@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+.next
+node_modules
+coverage
+playwright-report
+test-results
+src/generated
+docs/CAHIER_DES_CHARGES.md
+design
