@@ -1,0 +1,68 @@
+/* Harvest Kids — composants (classes hk-*), à charger après tokens.css */
+.hk-root{font-family:var(--font-text);color:var(--nuit);background:var(--creme);-webkit-font-smoothing:antialiased}
+.hk-root *{box-sizing:border-box}
+
+/* Bouton : pilule, cible tactile 56px */
+.hk-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--touch-min);padding:0 var(--space-6);border:0;border-radius:var(--radius-pill);font:700 17px/1 var(--font-text);cursor:pointer;text-decoration:none;transition:transform .12s ease,filter .12s ease}
+.hk-btn:active{transform:scale(.97)}
+.hk-btn:focus-visible{outline:3px solid var(--nuit);outline-offset:3px}
+.hk-btn--bleu{background:var(--bleu);color:var(--blanc)}
+.hk-btn--rose{background:var(--rose-fonce);color:var(--blanc)}
+.hk-btn--soleil{background:var(--soleil);color:var(--nuit)}
+.hk-btn--ghost{background:transparent;color:var(--nuit);box-shadow:inset 0 0 0 2px var(--nuit)}
+.hk-btn--sombre{background:var(--nuit);color:var(--blanc)}
+.hk-btn--xl{min-height:72px;padding:0 var(--space-8);font-size:20px}
+.hk-btn[disabled]{opacity:.45;cursor:not-allowed}
+.hk-btn svg{width:20px;height:20px}
+
+/* Pastille de statut */
+.hk-pill{display:inline-flex;align-items:center;gap:var(--space-2);padding:6px 14px;border-radius:var(--radius-pill);font:700 14px/20px var(--font-text);white-space:nowrap}
+.hk-pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.hk-pill--attendu{background:var(--blanc);color:var(--texte-doux);box-shadow:inset 0 0 0 1.5px var(--ligne)}
+.hk-pill--present{background:var(--bleu-voile);color:var(--nuit)}
+.hk-pill--en-salle{background:var(--bleu-layette);color:var(--nuit)}
+.hk-pill--appel{background:var(--soleil);color:var(--nuit)}
+.hk-pill--infirmerie{background:var(--alerte);color:var(--blanc)}
+.hk-pill--recupere{background:var(--succes);color:var(--blanc)}
+.hk-pill--outline{background:transparent;color:inherit;box-shadow:inset 0 0 0 1.5px currentColor}
+.hk-pill--outline::before{display:none}
+
+/* Carte à encoche : la signature du système (encoche en haut à droite, couleur du sol) */
+.hk-notch{--ground:var(--creme);--r:var(--radius-md);position:relative;border-radius:var(--radius-lg);padding:var(--space-6);overflow:hidden;isolation:isolate;border-top-right-radius:0}
+.hk-notch>:first-child{margin-right:calc(var(--notch-w) - var(--space-4))}
+.hk-notch::after{content:"";position:absolute;top:0;right:0;width:var(--notch-w);height:var(--notch-h);background:var(--ground);border-bottom-left-radius:var(--r);z-index:2}
+.hk-notch::before{content:"";position:absolute;top:0;right:0;width:calc(var(--notch-w) + var(--r));height:calc(var(--notch-h) + var(--r));z-index:2;pointer-events:none;
+  background:
+   radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),var(--ground) var(--r)) 0 0/var(--r) var(--r) no-repeat,
+   radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),var(--ground) var(--r)) 100% 100%/var(--r) var(--r) no-repeat}
+.hk-notch__corner{position:absolute;top:8px;right:10px;z-index:3;width:calc(var(--notch-w) - 20px);height:calc(var(--notch-h) - 16px);display:grid;place-items:center}
+.hk-notch--nuit{background:var(--nuit);color:var(--blanc)}
+.hk-notch--rose{background:var(--rose);color:var(--nuit)}
+.hk-notch--bleu{background:var(--bleu-layette);color:var(--nuit)}
+.hk-notch--soleil{background:var(--soleil);color:var(--nuit)}
+.hk-notch--blanc{background:var(--blanc);color:var(--nuit);box-shadow:var(--shadow-card)}
+
+/* Fiche enfant */
+.hk-child{display:grid;grid-template-columns:88px 1fr auto;gap:var(--space-4);align-items:center;background:var(--blanc);border-radius:var(--radius-lg);padding:var(--space-4) var(--space-6) var(--space-4) var(--space-4);box-shadow:var(--shadow-card)}
+.hk-child__photo{width:88px;height:88px;border-radius:var(--radius-md);display:grid;place-items:center;font:600 30px/1 var(--font-display);color:var(--nuit);background:var(--bleu-layette);object-fit:cover}
+.hk-child__photo--rose{background:var(--rose)}
+.hk-child__name{font:600 22px/28px var(--font-display);margin:0}
+.hk-child__meta{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:6px;font:600 14px/20px var(--font-text);color:var(--texte-doux)}
+.hk-child__id{font:600 28px/1 var(--font-display);letter-spacing:1px;text-align:right}
+.hk-child__side{display:grid;justify-items:end;gap:var(--space-2)}
+.hk-flag{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:var(--radius-pill);background:var(--rose-voile);color:var(--rose-fonce);font:800 13px/20px var(--font-text)}
+
+/* Écran d'appel (affiché en salle de culte) */
+.hk-board{background:var(--nuit);color:var(--blanc);border-radius:var(--radius-lg);padding:var(--space-8);display:grid;gap:var(--space-6)}
+.hk-board__head{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)}
+.hk-board__title{font:600 28px/34px var(--font-display);margin:0}
+.hk-board__hint{color:var(--nuit-doux);font:600 16px/24px var(--font-text);margin:4px 0 0}
+.hk-board__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--space-4)}
+.hk-tile{border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:4px}
+.hk-tile__num{font:600 36px/1 var(--font-display);letter-spacing:1px;white-space:nowrap}
+.hk-tile__where{font:700 14px/20px var(--font-text)}
+.hk-tile--appel{background:var(--soleil);color:var(--nuit)}
+.hk-tile--infirmerie{background:var(--alerte);color:var(--blanc)}
+.hk-tile--pret{background:var(--bleu-layette);color:var(--nuit)}
+
+@media (prefers-reduced-motion:reduce){.hk-btn{transition:none}}
