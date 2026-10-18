@@ -2,5 +2,8 @@ allowBuilds:
   "@swc/core": false
   # esbuild's postinstall only checks its platform binary (used to bundle the service worker).
   esbuild: true
+  # Prisma downloads its schema engine (migrations) at install time.
+  "@prisma/engines": true
+  prisma: true
   sharp: false
   unrs-resolver: false

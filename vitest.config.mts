@@ -30,6 +30,8 @@ export default defineConfig({
           environment: "node",
           // Integration tests share one PostgreSQL database.
           fileParallelism: false,
+          globalSetup: ["tests/integration/support/global-setup.ts"],
+          testTimeout: 20_000,
         },
       },
     ],
