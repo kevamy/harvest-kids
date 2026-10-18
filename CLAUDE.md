@@ -1,6 +1,6 @@
 # Harvest Kids — instructions pour Claude Code
 
-Application web (tablette) d'accueil, de suivi et de retrait sécurisé des enfants de l'église. Le besoin complet est dans `docs/CAHIER_DES_CHARGES.md` : **lis-le entièrement avant toute tâche** et réfère-toi aux règles de gestion par leur code (RG-01 à RG-12).
+Application web (tablette) d'accueil, de suivi et de retrait sécurisé des enfants de l'église. Le besoin complet est dans `docs/CAHIER_DES_CHARGES.md` : **lis-le entièrement avant toute tâche** et réfère-toi aux règles de gestion par leur code (RG-01 à RG-15).
 
 ## Méthode de travail
 
@@ -22,7 +22,8 @@ Le code doit tourner **sans modification** sur Vercel (test) et dans Docker sur 
 L'application sert plusieurs églises depuis une seule installation (section 3 bis du cahier des charges).
 
 - Toute table métier porte `egliseId`. Toute nouvelle table métier aussi, avec sa politique Row-Level Security dans la même migration.
-- On accède aux données d'une église **uniquement** via `getTenantDb()` (`src/lib/tenant.ts`), qui lit l'église active de la session, vérifie l'appartenance et positionne `app.eglise_id`. Importer le client Prisma brut en dehors de `src/server/plateforme/` et de `lib/tenant.ts` est interdit (règle ESLint `no-restricted-imports` à mettre en place).
+- On accède aux données d'une église **uniquement** via `getTenantDb()` (`src/lib/tenant.ts`), qui lit l'église active de la session, vérifie l'appartenance et positionne `app.eglise_id`. Importer le client Prisma brut est interdit (règle ESLint `no-restricted-imports`), sauf dans : `src/server/plateforme/`, `src/lib/tenant.ts`, `src/lib/auth.ts` (adaptateur Better Auth, tables hors RLS uniquement), `prisma/seed.ts` et `tests/`.
+- Les tables de plateforme (hors RLS) sont `Eglise`, `User`, `Membre`, `AccesSupport`, `AuditPlateforme` et les tables `Auth*` de Better Auth. Toutes les autres sont des tables d'église, sous RLS.
 - Jamais d'`egliseId` lu depuis le corps d'une requête, un paramètre d'URL ou un champ caché pour décider de l'accès : il vient de la session.
 - Les uniques métier sont composés avec l'église (`@@unique([egliseId, matricule])`, etc.) ; les compteurs (matricules) sont par église.
 - Les fichiers sont rangés sous `eglises/{egliseId}/` et servis après contrôle de l'église active.

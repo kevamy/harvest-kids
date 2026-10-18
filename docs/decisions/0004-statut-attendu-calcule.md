@@ -1,4 +1,4 @@
-# 0002 — Statut « Attendu » calculé à l'affichage
+# 0004 — Statut « Attendu » calculé à l'affichage
 
 - Statut : accepté
 - Date : 2026-10-18

@@ -1,4 +1,4 @@
-# 0003 — Intégration du design system et périmètre du service worker
+# 0005 — Intégration du design system et périmètre du service worker
 
 - Statut : accepté
 - Date : 2026-10-18
