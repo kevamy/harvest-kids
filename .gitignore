@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Logos of real churches provided for reference: never committed
 /design/logo-eglise-demo/
+
+# Docker production secrets
+/docker/production.env

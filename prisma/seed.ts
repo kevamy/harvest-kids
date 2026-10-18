@@ -11,6 +11,7 @@ import { logoEgliseFictif } from "../src/server/plateforme/images-demo";
 import { cleFichier } from "../src/lib/fichiers";
 import { stockage, type Stockage } from "../src/lib/storage";
 import { semerFamilles } from "./seed-familles";
+import { autorisationSeed } from "./seed-garde";
 
 try {
   process.loadEnvFile();
@@ -135,8 +136,9 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL est obligatoire.");
+  const decision = autorisationSeed(process.env);
+  if (!decision.autorise) throw new Error(decision.raison);
+  const url = process.env.DATABASE_URL!;
   const base = creerClientPlateforme(url);
   try {
     const resultat = await seed(base, stockage());

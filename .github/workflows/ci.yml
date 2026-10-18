@@ -1,0 +1,124 @@
+# Continuous integration: every job must be green to merge into main.
+# Only fictitious data (seed) and throwaway secrets generated per run.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verifications:
+    name: Lint, types et tests unitaires
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  integration:
+    name: Tests d'intégration (PostgreSQL 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      PGPASSWORD: postgres_ci
+      TEST_DATABASE_URL: postgresql://hk_app:hk_app_dev@localhost:5432/harvest_kids_test
+      TEST_DATABASE_MIGRATION_URL: postgresql://hk_owner:hk_owner_dev@localhost:5432/harvest_kids_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Rôles et bases (comme en local)
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f docker/init-db/01-roles.sql
+      - run: pnpm test:integration
+
+  e2e:
+    name: Tests de bout en bout (build de production)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      PGPASSWORD: postgres_ci
+      DATABASE_URL: postgresql://hk_app:hk_app_dev@localhost:5432/harvest_kids
+      DATABASE_MIGRATION_URL: postgresql://hk_owner:hk_owner_dev@localhost:5432/harvest_kids
+      BETTER_AUTH_URL: http://localhost:3000
+      STORAGE_DRIVER: local
+      UPLOADS_DIR: ./uploads
+      SUPER_ADMIN_EMAIL: superadmin@harvest-kids.test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Secret d'authentification jetable
+        run: echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Rôles, migrations et données fictives
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f docker/init-db/01-roles.sql
+          pnpm db:deploy
+          pnpm db:seed
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: E2E contre pnpm start (même artefact que la production)
+        run: pnpm test:e2e --workers=1
+      - name: Rapport en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-playwright
+          path: playwright-report/
+          retention-days: 7
+
+  docker:
+    name: Image Docker de production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Construction de l'image (application et migrations)
+        run: |
+          docker build -f docker/Dockerfile --target runner -t harvest-kids:ci .
+          docker build -f docker/Dockerfile --target migrate -t harvest-kids-migrate:ci .
