@@ -27,6 +27,7 @@
     "@prisma/client": "7.10.1",
     "@serwist/turbopack": "9.5.13",
     "@tanstack/react-query": "5.104.3",
+    "@vercel/blob": "2.8.2",
     "better-auth": "1.7.10",
     "class-variance-authority": "0.7.1",
     "cn": "0.5.0",

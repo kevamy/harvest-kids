@@ -13,6 +13,8 @@ export default defineConfig({
     },
   },
   test: {
+    // Global option (not per project): a hanging teardown fails instead of blocking.
+    teardownTimeout: 10_000,
     projects: [
       {
         extends: true,
@@ -32,6 +34,7 @@ export default defineConfig({
           fileParallelism: false,
           globalSetup: ["tests/integration/support/global-setup.ts"],
           testTimeout: 20_000,
+          hookTimeout: 20_000,
         },
       },
     ],

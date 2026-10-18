@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut, Repeat } from "lucide-react";
@@ -14,8 +15,9 @@ import {
 import { EcranVerrouille, SuiviActivite } from "./verrouillage";
 
 /**
- * Tablet layout of a church: header with the church's name (its logo comes with
- * the storage in step 6), lock screen after 15 minutes of inactivity.
+ * Tablet layout of a church: header with the active church's logo (served by
+ * /api/fichiers) and name, Harvest Kids footer, lock screen after 15 minutes of
+ * inactivity.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const session = await getSessionCourante();
@@ -42,9 +44,20 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <SuiviActivite />
       <div className="grid min-h-dvh grid-rows-[auto_1fr_auto]">
         <header className="flex flex-wrap items-center justify-between gap-4 bg-nuit px-6 py-4 text-blanc">
-          <p className="m-0 font-display text-h3 font-semibold" data-testid="eglise-active">
-            {eglise?.nom}
-          </p>
+          <div className="flex items-center gap-4">
+            {/* Light variant on the dark header when the church provided one. */}
+            {eglise?.logoClairKey || eglise?.logoKey ? (
+              // eslint-disable-next-line @next/next/no-img-element -- authenticated route, not optimisable
+              <img
+                src={`/api/fichiers/${eglise.logoClairKey ?? eglise.logoKey}`}
+                alt={`Logo de ${eglise.nom}`}
+                className="h-12 w-auto"
+              />
+            ) : null}
+            <p className="m-0 font-display text-h3 font-semibold" data-testid="eglise-active">
+              {eglise?.nom}
+            </p>
+          </div>
           <nav className="flex items-center gap-3" aria-label="Compte">
             <span className="hidden text-label text-nuit-doux sm:inline">{session.nom}</span>
             {eglises.length > 1 ? (
@@ -72,7 +85,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </nav>
         </header>
         <div className="mx-auto w-full max-w-6xl px-6 py-8">{children}</div>
-        <footer className="py-6 text-center text-caption text-texte-doux">Harvest Kids</footer>
+        <footer className="flex items-center justify-center gap-2 py-6 text-caption text-texte-doux">
+          <Image src="/logo/harvest-kids-icone.svg" alt="" width={20} height={20} />
+          Harvest Kids
+        </footer>
       </div>
     </Providers>
   );

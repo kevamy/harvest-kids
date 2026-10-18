@@ -80,3 +80,38 @@ export async function derniereActivite(adresse: string): Promise<Date> {
     return rows[0]!.d;
   });
 }
+
+export const EMAIL_SUPER_ADMIN = process.env.SUPER_ADMIN_EMAIL || "superadmin@harvest-kids.test";
+
+/** Deletes a church created by a test (owner role, inside the church because of RLS). */
+export async function supprimerEgliseDeTest(slug: string) {
+  await avecBase(async (c) => {
+    const { rows } = await c.query<{ id: string }>(`SELECT id FROM "Eglise" WHERE slug = $1`, [
+      slug,
+    ]);
+    const id = rows[0]?.id;
+    if (!id) return;
+    await c.query("BEGIN");
+    await c.query("SELECT set_config('app.eglise_id', $1, true)", [id]);
+    await c.query(`DELETE FROM "Classe" WHERE "egliseId" = $1`, [id]);
+    await c.query(`DELETE FROM "Culte" WHERE "egliseId" = $1`, [id]);
+    await c.query(`DELETE FROM "Eglise" WHERE id = $1`, [id]);
+    await c.query("COMMIT");
+    await c.query(`DELETE FROM "AuditPlateforme" WHERE "egliseId" = $1`, [id]);
+  });
+}
+
+export async function supprimerCompteDeTest(adresse: string) {
+  await avecBase((c) => c.query(`DELETE FROM "User" WHERE email = $1`, [adresse]));
+}
+
+/** Storage key of a church's logo (to try to read it from another church). */
+export async function cleLogo(slug: string): Promise<string | null> {
+  return avecBase(async (c) => {
+    const { rows } = await c.query<{ logoKey: string | null }>(
+      `SELECT "logoKey" FROM "Eglise" WHERE slug = $1`,
+      [slug],
+    );
+    return rows[0]?.logoKey ?? null;
+  });
+}

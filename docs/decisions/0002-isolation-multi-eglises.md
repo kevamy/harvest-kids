@@ -55,3 +55,10 @@ On a vérifié que ces tests échouent quand on désactive la RLS d'une table.
 - `src/lib/session.ts` renvoie `null` jusqu'à l'étape 5 (Better Auth) : sans session, tout accès est refusé.
 
 **Vérification de l'indépendance des deux barrières.** Barrière applicative désactivée, les tests qui attendent `RequeteHorsEglise` échouent, mais aucune lecture, modification ou suppression ne traverse vers l'église B : la RLS seule suffit à les bloquer. Inversement, sans RLS sur une table, les tests de catalogue et d'isolation SQL échouent.
+
+## Jetons des cartes et des badges (décidé à l'étape 6, réalisé au lot 1)
+
+- Les jetons QR (`HKF1.` + 22 caractères base62, environ 131 bits) sont tirés par `randomBytes` (`node:crypto`), jamais par `Math.random`.
+- La base ne stocke que l'empreinte SHA-256 du jeton : `CarteFamille.tokenHash` et `Membre.badgeTokenHash`, uniques, à la place des colonnes en clair `token` et `badgeToken`. Au scan, on calcule l'empreinte du jeton lu et on cherche sur l'empreinte. Une fuite de la base ne permet donc pas de fabriquer une carte valide.
+- Le jeton en clair n'existe qu'au moment de produire le PDF de la carte ou du badge. Conséquence assumée : une réimpression génère un nouveau jeton et révoque l'ancien.
+- Réalisation au lot 1, avec la génération des cartes : migration qui remplace les colonnes, adaptation du seed, fonction `SECURITY DEFINER` de RG-14 appelée avec l'empreinte.

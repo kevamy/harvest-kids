@@ -1,7 +1,12 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.PORT ?? 3000);
 const baseURL = `http://localhost:${port}`;
+
+// Server output copied here by scripts/serveur-e2e.mjs (secret leak checks).
+process.env.HK_JOURNAL_SERVEUR ??= join(tmpdir(), `harvest-kids-e2e-serveur-${port}.log`);
 
 // Target device: 10–11 inch Android tablet, landscape and portrait (cahier §16).
 export default defineConfig({
@@ -28,7 +33,7 @@ export default defineConfig({
   ],
   webServer: {
     // CI tests the production build; locally the dev server is reused if running.
-    command: process.env.CI ? `pnpm start --port ${port}` : `pnpm dev --port ${port}`,
+    command: `node scripts/serveur-e2e.mjs pnpm ${process.env.CI ? "start" : "dev"} --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

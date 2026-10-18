@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,12 @@ export default async function ChoisirEglise() {
           de votre église de vous ajouter.
         </p>
       )}
-      <form action={seDeconnecter} className="mt-6">
+      {session.superAdmin ? (
+        <Button asChild variant="sombre" className="mt-6 w-full">
+          <Link href="/plateforme">Administrer la plateforme</Link>
+        </Button>
+      ) : null}
+      <form action={seDeconnecter} className="mt-4">
         <Button type="submit" variant="ghost" className="w-full">
           Se déconnecter
         </Button>

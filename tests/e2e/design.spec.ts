@@ -68,6 +68,9 @@ test.describe("page de démonstration du design system", () => {
 });
 
 test("le manifeste PWA et le service worker sont servis", async ({ request }) => {
+  // The dev server compiles the service worker on first request (Serwist), which can
+  // exceed 30 s while the rest of the suite runs; the CI build serves it precompiled.
+  test.slow(!process.env.CI);
   const manifeste = await request.get("/manifest.webmanifest");
   expect(manifeste.ok()).toBe(true);
   const contenu = await manifeste.json();

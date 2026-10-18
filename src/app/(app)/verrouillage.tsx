@@ -12,6 +12,7 @@ import { Champ, MessageErreur } from "@/components/ui/champ";
 import { deverrouiller, seDeconnecter } from "@/app/actions/session";
 import { DELAI_VERROUILLAGE_MS, INTERVALLE_ENREGISTREMENT_MS } from "@/lib/activite";
 import { schemaDeverrouillage } from "@/lib/schemas/auth";
+import { usePret } from "@/lib/use-pret";
 
 /** Lock screen shown instead of the page when the tablet has been idle for 15 minutes. */
 export function EcranVerrouille({ nom }: { nom: string }) {
@@ -23,6 +24,7 @@ export function EcranVerrouille({ nom }: { nom: string }) {
     defaultValues: { pin: "" },
   });
   const { errors, isSubmitting } = formulaire.formState;
+  const pret = usePret();
 
   return (
     <main className="grid min-h-dvh place-items-center bg-nuit p-6">
@@ -37,6 +39,7 @@ export function EcranVerrouille({ nom }: { nom: string }) {
           {nom}, saisissez votre code PIN pour reprendre là où vous en étiez.
         </p>
         <form
+          method="post"
           noValidate
           className="mt-6 grid gap-5"
           onSubmit={formulaire.handleSubmit(async (valeurs) => {
@@ -71,7 +74,7 @@ export function EcranVerrouille({ nom }: { nom: string }) {
                 erreur={errors.pin?.message}
                 {...formulaire.register("pin")}
               />
-              <Button type="submit" variant="bleu" size="xl" disabled={isSubmitting}>
+              <Button type="submit" variant="bleu" size="xl" disabled={!pret || isSubmitting}>
                 Déverrouiller
               </Button>
             </>

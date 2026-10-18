@@ -5,8 +5,12 @@
  */
 import type { PrismaClient, Role } from "../src/generated/prisma/client";
 import { creerCompte, rattacherMembre } from "../src/server/plateforme/comptes";
-import { creerClientPlateforme } from "../src/server/plateforme/db";
+import { creerClientPlateforme, withEglise } from "../src/server/plateforme/db";
 import { creerEgliseAvecDefauts } from "../src/server/plateforme/eglises";
+import { logoEgliseFictif } from "../src/server/plateforme/images-demo";
+import { cleFichier } from "../src/lib/fichiers";
+import { stockage, type Stockage } from "../src/lib/storage";
+import { semerFamilles } from "./seed-familles";
 
 try {
   process.loadEnvFile();
@@ -63,7 +67,7 @@ async function membreDemo(base: PrismaClient, userId: string, egliseId: string, 
   if (!existant) await rattacherMembre(base, { userId, egliseId, roles, pin: PIN_DEMO });
 }
 
-export async function seed(base: PrismaClient) {
+export async function seed(base: PrismaClient, stockage: Stockage) {
   let comptesCrees = 0;
   const ids: Record<string, string> = {};
 
@@ -103,7 +107,31 @@ export async function seed(base: PrismaClient) {
     comptesCrees += Number(compte.cree);
   }
 
-  return { eglises: Object.keys(ids).length, comptesCrees };
+  // Church A gets a fictitious logo; church B has none (its name is shown instead).
+  const cotonou = await base.eglise.findUniqueOrThrow({
+    where: { id: ids.cotonou! },
+    select: { logoKey: true },
+  });
+  if (!cotonou.logoKey) {
+    const logoKey = cleFichier(ids.cotonou!, "logo", "logo.png");
+    const logoClairKey = cleFichier(ids.cotonou!, "logo", "logo-clair.png");
+    await stockage.put(logoKey, await logoEgliseFictif(), "image/png");
+    await stockage.put(logoClairKey, await logoEgliseFictif(true), "image/png");
+    await base.eglise.update({ where: { id: ids.cotonou! }, data: { logoKey, logoClairKey } });
+  }
+
+  let familles = 0;
+  for (const [i, eglise] of EGLISES_DEMO.entries()) {
+    const egliseId = ids[eglise.cle]!;
+    familles += await semerFamilles(
+      (fn) => withEglise(base, egliseId, fn),
+      egliseId,
+      1000 + i * 97,
+      stockage,
+    );
+  }
+
+  return { eglises: Object.keys(ids).length, comptesCrees, familles };
 }
 
 async function main() {
@@ -111,10 +139,10 @@ async function main() {
   if (!url) throw new Error("DATABASE_URL est obligatoire.");
   const base = creerClientPlateforme(url);
   try {
-    const resultat = await seed(base);
+    const resultat = await seed(base, stockage());
     // Counts only: no personal data in logs.
     console.log(
-      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes créés.`,
+      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés.`,
     );
   } finally {
     await base.$disconnect();

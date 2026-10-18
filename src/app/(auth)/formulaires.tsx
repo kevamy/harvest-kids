@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Champ, MessageErreur } from "@/components/ui/champ";
+import { usePret } from "@/lib/use-pret";
 import { schemaConnexion, schemaDefinitionPin } from "@/lib/schemas/auth";
 import { choisirEglise, definirMonPin, seConnecter, type Resultat } from "./actions";
 
@@ -30,9 +31,11 @@ export function FormulaireConnexion() {
     defaultValues: { identifiant: "", motDePasse: "" },
   });
   const { errors, isSubmitting } = formulaire.formState;
+  const pret = usePret();
 
   return (
     <form
+      method="post"
       noValidate
       className="grid gap-5"
       onSubmit={formulaire.handleSubmit(async (valeurs) => {
@@ -63,7 +66,7 @@ export function FormulaireConnexion() {
         erreur={errors.motDePasse?.message}
         {...formulaire.register("motDePasse")}
       />
-      <Button type="submit" variant="bleu" size="xl" disabled={isSubmitting}>
+      <Button type="submit" variant="bleu" size="xl" disabled={!pret || isSubmitting}>
         {isSubmitting ? "Connexion en cours…" : "Se connecter"}
       </Button>
     </form>
@@ -116,6 +119,7 @@ export function FormulaireDefinitionPin() {
     defaultValues: { pin: "", confirmation: "" },
   });
   const { errors, isSubmitting } = formulaire.formState;
+  const pret = usePret();
   const proprietesPin = {
     type: "password",
     inputMode: "numeric",
@@ -125,6 +129,7 @@ export function FormulaireDefinitionPin() {
 
   return (
     <form
+      method="post"
       noValidate
       className="grid gap-5"
       onSubmit={formulaire.handleSubmit(async (valeurs) => {
@@ -153,7 +158,7 @@ export function FormulaireDefinitionPin() {
         {...proprietesPin}
         {...formulaire.register("confirmation")}
       />
-      <Button type="submit" variant="bleu" size="xl" disabled={isSubmitting}>
+      <Button type="submit" variant="bleu" size="xl" disabled={!pret || isSubmitting}>
         Enregistrer le code PIN
       </Button>
     </form>

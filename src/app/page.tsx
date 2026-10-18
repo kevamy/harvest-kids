@@ -5,6 +5,6 @@ import { getSessionCourante } from "@/lib/session";
 export default async function Racine() {
   const session = await getSessionCourante();
   if (!session) redirect("/connexion");
-  if (!session.egliseActiveId) redirect("/choisir-eglise");
+  if (!session.egliseActiveId) redirect(session.superAdmin ? "/plateforme" : "/choisir-eglise");
   redirect("/accueil");
 }

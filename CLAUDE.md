@@ -33,6 +33,8 @@ L'application sert plusieurs églises depuis une seule installation (section 3 b
 ## Règles de code
 
 - La logique métier vit dans `src/server/` (fonctions pures ou services testés) ; les Server Actions valident avec Zod, vérifient le rôle via `lib/rbac.ts`, appellent le service et écrivent l'audit (`lib/audit.ts`). Aucune vérification de droit uniquement côté client.
+- Un layout ne protège jamais une page : chaque page, Server Action et route handler vérifie lui-même la session, l'église et le rôle (via rbac/tenant), même si son layout le fait déjà.
+- Tout formulaire qui contient un secret (mot de passe, PIN) déclare `method="post"` et garde son bouton d'envoi désactivé tant que la page n'est pas prête (`usePret()`).
 - Chaque changement de statut d'une présence crée un `EvenementPresence` et une entrée `AuditLog`, dans la même transaction.
 - Le QR code ne contient jamais de matricule ni de nom (RG-02).
 - Les photos ne sont jamais servies en URL publique : route `/api/photos/[key]` authentifiée (RG-11).
