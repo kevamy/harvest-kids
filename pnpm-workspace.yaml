@@ -1,3 +1,6 @@
 allowBuilds:
+  "@swc/core": false
+  # esbuild's postinstall only checks its platform binary (used to bundle the service worker).
+  esbuild: true
   sharp: false
   unrs-resolver: false
