@@ -51,3 +51,6 @@ next-env.d.ts
 
 # local storage driver
 /uploads
+
+# Logos of real churches provided for reference: never committed
+/design/logo-eglise-demo/
