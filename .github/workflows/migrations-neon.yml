@@ -1,0 +1,42 @@
+# Applies pending migrations to the Neon test database (owner role).
+# Automatically after a green CI on main; manually for another branch
+# (Actions › Migrations Neon › Run workflow, choose the branch).
+# The owner connection string lives only in the neon-test environment.
+name: Migrations Neon
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: neon-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrer:
+    name: Appliquer les migrations
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: neon-test
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # After CI: exactly the commit that was tested.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: prisma migrate deploy
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+        run: pnpm db:deploy

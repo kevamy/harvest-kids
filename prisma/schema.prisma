@@ -1,0 +1,568 @@
+// Harvest Kids — schéma de données (lot 0)
+//
+// Deux familles de tables :
+// - PLATEFORME (hors RLS) : Eglise, User, Membre, AccesSupport, AuditPlateforme et
+//   les tables Better Auth. Accès uniquement depuis src/server/plateforme/, src/lib/tenant.ts
+//   et src/lib/auth.ts.
+// - ÉGLISE (tenant, sous RLS) : toutes les autres. Chacune porte `egliseId`, une politique
+//   Row-Level Security (migration SQL) et `@@unique([id, egliseId])` pour que les relations
+//   entre tables tenant soient composites : un lien vers une ligne d'une autre église est
+//   impossible en base (ADR 0002).
+//
+// Les relations optionnelles composites portent `onDelete: Restrict` : l'action par défaut
+// (SetNull) tenterait de vider aussi `egliseId`.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  RESPONSABLE
+  ACCUEIL
+  MONITEUR
+  INFIRMERIE
+  ECRAN
+}
+
+enum StatutPresence {
+  PRESENT
+  EN_SALLE
+  INFIRMERIE
+  RECUPERE
+}
+
+enum StatutSession {
+  PLANIFIEE
+  OUVERTE
+  CLOTUREE
+}
+
+enum StatutEglise {
+  ACTIVE
+  SUSPENDUE
+}
+
+enum TypeIncident {
+  BLESSURE
+  MALAISE
+  COMPORTEMENT
+  ENFANT_INTROUVABLE
+  RETRAIT_NON_AUTORISE
+  AUTRE
+}
+
+// =====================================================================
+// PLATEFORME (hors RLS)
+// =====================================================================
+
+model Eglise {
+  id                String       @id @default(cuid())
+  nom               String
+  slug              String       @unique // /ecran/[slug]
+  logoKey           String? // logo principal (fonds clairs)
+  logoClairKey      String? // variante claire (fonds sombres)
+  telephoneAccueil  String? // imprimé sur les cartes famille
+  adresse           String?
+  fuseau            String       @default("Africa/Porto-Novo") // RG-12
+  statut            StatutEglise @default(ACTIVE)
+  ecranToken        String       @unique // jeton de l'écran d'appel
+  prochainMatricule Int          @default(1) // RG-01, incrémenté de façon atomique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  membres             Membre[]
+  accesSupport        AccesSupport[]
+  familles            Famille[]
+  tuteurs             Tuteur[]
+  personnesAutorisees PersonneAutorisee[]
+  enfants             Enfant[]
+  cartes              CarteFamille[]
+  classes             Classe[]
+  cultes              Culte[]
+  sessions            Session[]
+  sessionClasses      SessionClasse[]
+  affectations        AffectationMoniteur[]
+  presences           Presence[]
+  evenements          EvenementPresence[]
+  appels              Appel[]
+  appelsTelephoniques AppelTelephonique[]
+  incidents           Incident[]
+  auditLogs           AuditLog[]
+  parametres          Parametre[]
+}
+
+// Compte (Better Auth). `name` et `email` sont imposés par Better Auth ; un compte créé par
+// téléphone seul reçoit un e-mail technique non routable (<id>@telephone.invalid).
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
+  image            String?
+  telephone        String?  @unique
+  telephoneVerifie Boolean  @default(false)
+  superAdmin       Boolean  @default(false) // seul rôle global
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  membres         Membre[]
+  sessions        AuthSession[]
+  comptes         AuthAccount[]
+  accesSupport    AccesSupport[]
+  forcagesClasses SessionClasse[] @relation("ForcageClasse")
+}
+
+// Rattachement d'un compte à une église. Hors RLS : il faut pouvoir lister les églises
+// d'un utilisateur avant qu'il en choisisse une.
+model Membre {
+  id              String    @id @default(cuid())
+  egliseId        String
+  eglise          Eglise    @relation(fields: [egliseId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles           Role[]
+  pinHash         String?
+  pinEchecs       Int       @default(0)
+  pinBloqueJusqua DateTime?
+  badgeToken      String?   @unique // QR du badge moniteur (RG-02 : jeton opaque)
+  actif           Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  affectations AffectationMoniteur[]
+
+  @@unique([egliseId, userId])
+  @@unique([id, egliseId])
+  @@index([userId])
+}
+
+// Accès de support d'un super-administrateur à une église, limité dans le temps
+// (développé dans un lot ultérieur).
+model AccesSupport {
+  id       String   @id @default(cuid())
+  egliseId String
+  eglise   Eglise   @relation(fields: [egliseId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  motif    String
+  debut    DateTime @default(now())
+  fin      DateTime
+
+  @@index([egliseId, fin])
+}
+
+// Journal des actions de plateforme (création, suspension d'une église…). Non modifiable.
+model AuditPlateforme {
+  id        String   @id @default(cuid())
+  userId    String?
+  egliseId  String? // église concernée, le cas échéant (pas de relation : survit à la suppression)
+  action    String
+  detail    Json?
+  appareil  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ---------- Tables Better Auth
+
+model AuthSession {
+  id               String    @id @default(cuid())
+  token            String    @unique
+  expiresAt        DateTime
+  ipAddress        String?
+  userAgent        String?
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  egliseActiveId   String? // église active, vérifiée à chaque accès par getTenantDb()
+  derniereActivite DateTime? // verrouillage PIN après 15 min d'inactivité
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model AuthAccount {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model AuthVerification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// Compteurs de limitation des tentatives (partagés entre instances, donc en base).
+model AuthRateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+// =====================================================================
+// ÉGLISE (tenant, sous RLS)
+// =====================================================================
+
+model Famille {
+  id                  String    @id @default(cuid())
+  egliseId            String
+  eglise              Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  nom                 String
+  notes               String?
+  consentementDonnees DateTime?
+  consentementPhotos  DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tuteurs   Tuteur[]
+  enfants   Enfant[]
+  autorises PersonneAutorisee[]
+  cartes    CarteFamille[]
+
+  @@unique([id, egliseId])
+  @@index([egliseId, nom])
+}
+
+model Tuteur {
+  id         String  @id @default(cuid())
+  egliseId   String
+  eglise     Eglise  @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  familleId  String
+  famille    Famille @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  prenom     String
+  nom        String
+  lien       String
+  telephone  String
+  telephone2 String?
+  whatsapp   String?
+  principal  Boolean @default(false)
+
+  autorise PersonneAutorisee?
+
+  @@unique([id, egliseId])
+  @@index([egliseId, telephone])
+  @@index([familleId])
+}
+
+model PersonneAutorisee {
+  id        String  @id @default(cuid())
+  egliseId  String
+  eglise    Eglise  @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  familleId String
+  famille   Famille @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  tuteurId  String?
+  tuteur    Tuteur? @relation(fields: [tuteurId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  prenom    String
+  nom       String
+  lien      String
+  telephone String?
+  photoKey  String // obligatoire (RG-06)
+  actif     Boolean @default(true)
+
+  retraits Presence[]
+
+  @@unique([tuteurId, egliseId])
+  @@unique([id, egliseId])
+  @@index([familleId])
+}
+
+model Enfant {
+  id             String   @id @default(cuid())
+  egliseId       String
+  eglise         Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  matricule      String // HK-0001, unique dans l'église (RG-01)
+  familleId      String
+  famille        Famille  @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  prenom         String
+  nom            String
+  dateNaissance  DateTime @db.Date
+  sexe           String?
+  photoKey       String?
+  alertes        String[]
+  alerteDetail   String?
+  notes          String?
+  classeForceeId String?
+  classeForcee   Classe?  @relation(fields: [classeForceeId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  actif          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  presences           Presence[]
+  incidents           Incident[]
+  appelsTelephoniques AppelTelephonique[]
+
+  @@unique([egliseId, matricule])
+  @@unique([id, egliseId])
+  @@index([familleId])
+  @@index([egliseId, nom, prenom])
+}
+
+model CarteFamille {
+  id         String    @id @default(cuid())
+  egliseId   String
+  eglise     Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  familleId  String
+  famille    Famille   @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  token      String    @unique // HKF1. + 22 caractères base62 (RG-02), globalement unique
+  emiseLe    DateTime  @default(now())
+  revoqueeLe DateTime? // RG-03
+
+  @@unique([id, egliseId])
+  // Une seule carte active par famille.
+  @@unique([familleId], where: raw("\"revoqueeLe\" IS NULL"), map: "CarteFamille_une_active_par_famille")
+}
+
+model Classe {
+  id           String  @id @default(cuid())
+  egliseId     String
+  eglise       Eglise  @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  nom          String
+  ageMinMois   Int
+  ageMaxMois   Int
+  salle        String?
+  capacite     Int?
+  minMoniteurs Int     @default(2) // RG-05
+  ordre        Int     @default(0)
+  active       Boolean @default(true)
+
+  enfantsForces  Enfant[]
+  sessionClasses SessionClasse[]
+  presences      Presence[]
+
+  @@unique([id, egliseId])
+  @@index([egliseId, ordre])
+}
+
+model Culte {
+  id         String  @id @default(cuid())
+  egliseId   String
+  eglise     Eglise  @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  nom        String
+  jour       Int // 0 = dimanche … 6 = samedi
+  heureDebut String // "08:00", heure locale de l'église (RG-12)
+  heureFin   String
+  actif      Boolean @default(true)
+
+  sessions Session[]
+
+  @@unique([id, egliseId])
+  @@index([egliseId])
+}
+
+model Session {
+  id           String        @id @default(cuid())
+  egliseId     String
+  eglise       Eglise        @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  culteId      String?
+  culte        Culte?        @relation(fields: [culteId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  date         DateTime      @db.Date
+  debut        DateTime // UTC
+  fin          DateTime // UTC
+  statut       StatutSession @default(PLANIFIEE)
+  clotureMotif String?
+
+  classes   SessionClasse[]
+  presences Presence[]
+  incidents Incident[]
+
+  @@unique([egliseId, culteId, date])
+  @@unique([id, egliseId])
+  @@index([egliseId, date])
+}
+
+model SessionClasse {
+  id           String    @id @default(cuid())
+  egliseId     String
+  eglise       Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionId    String
+  session      Session   @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  classeId     String
+  classe       Classe    @relation(fields: [classeId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  ouverteLe    DateTime?
+  forcageMotif String? // ouverture forcée par un RESPONSABLE (RG-05)
+  forcePar     String?
+  forceur      User?     @relation("ForcageClasse", fields: [forcePar], references: [id])
+
+  moniteurs AffectationMoniteur[]
+
+  @@unique([sessionId, classeId])
+  @@unique([id, egliseId])
+}
+
+model AffectationMoniteur {
+  id              String        @id @default(cuid())
+  egliseId        String
+  eglise          Eglise        @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionClasseId String
+  sessionClasse   SessionClasse @relation(fields: [sessionClasseId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  membreId        String
+  membre          Membre        @relation(fields: [membreId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  renfort         Boolean       @default(false) // moniteur temporaire pour la session
+  arrivee         DateTime      @default(now())
+  depart          DateTime?
+
+  @@index([egliseId, sessionClasseId])
+}
+
+model Presence {
+  id            String             @id @default(cuid())
+  egliseId      String
+  eglise        Eglise             @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionId     String
+  session       Session            @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  enfantId      String
+  enfant        Enfant             @relation(fields: [enfantId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  classeId      String
+  classe        Classe             @relation(fields: [classeId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  statut        StatutPresence
+  codeRetrait   String // 4 caractères, valable pour cette session seulement (RG-04)
+  appelParent   Boolean            @default(false)
+  checkinPar    String
+  checkinLe     DateTime           @default(now())
+  enSalleLe     DateTime?
+  recupereLe    DateTime?
+  recuperePar   String? // personne autorisée qui a récupéré l'enfant
+  autorise      PersonneAutorisee? @relation(fields: [recuperePar, egliseId], references: [id, egliseId], onDelete: Restrict)
+  remisPar      String? // compte qui a remis l'enfant
+  basculeVers   String? // présence créée dans la session suivante
+  basculeCible  Presence?          @relation("Bascule", fields: [basculeVers, egliseId], references: [id, egliseId], onDelete: Restrict)
+  basculeSource Presence?          @relation("Bascule")
+
+  evenements          EvenementPresence[]
+  appels              Appel[]
+  appelsTelephoniques AppelTelephonique[]
+
+  @@unique([id, egliseId])
+  @@unique([basculeVers, egliseId])
+  // RG-08 : une seule présence non clôturée par enfant.
+  @@unique([enfantId], where: raw("statut <> 'RECUPERE' AND \"basculeVers\" IS NULL"), map: "Presence_une_ouverte_par_enfant")
+  @@index([egliseId, sessionId, statut])
+  @@index([sessionId, codeRetrait])
+}
+
+// Historique d'une présence. Non modifiable (droits SELECT et INSERT uniquement).
+model EvenementPresence {
+  id         String   @id @default(cuid())
+  egliseId   String
+  eglise     Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  presenceId String
+  presence   Presence @relation(fields: [presenceId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  type       String
+  detail     Json?
+  userId     String
+  appareil   String?
+  createdAt  DateTime @default(now())
+
+  @@index([presenceId, createdAt])
+}
+
+// Appel affiché sur l'écran d'appel (matricule + lieu, jamais de nom : RG-10).
+model Appel {
+  id         String    @id @default(cuid())
+  egliseId   String
+  eglise     Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  presenceId String
+  presence   Presence  @relation(fields: [presenceId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  motif      String
+  lieu       String
+  creeLe     DateTime  @default(now())
+  resoluLe   DateTime?
+  creePar    String
+
+  @@index([egliseId, resoluLe])
+}
+
+// Journal des appels téléphoniques et WhatsApp lancés depuis le bouton Urgence.
+model AppelTelephonique {
+  id         String    @id @default(cuid())
+  egliseId   String
+  eglise     Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  presenceId String?
+  presence   Presence? @relation(fields: [presenceId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  enfantId   String
+  enfant     Enfant    @relation(fields: [enfantId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  numero     String
+  canal      String // tel | whatsapp
+  resultat   String? // joint | pas_de_reponse | messagerie
+  userId     String
+  createdAt  DateTime  @default(now())
+
+  @@index([egliseId, enfantId])
+}
+
+model Incident {
+  id          String       @id @default(cuid())
+  egliseId    String
+  eglise      Eglise       @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionId   String?
+  session     Session?     @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  enfantId    String?
+  enfant      Enfant?      @relation(fields: [enfantId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  type        TypeIncident
+  description String
+  personnes   String?
+  mesures     String?
+  declarePar  String
+  createdAt   DateTime     @default(now())
+  clotureLe   DateTime?
+
+  @@index([egliseId, sessionId])
+}
+
+// Journal d'audit d'une église (RG-09). Non modifiable (droits SELECT et INSERT uniquement).
+model AuditLog {
+  id        String   @id @default(cuid())
+  egliseId  String
+  eglise    Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  userId    String?
+  action    String
+  entite    String
+  entiteId  String
+  avant     Json?
+  apres     Json?
+  appareil  String?
+  createdAt DateTime @default(now())
+
+  @@index([egliseId, entite, entiteId])
+  @@index([egliseId, createdAt])
+}
+
+// Paramètres d'une église : délais d'alerte, lieux de rendez-vous, textes de la carte
+// famille et du consentement, durée de conservation…
+model Parametre {
+  egliseId String
+  eglise   Eglise @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  cle      String
+  valeur   Json
+
+  @@id([egliseId, cle])
+}

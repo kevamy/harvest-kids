@@ -1,0 +1,75 @@
+# Production stack for the VPS: PostgreSQL, migrations, application, Caddy (HTTPS).
+# Secrets come from docker/production.env (never committed, see production.env.example).
+#   docker compose -f docker/docker-compose.yml --env-file docker/production.env up -d --build
+name: harvest-kids
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: postgres
+      HK_OWNER_PASSWORD: ${HK_OWNER_PASSWORD:?}
+      HK_APP_PASSWORD: ${HK_APP_PASSWORD:?}
+      TZ: UTC
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./init-db-prod:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d harvest_kids"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://hk_owner:${HK_OWNER_PASSWORD}@db:5432/harvest_kids
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://hk_app:${HK_APP_PASSWORD}@db:5432/harvest_kids
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+      BETTER_AUTH_URL: https://${DOMAINE:?}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-Africa/Porto-Novo}
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAINE: ${DOMAINE:?}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  uploads:
+  caddy-data:
+  caddy-config:

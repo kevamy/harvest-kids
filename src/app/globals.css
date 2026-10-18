@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@import "../../design/tokens.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * shadcn/ui semantic colours mapped onto the Harvest Kids tokens,
+ * so restyled shadcn components never carry their own palette.
+ */
+@theme inline {
+  --color-background: var(--color-creme);
+  --color-foreground: var(--color-nuit);
+  --color-card: var(--color-blanc);
+  --color-card-foreground: var(--color-nuit);
+  --color-popover: var(--color-blanc);
+  --color-popover-foreground: var(--color-nuit);
+  --color-primary: var(--color-bleu);
+  --color-primary-foreground: var(--color-blanc);
+  --color-secondary: var(--color-bleu-voile);
+  --color-secondary-foreground: var(--color-nuit);
+  --color-muted: var(--color-creme);
+  --color-muted-foreground: var(--color-texte-doux);
+  --color-accent: var(--color-bleu-voile);
+  --color-accent-foreground: var(--color-nuit);
+  --color-destructive: var(--color-alerte);
+  --color-border: var(--color-ligne);
+  --color-input: var(--color-ligne);
+  --color-ring: var(--color-nuit);
+}
+
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--color-nuit);
+    outline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

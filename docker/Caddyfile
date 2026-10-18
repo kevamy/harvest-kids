@@ -1,0 +1,19 @@
+# HTTPS in front of the application. Certificates are obtained automatically for
+# a public domain; with DOMAINE=localhost Caddy uses its internal authority.
+{$DOMAINE} {
+	encode zstd gzip
+
+	# Security headers (CSP with nonce, HSTS…) are set by the application (proxy.ts).
+	header -Server
+
+	reverse_proxy app:3000 {
+		health_uri /api/sante
+		health_interval 30s
+	}
+
+	log {
+		output stdout
+		# Request URLs only: bodies are never logged.
+		format console
+	}
+}
