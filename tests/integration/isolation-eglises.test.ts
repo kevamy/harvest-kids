@@ -250,10 +250,14 @@ describe("église active de la session", () => {
     await creerCompte("ub_inactif", [{ egliseId: b.egliseId, actif: false }]);
   });
 
-  const session = (userId: string, egliseActiveId: string | null) => ({
+  const session = (userId: string, egliseActiveId: string | null, verrouillee = false) => ({
     sessionId: `s_${userId}`,
     userId,
+    nom: userId,
+    superAdmin: false,
     egliseActiveId,
+    verrouillee,
+    appareil: null,
   });
 
   it("accepte l'église dont l'utilisateur est membre et renvoie ses rôles", async () => {
@@ -283,6 +287,7 @@ describe("église active de la session", () => {
         (e: unknown) => (e instanceof AccesRefuse ? e.raison : String(e)),
       );
     expect(await refus(null)).toBe("non_authentifie");
+    expect(await refus(session("ua", a.egliseId, true))).toBe("verrouille");
     expect(await refus(session("ua", null))).toBe("aucune_eglise");
     expect(await refus(session("ub_inactif", b.egliseId))).toBe("non_membre");
 

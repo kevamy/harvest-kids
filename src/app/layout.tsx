@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Nunito } from "next/font/google";
+import { connection } from "next/server";
 import { SerwistProvider } from "@serwist/turbopack/react";
 import { COULEURS_HORS_CSS } from "@/lib/couleurs";
 import "./globals.css";
@@ -19,7 +20,9 @@ export const viewport: Viewport = {
   themeColor: COULEURS_HORS_CSS.nuit,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Every page is rendered per request so the CSP nonce can be applied (src/proxy.ts).
+  await connection();
   return (
     <html lang="fr" className={`${fredoka.variable} ${nunito.variable}`}>
       <body className="min-h-dvh antialiased">

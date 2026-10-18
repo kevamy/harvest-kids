@@ -37,7 +37,8 @@ export function NotchCard({
       style={{ ...style, ["--ground" as string]: `var(--color-${sol})` }}
       {...props}
     >
-      <div>{children}</div>
+      {/* Children are direct: only the first one (the title) leaves room for the notch. */}
+      {children}
       {coin ? <div className="hk-notch__corner">{coin}</div> : null}
     </Tag>
   );

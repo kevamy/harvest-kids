@@ -15,7 +15,8 @@ const ACCES_BRUT_INTERDIT = {
     {
       group: ["@/server/plateforme/db", "**/server/plateforme/db"],
       allowTypeImports: true,
-      message: "Accès base de plateforme interdit ici : passez par getTenantDb() (src/lib/tenant.ts).",
+      message:
+        "Accès base de plateforme interdit ici : passez par getTenantDb() (src/lib/tenant.ts).",
     },
     {
       group: ["pg", "@prisma/adapter-pg"],

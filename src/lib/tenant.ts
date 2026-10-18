@@ -37,7 +37,12 @@ export const MODELES_EGLISE = [
 const MODELES = new Set<string>(MODELES_EGLISE);
 
 export type RaisonRefus =
-  "non_authentifie" | "aucune_eglise" | "non_membre" | "compte_inactif" | "eglise_suspendue";
+  | "non_authentifie"
+  | "verrouille"
+  | "aucune_eglise"
+  | "non_membre"
+  | "compte_inactif"
+  | "eglise_suspendue";
 
 /** Access to the active church is refused (the caller answers 401/403 or redirects). */
 export class AccesRefuse extends Error {
@@ -60,6 +65,8 @@ export type ContexteEglise = {
   userId: string;
   membreId: string;
   roles: Role[];
+  /** Short device description for the audit log (user agent). */
+  appareil: string | null;
 };
 
 /**
@@ -72,6 +79,8 @@ export async function verifierContexte(
   session: SessionCourante | null,
 ): Promise<ContexteEglise> {
   if (!session) throw new AccesRefuse("non_authentifie");
+  // A locked tablet reaches no church data until the PIN is entered.
+  if (session.verrouillee) throw new AccesRefuse("verrouille");
   if (!session.egliseActiveId) throw new AccesRefuse("aucune_eglise");
 
   const membre = await base.membre.findUnique({
@@ -93,6 +102,7 @@ export async function verifierContexte(
     userId: session.userId,
     membreId: membre.id,
     roles: membre.roles,
+    appareil: session.appareil,
   };
 }
 
@@ -213,7 +223,8 @@ type TablesPlateforme =
   | "authVerification"
   | "authRateLimit";
 
-type ClientDeBase = Omit<
+/** Scoped client inside $tx (and the operations shared with the full client). */
+export type ClientDeBase = Omit<
   ClientEtendu,
   TablesPlateforme | "$transaction" | "$extends" | "$connect" | "$disconnect" | "$on"
 >;
@@ -278,12 +289,19 @@ export async function attribuerMatricule(db: Pick<ClientDeBase, "$queryRaw">): P
 }
 
 /** Active church of the current session, checked against its membership. */
-export async function getEgliseActive(): Promise<ContexteEglise> {
-  return verifierContexte(prismaPlateforme(), await getSessionCourante());
+export type OptionsAcces = {
+  /** Automatic refresh of a live screen: does not count as user activity. */
+  rafraichissementAuto?: boolean;
+};
+
+export async function getEgliseActive(options: OptionsAcces = {}): Promise<ContexteEglise> {
+  return verifierContexte(prismaPlateforme(), await getSessionCourante(options));
 }
 
 /** Scoped client of the active church, plus the checked context (roles for rbac). */
-export async function getTenantDb(): Promise<{ db: ClientEglise; contexte: ContexteEglise }> {
-  const contexte = await getEgliseActive();
+export async function getTenantDb(
+  options: OptionsAcces = {},
+): Promise<{ db: ClientEglise; contexte: ContexteEglise }> {
+  const contexte = await getEgliseActive(options);
   return { db: clientEglise(prismaPlateforme(), contexte.egliseId), contexte };
 }
