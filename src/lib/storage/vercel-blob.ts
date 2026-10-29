@@ -2,7 +2,12 @@ import "server-only";
 import { del, get, put } from "@vercel/blob";
 import { verifierCle, type Stockage } from "./index";
 
-/** Private Vercel Blob store (test environment): blobs are read with the token only. */
+/**
+ * Private Vercel Blob store (test environment): blobs are read with the token only.
+ * The token is always passed explicitly, so the SDK never falls back to OIDC
+ * (VERCEL_OIDC_TOKEN + BLOB_STORE_ID), which only exists inside Vercel: the same
+ * driver works from Vercel, GitHub Actions and the operator's machine.
+ */
 export function creerStockageVercelBlob(token: string): Stockage {
   return {
     async put(cle, donnees, typeContenu) {

@@ -22,7 +22,9 @@ export const envSchema = z
     SENTRY_DSN: z.url().optional(),
   })
   .refine((env) => env.STORAGE_DRIVER !== "vercel-blob" || env.BLOB_READ_WRITE_TOKEN, {
-    message: "BLOB_READ_WRITE_TOKEN est obligatoire avec STORAGE_DRIVER=vercel-blob",
+    // A Vercel Blob store only injects BLOB_STORE_ID: the token is added by hand.
+    message:
+      "BLOB_READ_WRITE_TOKEN est obligatoire avec STORAGE_DRIVER=vercel-blob (à ajouter à la main dans Vercel, voir docs/exploitation.md)",
     path: ["BLOB_READ_WRITE_TOKEN"],
   });
 
