@@ -2,14 +2,14 @@
 
 Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque lot se termine par une démonstration sur l'environnement Vercel et une validation avant le suivant.
 
-| Lot                              | État                                                    | Branche et pull request |
-| -------------------------------- | ------------------------------------------------------- | ----------------------- |
-| 0. Fondations                    | **validé** sur Vercel le 2026-10-29, fusionné dans main | `lot-0`, PR n°1         |
-| 1. Familles et cartes            | en attente des réponses des leaders                     | —                       |
-| 2. Sessions, check-in, check-out | à faire                                                 | —                       |
-| 3. Infirmerie, appels, urgence   | à faire                                                 | —                       |
-| 4. Transition et pilotage        | à faire                                                 | —                       |
-| 5. Robustesse et borne           | à faire                                                 | —                       |
+| Lot                              | État                                                                            | Branche et pull request            |
+| -------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
+| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2 |
+| 1. Familles et cartes            | plan à valider                                                                  | —                                  |
+| 2. Sessions, check-in, check-out | à faire                                                                         | —                                  |
+| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                  |
+| 4. Transition et pilotage        | à faire                                                                         | —                                  |
+| 5. Robustesse et borne           | à faire                                                                         | —                                  |
 
 ## Lot 0 — Fondations
 
@@ -33,7 +33,7 @@ Livré :
 
 Tests au dernier passage de la CI : 105 unitaires, 61 d'intégration, 58 de bout en bout (build de production, viewports tablette).
 
-Environnement de test : prévisualisation Vercel de `lot-0` (`/api/sante`, connexion, choix d'église, `/design` et `/plateforme` vérifiés par l'exploitant), base Neon, Blob store privé en mode jeton.
+Environnement de recette : https://harvest-kids.vercel.app, déployé depuis `main` (base Neon, Blob store privé en mode jeton). Les migrations y sont appliquées par le workflow « Migrations Neon » après chaque CI verte sur `main`. Le lot 0 a d'abord été validé sur la prévisualisation de `lot-0` (`/api/sante`, connexion, choix d'église, `/design` et `/plateforme`).
 
 Décisions : ADR 0001 à 0007 dans `docs/decisions/`. Exploitation : `docs/exploitation.md`.
 
@@ -41,4 +41,8 @@ Hors lot 0, reporté : Sentry ; écran d'appel et son appareil dédié (lot 3) ;
 
 ## Avant le lot 1
 
-Le lot 1 ne commence pas avant les réponses de l'équipe des leaders aux points de la section 17 du cahier des charges, attendues dans `docs/reponses-leaders.md`. Pour le lot 1, les points qui comptent le plus : tranches d'âge et noms des classes (1), carte par famille ou par enfant (2), impression et plastification des cartes (5), conservation des données (7), paramètres par défaut d'une nouvelle église (9).
+Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de carte par église (RG-16), classes et tranches d'âge par église (RG-17), impression des cartes par chaque église dans cinq formats (section 7.10). Points 1, 2 et 5 de la section 17 tranchés.
+
+Points encore ouverts (section 17) : check-out à la porte des classes (3), horaires des cultes et délai d'alerte (4), lieu de rendez-vous de l'écran d'appel (6), conservation des données (7), domaine et exploitant (8), paramètres par défaut d'une nouvelle église (9).
+
+Le lot 1 ne commence qu'après validation de son plan.
