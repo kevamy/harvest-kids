@@ -10,7 +10,7 @@
 
 ## Décision
 
-- Le pilote `vercel-blob` utilise uniquement `BLOB_READ_WRITE_TOKEN`, passé explicitement au SDK à chaque appel ; la variable est ajoutée à la main dans Vercel (Preview) et dans l'environnement GitHub `neon-test`. Le jeton explicite est prioritaire dans le SDK : l'OIDC n'est jamais tenté.
+- Le pilote `vercel-blob` utilise uniquement `BLOB_READ_WRITE_TOKEN`, passé explicitement au SDK à chaque appel ; la variable est ajoutée à la main dans Vercel (Preview) et dans l'environnement GitHub `neon-recette`. Le jeton explicite est prioritaire dans le SDK : l'OIDC n'est jamais tenté.
 - `DATABASE_URL` (lue par `pg`) porte `sslmode=verify-full` ; `DATABASE_MIGRATION_URL` (lue par `prisma migrate`) garde `sslmode=require`.
 
 ## Conséquences

@@ -9,7 +9,7 @@ L'environnement de test tourne sur Vercel (fonctions en fra1) avec une base Neon
 
 ## Décision
 
-- **Migrations sur Neon par une action GitHub** (`migrations-neon.yml`), après une CI verte sur `main` ou à la main, avec le secret du rôle propriétaire dans l'environnement GitHub `neon-test` seulement. Pas de migration au build Vercel : chaque prévisualisation appliquerait ses migrations, même non fusionnées, à la base partagée, et le code de chaque build verrait la chaîne du propriétaire.
+- **Migrations sur Neon par une action GitHub** (`migrations-neon.yml`), après une CI verte sur `main` ou à la main, avec le secret du rôle propriétaire dans l'environnement GitHub `neon-recette` seulement. Pas de migration au build Vercel : chaque prévisualisation appliquerait ses migrations, même non fusionnées, à la base partagée, et le code de chaque build verrait la chaîne du propriétaire.
 - **Migrations sur le VPS** par le service `migrate` de `docker/docker-compose.yml`, qui s'exécute avant l'application et s'arrête.
 - **Seed** : action manuelle avec confirmation (`seed-demo-neon.yml`) ; garde dans `prisma/seed-garde.ts` (base locale libre ; base distante seulement avec `HK_SEED_DEMO=autorise` et un mot de passe choisi) ; l'image de production ne contient pas le seed.
 - **Contrôle de santé** `/api/sante` : 503 si `DATABASE_URL` désigne un rôle qui contourne ou peut désactiver la RLS, ou si les migrations manquent.
