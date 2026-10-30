@@ -75,7 +75,7 @@ export async function creerEglise(proprietaire: pg.Client, suffixe: string): Pro
   );
   await enEglise(proprietaire, jeu.egliseId, async () => {
     await proprietaire.query(
-      `INSERT INTO "Famille" (id, "egliseId", nom, "updatedAt") VALUES ($1, $2, $3, now())`,
+      `INSERT INTO "Famille" (id, "egliseId", nom, "finaliseeLe", "updatedAt") VALUES ($1, $2, $3, now(), now())`,
       [jeu.familleId, jeu.egliseId, `Famille ${suffixe}`],
     );
     await proprietaire.query(

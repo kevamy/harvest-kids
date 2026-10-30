@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { analyserCle } from "@/lib/fichiers";
-import { estJetonCarte } from "@/lib/jetons";
+import { FORMAT_EMPREINTE } from "@/lib/jetons";
 import { creerStockageLocal } from "@/lib/storage/local";
 import { clientEglise } from "@/lib/tenant";
 import { creerCompte, rattacherMembre } from "@/server/plateforme/comptes";
@@ -192,10 +192,13 @@ describe("seed de démonstration", () => {
         expect(await stockage.get(photoKey)).not.toBeNull();
       }
 
-      // RG-02: one active card per family, opaque token.
-      const cartes = await db.carteFamille.findMany({ select: { token: true } });
+      // RG-02 and ADR 0008: one active family card per family, fingerprint only.
+      const cartes = await db.carteFamille.findMany({
+        select: { tokenHash: true, activeLe: true, enfantId: true },
+      });
       expect(cartes).toHaveLength(familles);
-      expect(cartes.every((c) => estJetonCarte(c.token))).toBe(true);
+      expect(cartes.every((c) => FORMAT_EMPREINTE.test(c.tokenHash))).toBe(true);
+      expect(cartes.every((c) => c.activeLe !== null && c.enfantId === null)).toBe(true);
     }
     expect(premier.familles).toBe(total);
 

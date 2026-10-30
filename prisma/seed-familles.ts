@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import { cleFichier } from "../src/lib/fichiers";
-import { genererJetonCarte } from "../src/lib/jetons";
+import { empreinteJeton, genererJetonCarte } from "../src/lib/jetons";
 import type { Stockage } from "../src/lib/storage";
 import { attribuerMatricule } from "../src/lib/tenant";
 import { silhouetteFictive } from "../src/server/plateforme/images-demo";
@@ -177,6 +177,7 @@ export async function semerFamilles(
           nom: nomFamille,
           consentementDonnees: consentement,
           consentementPhotos: hasard.probabilite(0.7) ? consentement : null,
+          finaliseeLe: consentement,
         },
         select: { id: true },
       });
@@ -239,8 +240,14 @@ export async function semerFamilles(
         });
       }
 
+      // Active card; the clear token is discarded (only its fingerprint is stored, ADR 0008).
       await tx.carteFamille.create({
-        data: { egliseId, familleId: famille.id, token: genererJetonCarte() },
+        data: {
+          egliseId,
+          familleId: famille.id,
+          tokenHash: empreinteJeton(genererJetonCarte()),
+          activeLe: consentement,
+        },
       });
     });
   }
