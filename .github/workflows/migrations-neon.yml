@@ -1,7 +1,7 @@
 # Applies pending migrations to the Neon test database (owner role).
 # Automatically after a green CI on main; manually for another branch
 # (Actions › Migrations Neon › Run workflow, choose the branch).
-# The owner connection string lives only in the neon-test environment.
+# The owner connection string lives only in the neon-recette environment.
 name: Migrations Neon
 
 on:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: neon-test
+  group: neon-recette
   cancel-in-progress: false
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: neon-test
+    environment: neon-recette
     steps:
       - uses: actions/checkout@v5
         with:
