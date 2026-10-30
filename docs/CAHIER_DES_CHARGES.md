@@ -1,6 +1,6 @@
 # Harvest Kids — Cahier des charges
 
-Version 1.1, octobre 2026 (ajout du multi-églises et du logo de l'église sur les cartes). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
+Version 1.2, octobre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
 
 ---
 
@@ -59,7 +59,7 @@ Harvest Kids est un service unique hébergé une fois (Vercel en test, VPS Hosti
 
 ### Ce qui est propre à chaque église
 
-Nom, slug, logo, coordonnées, fuseau horaire, cultes, classes, comptes et rôles, badges moniteurs, familles et enfants, séquence des matricules, textes de consentement, texte de la carte famille, lieux de rendez-vous, délais d'alerte, durée de conservation des données.
+Nom, slug, logo, coordonnées, fuseau horaire, cultes, classes et tranches d'âge, mode de carte (par famille ou par enfant), format d'impression des cartes et des badges, comptes et rôles, badges moniteurs, familles et enfants, séquence des matricules, textes de consentement, texte de la carte famille, lieux de rendez-vous, délais d'alerte, durée de conservation des données.
 
 ### Administration de la plateforme
 
@@ -100,8 +100,9 @@ Une personne peut avoir plusieurs rôles. Les parents n'ont pas de compte en v1 
 - **Tuteur** : parent ou tuteur légal, avec nom, téléphone principal, téléphone secondaire, WhatsApp, lien avec l'enfant. Un tuteur est « contact principal ».
 - **Personne autorisée** : adulte autorisé à récupérer un ou plusieurs enfants de la famille (tuteurs compris), avec photo obligatoire, nom, lien et téléphone.
 - **Enfant** : prénom, nom, date de naissance, photo, sexe (facultatif), alertes médicales (allergies, traitements, consignes), notes, consentement photo, **matricule** (`HK-0001`).
-- **Carte famille** : carte plastifiée format carte bancaire remise aux parents, au **logo de l'église** (pas celui de Harvest Kids), portant un QR code. Une carte par famille (elle donne accès à tous les enfants de la famille). Révocable et remplaçable.
-- **Classe** : groupe d'enfants par tranche d'âge (ex. Pouponnière 0–2 ans, 3–5 ans, 6–8 ans, 9–12 ans), avec salle, capacité et nombre minimum de moniteurs (2 par défaut).
+- **Carte famille** : carte remise aux parents, imprimée par l'église elle-même dans l'un des cinq formats proposés (section 7.10), au **logo de l'église** (pas celui de Harvest Kids), portant un QR code. Selon le **mode de carte** de l'église (RG-16), une carte par famille (par défaut : elle donne accès à tous les enfants de la famille) ou une carte par enfant (« carte enfant »). Révocable et remplaçable.
+- **Mode de carte** : paramètre de l'église, « une carte par famille » (par défaut) ou « une carte par enfant » (RG-16).
+- **Classe** : groupe d'enfants défini par l'église, avec sa **tranche d'âge en mois** (ex. Pouponnière 0–35 mois, 3–5 ans, 6–8 ans, 9–12 ans), salle, capacité, nombre minimum de moniteurs (2 par défaut), ordre d'affichage et activation (RG-17).
 - **Culte** : créneau récurrent (ex. « Culte 1 — dimanche 8 h », « Culte 2 — dimanche 10 h 30 »).
 - **Session** : l'occurrence datée d'un culte (ex. culte 1 du 19 octobre 2026). Toutes les présences sont rattachées à une session.
 - **Présence** : le passage d'un enfant dans une session, avec sa classe, son statut, son code de retrait et ses horodatages.
@@ -136,8 +137,8 @@ Chaque changement de statut est horodaté et enregistré dans l'historique de la
 1. Saisie du ou des tuteurs, puis des enfants, puis des personnes autorisées (photo prise avec la caméra de la tablette).
 2. Saisie des alertes médicales par enfant, en texte libre plus des cases rapides (allergie alimentaire, asthme, épilepsie, traitement en cours, autre).
 3. Recueil du consentement du tuteur : case à cocher datée « J'accepte que les données de mes enfants soient utilisées pour leur sécurité pendant les activités de l'église » et case séparée pour l'usage des photos. Sans le premier consentement, l'inscription ne peut pas être validée.
-4. À la validation : attribution des matricules et génération de la carte famille.
-5. Impression : PDF de la carte famille (format CR80, 85,6 × 54 mm). Recto : **logo de l'église** et nom de l'église, nom de la famille, QR code, prénoms et matricules des enfants. Verso : consignes de dépôt et de retrait, téléphone de l'accueil enfants (texte paramétrable par l'église). Le logo Harvest Kids n'apparaît pas sur la carte. Si l'église n'a pas encore téléversé de logo, son nom est composé en Fredoka à la place. Possibilité d'imprimer une planche A4 de 10 cartes.
+4. À la validation : attribution des matricules et génération des cartes selon le mode de carte de l'église (RG-16) : une carte pour la famille, ou une carte par enfant.
+5. Impression par l'église elle-même : PDF de la carte dans le format par défaut de l'église, modifiable au moment de l'impression (formats, sorties PDF et règles de mise en page en section 7.10). Recto : **logo de l'église** et nom de l'église, nom de la famille, QR code, prénoms et matricules des enfants (carte famille) ou prénom et matricule de l'enfant (carte enfant). Verso : consignes de dépôt et de retrait, téléphone de l'accueil enfants (texte paramétrable par l'église) ; en mode « recto seul », le téléphone et une consigne courte passent au recto. Le logo Harvest Kids n'apparaît pas sur la carte. Si l'église n'a pas encore téléversé de logo, son nom est composé en Fredoka à la place.
 6. Import CSV des familles (modèle téléchargeable) pour la reprise depuis Harvest ou des fichiers existants, avec écran de prévisualisation et rapport d'erreurs.
 
 Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est disponible partout.
@@ -153,9 +154,9 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 
 ### 7.3 Check-in (ACCUEIL)
 
-1. L'agent d'accueil scanne la carte famille (caméra de la tablette ou douchette USB/Bluetooth qui saisit comme un clavier). À défaut, il recherche la famille.
-2. L'écran affiche les enfants de la famille avec photo, âge et alertes médicales ; tous sont cochés par défaut, l'agent décoche ceux qui ne sont pas là.
-3. La classe est proposée automatiquement selon l'âge et reste modifiable.
+1. L'agent d'accueil scanne la carte (caméra de la tablette ou douchette USB/Bluetooth qui saisit comme un clavier). À défaut, il recherche la famille.
+2. Le comportement dépend du type de la carte scannée, pas du mode de carte actuel de l'église (RG-16). Carte famille : l'écran affiche les enfants de la famille avec photo, âge et alertes médicales ; tous sont cochés par défaut, l'agent décoche ceux qui ne sont pas là. Carte enfant : l'écran affiche uniquement l'enfant concerné, avec un raccourci « Ajouter ses frères et sœurs » qui les ajoute au même check-in.
+3. La classe est proposée automatiquement (RG-17) : la classe forcée de l'enfant si elle existe ; sinon, parmi les classes actives dont la tranche couvre son âge (en mois révolus à la date de la session, bornes incluses), celle qui vient en premier dans l'ordre des classes, les autres classes correspondantes étant proposées en choix secondaire. Elle reste modifiable. Si aucune tranche ne couvre l'enfant, l'écran le signale et demande de choisir la classe à la main.
 4. L'agent valide : chaque enfant passe en `PRESENT`, un **code de retrait de session** de 4 caractères est généré pour la famille (alphabet sans caractères ambigus : pas de 0, O, 1, I, L).
 5. Confirmation affichée en grand : matricules, classes et code de retrait, que l'agent dicte au parent (plus tard, imprimé sur une étiquette parent).
 6. Si une alerte médicale existe, elle est rappelée à l'écran et marquée sur la fiche de classe.
@@ -176,8 +177,8 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 
 ### 7.6 Check-out (ACCUEIL, et MONITEUR en salle si la configuration le permet)
 
-1. Le parent présente sa carte famille (scan) ou donne son code de retrait de session.
-2. L'écran affiche les enfants de la famille présents dans la session avec leur statut et leur lieu, ainsi que **les photos des personnes autorisées**.
+1. Le parent présente sa carte (scan) ou donne son code de retrait de session.
+2. L'écran affiche les enfants de la famille présents dans la session avec leur statut et leur lieu, ainsi que **les photos des personnes autorisées**. Avec une carte enfant, tous les enfants de la famille présents dans la session sont affichés : l'enfant scanné est présélectionné, les autres sont visibles mais non cochés (RG-16). L'autorisation reste celle de RG-06.
 3. L'agent vérifie visuellement l'adulte et touche sa photo pour indiquer qui récupère.
 4. L'agent sélectionne les enfants remis et valide : statut `RECUPERE`, horodatage, personne qui récupère, agent qui remet.
 5. Cas particuliers :
@@ -209,10 +210,34 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 ### 7.10 Administration
 
 - Profil de l'église : nom, coordonnées, fuseau horaire, **logo** (SVG ou PNG transparent, avec une variante claire facultative pour les fonds sombres), téléphone de l'accueil enfants imprimé sur les cartes.
-- Gestion des comptes et de leurs rôles dans l'église, invitation d'un compte déjà membre d'une autre église, badges moniteurs (QR imprimables, au logo de l'église).
-- Gestion des cultes récurrents, des classes (tranches d'âge, salles, capacité, minimum de moniteurs).
-- Paramètres : délais d'alerte, lieux de rendez-vous, texte de la carte famille, durée de conservation des données.
-- Révocation et réédition d'une carte famille perdue (l'ancien QR devient invalide immédiatement).
+- Gestion des comptes et de leurs rôles dans l'église, invitation d'un compte déjà membre d'une autre église, badges moniteurs (QR imprimables, au logo de l'église, dans les mêmes formats et avec les mêmes réglages que les cartes).
+- Gestion des cultes récurrents.
+- **Page Paramètres** :
+  - **mode de carte** (ADMIN) : « une carte par famille » (par défaut) ou « une carte par enfant ». Avant d'enregistrer un changement, l'écran prévient l'administrateur que les cartes existantes restent valides jusqu'à leur révocation et que seules les nouvelles cartes seront émises dans le nouveau mode ; il propose ensuite une réémission groupée des cartes dans le nouveau mode, avec une date limite facultative (RG-16) ;
+  - **classes et tranches d'âge** (ADMIN, RESPONSABLE) : nom, âge minimum et maximum en mois, salle, capacité, nombre minimum de moniteurs, ordre, activation. L'écran signale les chevauchements et les trous entre les tranches des classes actives, sans les interdire (RG-17) ;
+  - **impression des cartes** (ADMIN) : format par défaut et option « recto seul » ou « recto-verso », avec l'aide au choix décrite ci-dessous ;
+  - délais d'alerte, lieux de rendez-vous, texte de la carte famille, durée de conservation des données.
+- Révocation et réédition d'une carte perdue (l'ancien QR devient invalide immédiatement).
+- **Réémission groupée** (RG-16) : les anciennes cartes restent valides jusqu'au premier scan d'une nouvelle carte ; à ce moment, les anciennes cartes couvrant les mêmes enfants sont révoquées automatiquement, avec une entrée d'audit. L'administrateur peut fixer une date limite après laquelle les anciennes cartes non remplacées sont révoquées.
+
+#### Impression des cartes et des badges
+
+Chaque église imprime elle-même ses cartes. Cinq formats sont proposés, en trois familles :
+
+| Famille | Format | Orientation | Usage conseillé |
+|---|---|---|---|
+| Carte PVC standard | CR80, 85,6 × 53,98 mm | paysage | imprimante à cartes PVC |
+| Imprimerie standard, papier semi-rigide | 90 × 54 mm ou 90 × 50 mm | paysage | imprimeur |
+| Grand format, événements | 70 × 100 mm ou 85 × 100 mm | portrait | événement avec cordon, lisible à distance |
+
+1. **Réglages de l'église** : format par défaut et option « recto seul » ou « recto-verso ». Le format peut être changé au moment de chaque impression.
+2. **Aide au choix** : la page Paramètres représente les cinq formats côte à côte, à la même échelle (proportions réelles respectées), chacun rendu avec le vrai logo de l'église et une famille fictive, avec ses dimensions en mm et son usage conseillé. Un bouton « Télécharger un PDF d'essai » génère une carte de test dans le format choisi.
+3. **Deux sorties PDF** :
+   - CR80 : une carte par page, au format exact, pour les imprimantes à cartes PVC ;
+   - tous formats : planche A4 avec traits de coupe et fond perdu de 3 mm ; le nombre de cartes par planche est calculé selon le format.
+4. **Mise en page** : QR code d'au moins 20 mm avec sa zone de silence, zone de sécurité de 3 mm sans texte important, matricules en Fredoka. En grand format portrait, une zone libre en haut est réservée à la perforation du cordon, et le QR code et les matricules sont agrandis.
+5. **Recto seul** : le téléphone de l'accueil enfants et une consigne courte passent au recto.
+6. **Badges moniteurs** : mêmes formats et mêmes réglages que les cartes.
 
 ## 8. Règles de gestion
 
@@ -233,6 +258,8 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 | RG-13 | Aucune donnée d'une église n'est lisible ni modifiable depuis une autre église. Toute table métier porte `egliseId`, filtré par l'application et par la Row-Level Security. |
 | RG-14 | Un QR (carte famille, badge moniteur) scanné dans une église à laquelle il n'appartient pas est refusé avec le message « Cette carte n'appartient pas à cette église. » |
 | RG-15 | Les fichiers (photos, logos, PDF) sont rangés sous un préfixe par église (`eglises/{egliseId}/…`) et la route de lecture vérifie que le fichier appartient à l'église active. |
+| RG-16 | **Mode de carte par église**, choisi par un ADMIN dans la page Paramètres : « une carte par famille » (par défaut) ou « une carte par enfant ». Une carte porte toujours la famille et, pour une carte enfant, l'enfant concerné. **Le comportement au scan dépend du type de la carte, pas du mode actuel de l'église** : une carte famille ouvre toute la famille jusqu'à sa révocation. Au check-in, le scan d'une carte famille ouvre tous les enfants de la famille ; le scan d'une carte enfant ouvre uniquement cet enfant, avec un raccourci pour ajouter ses frères et sœurs au même check-in. Au check-out, le scan d'une carte enfant affiche tous les enfants de la famille présents dans la session : l'enfant scanné est présélectionné, les autres sont visibles mais non cochés ; l'autorisation reste celle de RG-06. Le code de retrait de session reste **par famille** dans les deux modes (RG-04). Changer de mode n'invalide aucune carte : les cartes existantes restent valides jusqu'à leur révocation et les nouvelles cartes sont émises dans le nouveau mode ; l'écran de changement prévient l'administrateur et propose une réémission groupée. Après une réémission groupée, les anciennes cartes restent valides jusqu'au premier scan d'une nouvelle carte ; ce scan révoque automatiquement les anciennes cartes couvrant les mêmes enfants, avec une entrée d'audit. L'administrateur peut fixer une date limite après laquelle les anciennes cartes non remplacées sont révoquées. La base garantit au plus une carte famille active par famille et au plus une carte enfant active par enfant. |
+| RG-17 | **Classes et tranches d'âge par église**, gérées par un ADMIN ou un RESPONSABLE dans la page Paramètres. Une tranche est définie en mois, âge minimum et maximum, **bornes incluses** ; l'âge de l'enfant est compté en **mois révolus à la date de la session**, dans le fuseau de l'église (RG-12). L'écran signale les chevauchements et les trous entre les tranches des classes actives, sans les interdire. Au check-in, la classe forcée de l'enfant est prioritaire ; à défaut, la classe proposée est, parmi les classes actives dont la tranche couvre l'âge de l'enfant, celle qui vient en premier selon l'ordre des classes, les autres classes correspondantes étant affichées en choix secondaire. Un enfant qu'aucune tranche ne couvre est signalé et l'agent choisit la classe à la main. Modifier une tranche ne déplace aucune présence existante : la nouvelle tranche s'applique aux check-in suivants. |
 
 ## 9. Exigences non fonctionnelles
 
@@ -418,16 +445,23 @@ model CarteFamille {
   egliseId   String
   familleId  String
   famille    Famille  @relation(fields: [familleId], references: [id])
+  enfantId   String?            // null = carte famille ; renseigné = carte enfant (RG-16)
   token      String   @unique   // HKF1.xxxx, globalement unique, sans matricule ni église
   emiseLe    DateTime @default(now())
   revoqueeLe DateTime?
+  // Index partiels (RG-16), à écrire dans la migration :
+  // UNIQUE ("familleId") WHERE "revoqueeLe" IS NULL AND "enfantId" IS NULL      -- une carte famille active par famille
+  // UNIQUE ("enfantId")  WHERE "revoqueeLe" IS NULL AND "enfantId" IS NOT NULL  -- une carte enfant active par enfant
 }
+
+// Paramètres d'impression et de carte de l'église : mode de carte FAMILLE (par défaut) ou ENFANT (RG-16),
+// format par défaut (CR80, 90×54, 90×50, 70×100, 85×100) et recto seul ou recto-verso (section 7.10).
 
 model Classe {
   id            String  @id @default(cuid())
   egliseId      String
   nom           String
-  ageMinMois    Int
+  ageMinMois    Int              // tranche d'âge en mois (RG-17)
   ageMaxMois    Int
   salle         String?
   capacite      Int?
@@ -680,7 +714,7 @@ Chaque lot se termine par une démonstration sur l'environnement Vercel et une v
 | Lot | Contenu | Critères d'acceptation |
 |---|---|---|
 | **0. Fondations** | Projet Next.js, Tailwind + tokens, shadcn, Prisma + schéma, **socle multi-églises** (`Eglise`, `Membre`, église active en session, `getTenantDb()`, politiques RLS, espace `/plateforme`), Better Auth + rôles par église + PIN, layout tablette, composants `hk/`, seed avec **deux églises de démonstration**, CI (lint, types, tests), déploiement Vercel, Dockerfile et compose | Connexion par rôle et choix de l'église ; un utilisateur de l'église A ne voit aucune donnée de l'église B, y compris par une requête forcée (test automatique) ; page de démonstration des composants fidèle au design system ; CI verte ; build Docker qui démarre en local |
-| **1. Familles et cartes** | Profil de l'église et téléversement du logo, inscription famille (tuteurs, enfants, personnes autorisées, photos, consentements), recherche, matricules par église, carte famille PDF au logo de l'église, révocation, import CSV, badges moniteurs | Une famille de 3 enfants s'inscrit en moins de 5 minutes ; la carte imprimée porte le logo de l'église et se scanne ; une carte révoquée est refusée ; une carte de l'église A est refusée dans l'église B |
+| **1. Familles et cartes** | Profil de l'église et téléversement du logo, **page Paramètres** (mode de carte, classes et tranches d'âge, format d'impression avec les cinq aperçus et le PDF d'essai), inscription famille (tuteurs, enfants, personnes autorisées, photos, consentements), recherche, matricules par église, cartes PDF au logo de l'église (famille ou enfant selon le mode) dans les cinq formats, en CR80 carte par carte et en planche A4 avec traits de coupe, révocation, réémission groupée avec révocation au premier scan et date limite, import CSV, badges moniteurs dans les mêmes formats | Une famille de 3 enfants s'inscrit en moins de 5 minutes ; la carte imprimée porte le logo de l'église et se scanne ; une carte révoquée est refusée ; une carte de l'église A est refusée dans l'église B ; en mode « une carte par enfant », une famille de 3 enfants reçoit 3 cartes, chacune désignant son enfant ; après un changement de mode, les cartes existantes restent valides et la réémission groupée émet les cartes du nouveau mode ; le premier scan d'une nouvelle carte révoque les anciennes cartes couvrant les mêmes enfants, avec une entrée d'audit, et la date limite révoque les anciennes cartes non remplacées ; chaque PDF a les dimensions exactes de son format (taille de page en points vérifiée par un test) ; la page Paramètres affiche les cinq aperçus à la même échelle (test e2e) ; le PDF d'essai se télécharge dans le format choisi ; la base refuse une deuxième carte famille active pour une famille et une deuxième carte enfant active pour un enfant ; seul un ADMIN change le mode de carte ; un ADMIN ou un RESPONSABLE modifie les classes et tranches d'âge, l'écran signale chevauchements et trous sans bloquer l'enregistrement ; le paramétrage d'une église est sans effet sur une autre |
 | **2. Sessions, check-in, check-out** | Cultes et sessions, ouverture des classes à 2 moniteurs, check-in, vue moniteur et confirmation en salle, check-out avec vérification des personnes autorisées, code de retrait | Check-in famille < 15 s ; classe à 1 moniteur bloquée ; retrait par personne non autorisée bloqué et tracé en incident |
 | **3. Infirmerie, appels, urgence** | Infirmerie, appel parent, écran d'appel `/ecran`, bouton urgence avec journal des appels, incidents | **Test e2e du scénario d'origine** : un enfant envoyé à l'infirmerie est signalé au check-out et sur l'écran d'appel en moins de 5 s |
 | **4. Transition et pilotage** | Double colonne départs / arrivées, alertes de non-récupération, bascule entre sessions, clôture, tableaux de bord, rapports et exports, audit consultable | Clôture impossible avec un enfant non récupéré sans justification ; rapports exportables |
@@ -689,17 +723,18 @@ Chaque lot se termine par une démonstration sur l'environnement Vercel et une v
 ## 16. Tests
 
 - Unitaires (Vitest) pour chaque règle RG-xx dans `src/server/`.
-- Bout en bout (Playwright, viewport 1280 × 800 et 800 × 1280) pour les parcours : inscription, check-in, confirmation en salle, infirmerie, appel, check-out autorisé, check-out refusé, transition entre cultes.
+- Bout en bout (Playwright, viewport 1280 × 800 et 800 × 1280) pour les parcours : inscription, check-in, confirmation en salle, infirmerie, appel, check-out autorisé, check-out refusé, transition entre cultes, et la présence des cinq aperçus de format dans la page Paramètres.
+- Impression : un test vérifie les dimensions exactes de chaque PDF (taille de page en points) pour les cinq formats, en CR80 carte par carte et en planche A4.
 - **Tests d'isolation multi-églises** (obligatoires, dans la CI) : pour chaque service et chaque route, vérifier qu'un utilisateur de l'église A ne peut ni lire, ni modifier, ni deviner l'existence d'une donnée de l'église B ; vérifier qu'une requête exécutée sans église active est refusée par la RLS.
 - Un jeu de données de démonstration réaliste généré par le seed : deux églises, chacune avec 20 à 40 familles (noms béninois variés), 4 classes et 2 cultes, et un utilisateur membre des deux églises.
 
 ## 17. Points à valider par l'équipe des leaders
 
-1. Les tranches d'âge exactes des classes et le nom de chaque classe.
-2. Une carte par famille (proposé) ou une carte par enfant.
+1. ~~Les tranches d'âge exactes des classes et le nom de chaque classe.~~ **Tranché : configurables par église** (page Paramètres, RG-17).
+2. ~~Une carte par famille (proposé) ou une carte par enfant.~~ **Tranché : configurable par église**, une carte par famille par défaut (page Paramètres, RG-16).
 3. Le check-out se fait-il uniquement à l'accueil, ou aussi à la porte des classes ?
 4. Les horaires exacts des deux cultes et le délai d'alerte après la fin du culte 1.
-5. Qui imprime et plastifie les cartes, et sur quel matériel.
+5. ~~Qui imprime et plastifie les cartes, et sur quel matériel.~~ **Tranché : chaque église imprime ses cartes elle-même**, dans l'un des cinq formats proposés (section 7.10, « Impression des cartes et des badges »).
 6. Le lieu de rendez-vous à afficher sur l'écran d'appel (accueil enfants, infirmerie, autre).
 7. La durée de conservation des données.
 8. Le nom de domaine de la plateforme et qui joue le rôle d'exploitant (super-administrateur) et de sous-traitant des données.
