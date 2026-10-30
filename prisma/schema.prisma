@@ -103,6 +103,7 @@ model Eglise {
   incidents           Incident[]
   auditLogs           AuditLog[]
   parametres          Parametre[]
+  fichiersASupprimer  FichierASupprimer[]
 }
 
 // Compte (Better Auth). `name` et `email` sont imposés par Better Auth ; un compte créé par
@@ -303,6 +304,8 @@ model PersonneAutorisee {
   @@unique([tuteurId, egliseId])
   @@unique([id, egliseId])
   @@index([familleId])
+  // Recherche par téléphone limitée à l'église active (ADR 0011).
+  @@index([egliseId, telephone])
 }
 
 model Enfant {
@@ -610,4 +613,20 @@ model Parametre {
   valeur   Json
 
   @@id([egliseId, cle])
+}
+
+// Fichier remplacé (ancien logo, ancienne photo), supprimé par la tâche quotidienne à partir de
+// `apresLe` (24 h après le remplacement) : une tablette qui affiche encore l'ancienne page ne
+// montre jamais une image cassée. La clé est vérifiée (préfixe de l'église) avant suppression.
+model FichierASupprimer {
+  id       String   @id @default(cuid())
+  egliseId String
+  eglise   Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  cle      String // eglises/{egliseId}/...
+  apresLe  DateTime
+  creeLe   DateTime @default(now())
+
+  @@unique([id, egliseId])
+  @@unique([egliseId, cle])
+  @@index([apresLe])
 }

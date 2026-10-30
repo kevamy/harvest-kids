@@ -193,14 +193,15 @@ test("l'administrateur téléverse un logo, converti par sharp sur le build de p
       page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
     ).toHaveAttribute("src", premier);
 
-    // Same file again: a new key, so no browser cache can serve the old logo; the old
-    // file is deleted once the church points to the new one.
+    // Same file again: a new key, so no browser cache can serve the old logo. The old file
+    // stays served (tablets still showing the old page) until the daily task deletes it, 24 h
+    // later at the earliest.
     const second = await televerser(premier);
     expect(second).not.toBe(premier);
     await expect(
       page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
     ).toHaveAttribute("src", second);
-    expect((await page.request.get(premier)).status()).toBe(404);
+    expect((await page.request.get(premier)).status()).toBe(200);
     expect((await page.request.get(second)).status()).toBe(200);
 
     // Saving a logo must not invalidate the prerendered service worker.

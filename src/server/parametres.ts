@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { journaliser } from "@/lib/audit";
 import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
+import { REGLES_TELEPHONE } from "@/lib/telephone";
 import { IDS_FORMAT } from "@/server/impression/formats";
 
 /**
@@ -24,6 +25,11 @@ export const SCHEMAS_PARAMETRES = {
     .int("Saisissez un nombre entier de jours.")
     .min(7, "Le délai est d'au moins 7 jours.")
     .max(730, "Le délai est d'au plus 730 jours."),
+  // Country code applied to a phone number typed without one.
+  "telephone.indicatifParDefaut": z.enum(
+    REGLES_TELEPHONE.map((r) => r.indicatif) as [string, ...string[]],
+    { message: "Choisissez un indicatif de la liste." },
+  ),
 } as const;
 
 export type CleParametre = keyof typeof SCHEMAS_PARAMETRES;
@@ -34,6 +40,7 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   // Provisional until the leaders settle the defaults of a new church (cahier §17, point 9).
   impression: { format: "90x54", rectoVerso: false },
   "familles.delaiPurgeBrouillonsJours": 90,
+  "telephone.indicatifParDefaut": "229",
 };
 
 const CLES = Object.keys(SCHEMAS_PARAMETRES) as CleParametre[];

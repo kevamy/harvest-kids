@@ -52,7 +52,7 @@ describe("catalogue PostgreSQL", () => {
                       AND col.column_name = 'egliseId')
     `);
     const tenant = rows.filter((r) => !TABLES_PLATEFORME.includes(r.table));
-    expect(tenant.length).toBe(18);
+    expect(tenant.length).toBe(19);
     for (const table of tenant) {
       expect(table, table.table).toMatchObject({ rls: true, force: true, politiques: 1 });
     }

@@ -113,6 +113,7 @@ describe("paramètres de l'église", () => {
       "cartes.mode": "FAMILLE",
       impression: { format: "90x54", rectoVerso: false },
       "familles.delaiPurgeBrouillonsJours": 90,
+      "telephone.indicatifParDefaut": "229",
     });
   });
 
@@ -167,10 +168,10 @@ describe("profil de l'église", () => {
     });
   });
 
-  it("refuse un téléphone mal formé et un fuseau hors liste", () => {
-    expect(schemaProfilEglise.safeParse({ ...valide, telephoneAccueil: "abc" }).success).toBe(
-      false,
-    );
+  it("refuse un fuseau hors liste ; le téléphone est vérifié par le service, avec l'indicatif de l'église", () => {
     expect(schemaProfilEglise.safeParse({ ...valide, fuseau: "Mars/Olympus" }).success).toBe(false);
+    expect(
+      schemaProfilEglise.safeParse({ ...valide, telephoneAccueil: "x".repeat(31) }).success,
+    ).toBe(false);
   });
 });

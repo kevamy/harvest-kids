@@ -3,24 +3,26 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Champ, MessageErreur } from "@/components/ui/champ";
+import { ChampTelephone } from "@/components/ui/champ-telephone";
+import { REGLES_TELEPHONE } from "@/lib/telephone";
 import { appelerAction } from "@/lib/appel-action";
 import { MessageSucces } from "../entete";
-import { enregistrerProfil, supprimerLogoClair, televerserLogo } from "../actions";
+import {
+  enregistrerIndicatif,
+  enregistrerProfil,
+  supprimerLogoClair,
+  televerserLogo,
+} from "../actions";
 
 // Same rules as the server (schemaProfilEglise); the server checks again.
 const schemaFormulaire = z.object({
   nom: z.string().trim().min(3, "Le nom compte au moins 3 caractères."),
   adresse: z.string().trim().max(200, "200 caractères au plus."),
-  telephoneAccueil: z
-    .string()
-    .trim()
-    .refine((s) => s === "" || /^\+?[0-9 ().-]{6,20}$/.test(s), {
-      message: "Saisissez un numéro de téléphone valide, par exemple +229 01 23 45 67.",
-    }),
+  telephoneAccueil: z.string().trim().max(30),
   fuseau: z.string().min(1),
 });
 type Formulaire = z.infer<typeof schemaFormulaire>;
@@ -28,9 +30,11 @@ type Formulaire = z.infer<typeof schemaFormulaire>;
 export function FormulaireProfil({
   fuseaux,
   valeurs,
+  indicatif,
 }: {
   fuseaux: readonly string[];
   valeurs: Formulaire;
+  indicatif: string;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
@@ -39,6 +43,7 @@ export function FormulaireProfil({
     defaultValues: valeurs,
   });
   const { errors, isSubmitting } = formulaire.formState;
+  const telephoneAccueil = useWatch({ control: formulaire.control, name: "telephoneAccueil" });
 
   return (
     <form
@@ -75,13 +80,15 @@ export function FormulaireProfil({
         erreur={errors.adresse?.message}
         {...formulaire.register("adresse")}
       />
-      <Champ
+      <ChampTelephone
         id="telephoneAccueil"
         libelle="Téléphone de l'accueil enfants"
-        type="tel"
         aide="Imprimé sur les cartes famille."
-        erreur={errors.telephoneAccueil?.message}
-        {...formulaire.register("telephoneAccueil")}
+        indicatif={indicatif}
+        value={telephoneAccueil}
+        onChange={(valeur) =>
+          formulaire.setValue("telephoneAccueil", valeur, { shouldDirty: true })
+        }
       />
       <div className="grid gap-2">
         <label htmlFor="fuseau" className="text-label font-bold">
@@ -211,6 +218,70 @@ export function FormulaireLogo({
           </Button>
         ) : null}
       </div>
+    </form>
+  );
+}
+
+/** Country code applied to phone numbers typed without one (+229 by default). */
+export function FormulaireIndicatif({ indicatif }: { indicatif: string }) {
+  const router = useRouter();
+  const [choix, setChoix] = useState(indicatif);
+  const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
+  const [enCours, demarrer] = useTransition();
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        demarrer(async () => {
+          setMessage(null);
+          const resultat = await appelerAction(() => enregistrerIndicatif(choix));
+          if (!resultat.ok) {
+            setMessage({ ok: false, texte: resultat.erreur });
+            return;
+          }
+          setMessage({ ok: true, texte: "Indicatif enregistré." });
+          router.refresh();
+        });
+      }}
+    >
+      {message ? (
+        message.ok ? (
+          <MessageSucces>{message.texte}</MessageSucces>
+        ) : (
+          <MessageErreur>{message.texte}</MessageErreur>
+        )
+      ) : null}
+      <div className="grid gap-2">
+        <label htmlFor="indicatif" className="text-label font-bold">
+          Indicatif par défaut des numéros de téléphone
+        </label>
+        <select
+          id="indicatif"
+          className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+          value={choix}
+          onChange={(e) => setChoix(e.target.value)}
+        >
+          {REGLES_TELEPHONE.map((r) => (
+            <option key={r.indicatif} value={r.indicatif}>
+              {r.pays} (+{r.indicatif})
+            </option>
+          ))}
+        </select>
+        <p className="m-0 text-label text-texte-doux">
+          Utilisé quand un numéro est saisi sans indicatif. Les numéros sont enregistrés au format
+          international.
+        </p>
+      </div>
+      <Button
+        type="submit"
+        variant="bleu"
+        className="justify-self-start"
+        disabled={enCours || choix === indicatif}
+      >
+        Enregistrer l&apos;indicatif
+      </Button>
     </form>
   );
 }

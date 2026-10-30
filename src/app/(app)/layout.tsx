@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Repeat, Settings } from "lucide-react";
+import { LogOut, Repeat, Settings, Users } from "lucide-react";
 import { Providers } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { seDeconnecter } from "@/app/actions/session";
@@ -61,6 +61,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
           <nav className="flex items-center gap-3" aria-label="Compte">
             <span className="hidden text-label text-nuit-doux sm:inline">{session.nom}</span>
+            {peut(contexte.roles, "familles.gerer") ? (
+              <Button
+                asChild
+                variant="sombre"
+                className="shadow-[inset_0_0_0_2px_var(--color-nuit-doux)]"
+              >
+                <Link href="/familles">
+                  <Users aria-hidden />
+                  Familles
+                </Link>
+              </Button>
+            ) : null}
             {peut(contexte.roles, "eglise.parametrer") || peut(contexte.roles, "classes.gerer") ? (
               <Button
                 asChild

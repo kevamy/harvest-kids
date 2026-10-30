@@ -17,6 +17,7 @@ import { creerClientPlateforme } from "@/server/plateforme/db";
 import {
   LOGO_TAILLE_MAX,
   LogoRefuse,
+  ProfilRefuse,
   convertirLogo,
   lireProfilEglise,
   modifierProfilEglise,
@@ -225,13 +226,17 @@ describe("profil de l'église", () => {
   const profil = {
     nom: "Église A modifiée",
     adresse: "Rue des Cocotiers",
-    telephoneAccueil: "+229 01 02 03 04",
+    telephoneAccueil: "01 97 45 12 33",
     fuseau: "Africa/Lagos",
   };
 
   it("modifie le profil de l'église active seulement, avec l'audit dans cette église", async () => {
     await modifierProfilEglise(base, auteur(a), profil);
-    expect(await lireProfilEglise(base, auteur(a))).toMatchObject(profil);
+    // The reception phone is stored in E.164, with the church's default country code.
+    expect(await lireProfilEglise(base, auteur(a))).toMatchObject({
+      ...profil,
+      telephoneAccueil: "+2290197451233",
+    });
     expect((await lireProfilEglise(base, auteur(b))).nom).toBe("Église b");
 
     const entrees = await audit(a);
@@ -244,6 +249,17 @@ describe("profil de l'église", () => {
       apres: { nom: "Église A modifiée" },
     });
     expect(await audit(b)).toEqual([]);
+  });
+
+  it("refuse un téléphone invalide ou béninois à 8 chiffres, sans rien écrire", async () => {
+    await expect(
+      modifierProfilEglise(base, auteur(a), { ...profil, telephoneAccueil: "abc" }),
+    ).rejects.toThrow(ProfilRefuse);
+    await expect(
+      modifierProfilEglise(base, auteur(a), { ...profil, telephoneAccueil: "97 45 12 33" }),
+    ).rejects.toThrow("Voulez-vous dire 01 97 45 12 33 ?");
+    expect((await lireProfilEglise(base, auteur(a))).nom).toBe("Église a");
+    expect(await audit(a)).toEqual([]);
   });
 });
 
@@ -272,7 +288,7 @@ describe("logos", () => {
     ).rejects.toThrow("Le logo dépasse 2 Mo. Choisissez un fichier plus léger.");
   });
 
-  it("remplace le logo sous une nouvelle clé de l'église, supprime l'ancien fichier et journalise", async () => {
+  it("remplace le logo sous une nouvelle clé, programme la suppression de l'ancien dans 24 h et journalise", async () => {
     const stockage = creerStockageLocal(dossier);
     const premier = await convertirLogo({ type: "image/svg+xml", octets: svg("#111111") });
     await remplacerLogo(base, stockage, auteur(a), "principal", premier);
@@ -284,7 +300,14 @@ describe("logos", () => {
     await remplacerLogo(base, stockage, auteur(a), "principal", second);
     const cle2 = (await lireProfilEglise(base, auteur(a))).logoKey!;
     expect(cle2).not.toBe(cle1);
-    expect(await stockage.get(cle1)).toBeNull();
+    // The old file stays served (tablets still showing the old page) until the daily task
+    // deletes it, at least 24 hours later.
+    expect(await stockage.get(cle1)).not.toBeNull();
+    const programmes = await dbA.fichierASupprimer.findMany({
+      select: { cle: true, apresLe: true },
+    });
+    expect(programmes.map((p) => p.cle)).toEqual([cle1]);
+    expect(programmes[0]!.apresLe.getTime()).toBeGreaterThan(Date.now() + 23 * 3600 * 1000);
     expect(await stockage.get(cle2)).not.toBeNull();
 
     // Removing the light variant empties it; church B is untouched.

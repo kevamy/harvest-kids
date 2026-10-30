@@ -2,10 +2,12 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { cleAppartientA, cleFichier } from "@/lib/fichiers";
+import { cleFichier } from "@/lib/fichiers";
+import { INDICATIF_PAR_DEFAUT, normaliserTelephone } from "@/lib/telephone";
 import type { ContexteEglise } from "@/lib/tenant";
 import { stockage, type Stockage } from "@/lib/storage";
 import { prismaPlateforme, withEglise } from "./db";
+import { dateSuppression } from "@/server/fichiers-differes";
 import { FUSEAUX_PROPOSES } from "./eglises";
 
 /**
@@ -15,8 +17,6 @@ import { FUSEAUX_PROPOSES } from "./eglises";
  * transaction (app.eglise_id set, as for any church write).
  */
 
-const TELEPHONE = /^\+?[0-9 ().-]{6,20}$/;
-
 export const schemaProfilEglise = z.object({
   nom: z.string().trim().min(3, "Le nom compte au moins 3 caractères.").max(120),
   adresse: z
@@ -25,14 +25,13 @@ export const schemaProfilEglise = z.object({
     .max(200)
     .transform((s) => s || null)
     .nullable(),
+  // Typed as entered; normalised to E.164 with the church's default country code.
   telephoneAccueil: z
     .string()
     .trim()
+    .max(30)
     .transform((s) => s || null)
-    .nullable()
-    .refine((s) => s === null || TELEPHONE.test(s), {
-      message: "Saisissez un numéro de téléphone valide, par exemple +229 01 23 45 67.",
-    }),
+    .nullable(),
   fuseau: z.enum(FUSEAUX_PROPOSES, { message: "Choisissez un fuseau horaire de la liste." }),
 });
 export type ProfilEglise = z.infer<typeof schemaProfilEglise>;
@@ -75,9 +74,30 @@ async function journaliser(
   });
 }
 
+/** Refusal of a profile change, with the message saying what to do. */
+export class ProfilRefuse extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProfilRefuse";
+  }
+}
+
 export async function modifierProfilEglise(base: PrismaClient, auteur: Auteur, saisie: unknown) {
   const donnees = schemaProfilEglise.parse(saisie);
   await withEglise(base, auteur.egliseId, async (tx) => {
+    if (donnees.telephoneAccueil) {
+      const parametre = await tx.parametre.findUnique({
+        where: { egliseId_cle: { egliseId: auteur.egliseId, cle: "telephone.indicatifParDefaut" } },
+        select: { valeur: true },
+      });
+      const indicatif =
+        typeof parametre?.valeur === "string" ? parametre.valeur : INDICATIF_PAR_DEFAUT;
+      const normalise = normaliserTelephone(donnees.telephoneAccueil, indicatif);
+      if (normalise.statut !== "valide") {
+        throw new ProfilRefuse("Téléphone de l'accueil : " + normalise.message);
+      }
+      donnees.telephoneAccueil = normalise.e164;
+    }
     const avant = await tx.eglise.findUniqueOrThrow({
       where: { id: auteur.egliseId },
       select: { nom: true, adresse: true, telephoneAccueil: true, fuseau: true },
@@ -135,8 +155,9 @@ export type VarianteLogo = "principal" | "clair";
 const COLONNE = { principal: "logoKey", clair: "logoClairKey" } as const;
 
 /**
- * Stores a new logo under a fresh key (no stale browser cache), points the church to it,
- * then deletes the previous file once the transaction is committed.
+ * Stores a new logo under a fresh key (no stale browser cache) and points the church to
+ * it. The previous file is not deleted at once: it is scheduled for deletion by the daily
+ * task 24 hours later, so a tablet still showing the old page never shows a broken image.
  */
 export async function remplacerLogo(
   base: PrismaClient,
@@ -150,14 +171,13 @@ export async function remplacerLogo(
     : null;
   if (png && nouvelleCle) await stockage.put(nouvelleCle, png, "image/png");
 
-  let ancienneCle: string | null = null;
   try {
     await withEglise(base, auteur.egliseId, async (tx) => {
       const eglise = await tx.eglise.findUniqueOrThrow({
         where: { id: auteur.egliseId },
         select: { logoKey: true, logoClairKey: true },
       });
-      ancienneCle = eglise[COLONNE[variante]];
+      const ancienneCle = eglise[COLONNE[variante]];
       await tx.eglise.update({
         where: { id: auteur.egliseId },
         data: { [COLONNE[variante]]: nouvelleCle },
@@ -169,15 +189,17 @@ export async function remplacerLogo(
         { variante, cle: ancienneCle },
         { variante, cle: nouvelleCle },
       );
+      if (ancienneCle) {
+        await tx.fichierASupprimer.createMany({
+          data: [{ egliseId: auteur.egliseId, cle: ancienneCle, apresLe: dateSuppression() }],
+          skipDuplicates: true,
+        });
+      }
     });
   } catch (erreur) {
     // Nothing points to the new file: remove it.
     if (nouvelleCle) await stockage.delete(nouvelleCle).catch(() => undefined);
     throw erreur;
-  }
-  // Defence in depth: only ever delete a key of this church.
-  if (ancienneCle && cleAppartientA(ancienneCle, auteur.egliseId)) {
-    await stockage.delete(ancienneCle).catch(() => undefined);
   }
 }
 

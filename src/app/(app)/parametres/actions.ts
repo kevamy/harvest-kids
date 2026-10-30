@@ -5,6 +5,7 @@ import { creerClasse, modifierClasse } from "@/server/classes";
 import { ecrireParametre } from "@/server/parametres";
 import {
   LogoRefuse,
+  ProfilRefuse,
   enregistrerLogo,
   enregistrerProfilEglise,
   type VarianteLogo,
@@ -23,9 +24,21 @@ export async function enregistrerProfil(saisie: unknown): Promise<ResultatAction
   // invalidate the prerendered service worker (/serwist/sw.js), which Serwist cannot
   // rebuild in the standalone build. A new logo gets a new file key: no cache serves the
   // old one.
-  const resultat = await executerAction("eglise.parametrer", ({ contexte }) =>
-    enregistrerProfilEglise(contexte, saisie),
-  );
+  return executerAction("eglise.parametrer", async ({ contexte }) => {
+    try {
+      await enregistrerProfilEglise(contexte, saisie);
+    } catch (erreur) {
+      if (erreur instanceof ProfilRefuse) throw new RefusMetier(erreur.message);
+      throw erreur;
+    }
+  });
+}
+
+export async function enregistrerIndicatif(indicatif: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("eglise.parametrer", async ({ db, contexte }) => {
+    await db.$tx((tx) => ecrireParametre(tx, contexte, "telephone.indicatifParDefaut", indicatif));
+  });
+  if (resultat.ok) revalidatePath("/parametres/eglise");
   return resultat;
 }
 

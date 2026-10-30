@@ -33,6 +33,7 @@ export const MODELES_EGLISE = [
   "Incident",
   "AuditLog",
   "Parametre",
+  "FichierASupprimer",
 ] as const;
 
 const MODELES = new Set<string>(MODELES_EGLISE);

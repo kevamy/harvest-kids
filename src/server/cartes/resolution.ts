@@ -84,9 +84,10 @@ export async function resoudreJeton(
  * An active card is out of date once a bulk reissue covering the same children has
  * passed its deadline (RG-16). Read-only: the daily task revokes it with an audit entry.
  */
-async function estPerimee(
+export async function estPerimee(
   db: Lecture,
   carte: { id: string; familleId: string; enfantId: string | null; emiseLe: Date },
+  maintenant = new Date(),
 ): Promise<boolean> {
   const remplacante = await db.carteFamille.findFirst({
     where: {
@@ -94,7 +95,7 @@ async function estPerimee(
       familleId: carte.familleId,
       revoqueeLe: null,
       emiseLe: { gt: carte.emiseLe },
-      reemission: { dateLimite: { lt: new Date() } },
+      reemission: { dateLimite: { lt: maintenant } },
       // A family card is replaced by any newer card of the family; a child card by a
       // newer card of the same child or a newer family card.
       ...(carte.enfantId ? { OR: [{ enfantId: carte.enfantId }, { enfantId: null }] } : {}),

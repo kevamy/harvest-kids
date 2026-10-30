@@ -2,8 +2,8 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { journaliser } from "@/lib/audit";
 import { empreinteJeton, genererJetonCarte } from "@/lib/jetons";
-import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
-import { resoudreJeton, type RechercheBadge, type ResolutionJeton } from "./resolution";
+import type { ClientDeBase, ClientEglise, ContexteEglise } from "@/lib/tenant";
+import { estPerimee, resoudreJeton, type RechercheBadge, type ResolutionJeton } from "./resolution";
 
 /**
  * Card lifecycle (RG-16, ADR 0008): pending → active → revoked.
@@ -23,7 +23,8 @@ import { resoudreJeton, type RechercheBadge, type ResolutionJeton } from "./reso
  */
 
 type Tx = Pick<ClientDeBase, "carteFamille" | "famille" | "auditLog" | "$queryRaw">;
-type Auteur = Pick<ContexteEglise, "userId" | "appareil">;
+// userId null: the daily task.
+type Auteur = Pick<ContexteEglise, "appareil"> & { userId: string | null };
 
 export class CarteImpossible extends Error {
   constructor(
@@ -203,4 +204,27 @@ export async function declarerCartePerdue(
     apres: { revoquees },
   });
   return { carteId, jeton, revoquees };
+}
+
+/**
+ * Daily task (RG-16): once a bulk reissue's deadline has passed, the old cards it covers
+ * are revoked, with an audit entry. At scan time they are already refused (read-only).
+ */
+export async function revoquerCartesPerimees(
+  db: Tx & Pick<ClientEglise, "$tx">,
+  maintenant = new Date(),
+): Promise<number> {
+  const actives = await db.carteFamille.findMany({
+    where: { revoqueeLe: null, activeLe: { not: null } },
+    select: { id: true, familleId: true, enfantId: true, emiseLe: true },
+  });
+  let revoquees = 0;
+  for (const carte of actives) {
+    if (!(await estPerimee(db, carte, maintenant))) continue;
+    await db.$tx((tx) =>
+      revoquer(tx, { userId: null, appareil: "tache-quotidienne" }, [carte.id], "date_limite"),
+    );
+    revoquees++;
+  }
+  return revoquees;
 }
