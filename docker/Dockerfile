@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     && corepack enable && corepack prepare pnpm@12.14.0 --activate
 WORKDIR /app
 
-# Dependencies (the postinstall step generates the Prisma client from the schema).
+# Dependencies (postinstall generates the Prisma client; `pnpm build` regenerates it
+# so the build never depends on an install step having run).
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
 COPY prisma ./prisma
