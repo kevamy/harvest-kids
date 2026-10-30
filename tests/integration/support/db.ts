@@ -1,4 +1,5 @@
 import pg from "pg";
+import type { ContexteEglise } from "@/lib/tenant";
 import { urlsDeTest } from "./urls";
 
 export type Client = pg.Client;
@@ -93,4 +94,18 @@ export async function creerEglise(proprietaire: pg.Client, suffixe: string): Pro
     );
   });
   return jeu;
+}
+
+/**
+ * Checked context of a church member, as verifierContexte() returns it after reading the
+ * session (the brand is only cast here, in tests). Services never take a church otherwise.
+ */
+export function contexteVerifie(jeu: Jeu): ContexteEglise {
+  return {
+    egliseId: jeu.egliseId,
+    userId: "user_test",
+    membreId: `membre_${jeu.egliseId}`,
+    roles: ["ADMIN"],
+    appareil: null,
+  } as unknown as ContexteEglise;
 }

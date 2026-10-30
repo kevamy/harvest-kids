@@ -5,7 +5,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | Lot                              | État                                                                            | Branche et pull request            |
 | -------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2 |
-| 1. Familles et cartes            | **en cours** : étape 1 validée                                                  | `lot-1`, PR `lot-1` → `main`       |
+| 1. Familles et cartes            | **en cours** : étapes 1 et 2 faites                                             | `lot-1`, PR `lot-1` → `main`       |
 | 2. Sessions, check-in, check-out | à faire                                                                         | —                                  |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                  |
 | 4. Transition et pilotage        | à faire                                                                         | —                                  |
@@ -46,7 +46,7 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 Étapes (plan validé le 2026-10-30) :
 
 1. [x] Schéma, empreintes des jetons, cycle de vie des cartes (en attente, active, révoquée), fonction RG-14 (ADR 0008).
-2. [ ] Page Paramètres et profil de l'église.
+2. [x] Page Paramètres et profil de l'église ; barrière applicative récursive et tests d'isolation générés depuis le DMMF.
 3. [ ] Familles, brouillons et tâche quotidienne.
 4. [ ] Cartes PDF, aperçus et scan.
 5. [ ] Mode de carte et réémission groupée.

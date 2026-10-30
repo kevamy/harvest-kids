@@ -16,7 +16,15 @@ import {
 import { MESSAGES_SCAN, resoudreJeton } from "@/server/cartes/resolution";
 import { rechercheBadge } from "@/server/plateforme/badges";
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { type Client, type Jeu, connecter, creerEglise, enEglise, viderBase } from "./support/db";
+import {
+  type Client,
+  type Jeu,
+  connecter,
+  contexteVerifie,
+  creerEglise,
+  enEglise,
+  viderBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 let base: PrismaClient;
@@ -52,9 +60,13 @@ beforeEach(async () => {
   dbA = clientEglise(base, a.egliseId);
 });
 
-const badgesA = () => rechercheBadge(base, a.egliseId);
+const badgesA = () => rechercheBadge(base, contexteVerifie(a));
 const resoudre = (jeton: string, db: ClientEglise = dbA) =>
-  resoudreJeton(db, jeton, rechercheBadge(base, db.egliseId));
+  resoudreJeton(
+    db,
+    jeton,
+    rechercheBadge(base, contexteVerifie(db.egliseId === a.egliseId ? a : b)),
+  );
 const emettre = (couverture: { enfantId?: string } = {}, db: ClientEglise = dbA) =>
   db.$tx((tx) => emettreCarte(tx, AUTEUR, { familleId: a.familleId, ...couverture }));
 const activer = (carteId: string) => dbA.$tx((tx) => activerCarte(tx, AUTEUR, carteId));

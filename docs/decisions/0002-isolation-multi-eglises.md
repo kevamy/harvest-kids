@@ -47,6 +47,7 @@ On a vérifié que ces tests échouent quand on désactive la RLS d'une table.
 - `clientEglise(egliseId)` étend Prisma (`$extends`, `query.$allOperations`) :
   - il ajoute `egliseId` à chaque `where` et à chaque création ;
   - il refuse avec `RequeteHorsEglise` une requête qui nomme une autre église ou tente de déplacer une ligne vers une autre église ;
+  - depuis le lot 1, cette vérification est **récursive et exhaustive** (`verifierArgumentsEglise`) : elle parcourt tous les arguments de la requête, à toute profondeur, sans liste de clés connues (`where`, `data`, `create`, `update`, clés uniques composées, `connect`, `connectOrCreate`, filtres et écritures imbriqués). Elle refuse tout `egliseId` qui n'est pas l'église active, tout filtre sur `egliseId` autre que l'égalité (`not`, `notIn`, intervalles…) et toute mention de la relation `eglise`. Seules les projections (`select`, `include`, `orderBy`…) sont ignorées, mais pas les requêtes qu'elles contiennent. `tests/integration/isolation-cles-composees.test.ts` génère ses cas à partir du DMMF : chaque clé composée contenant `egliseId`, avec `findUnique`, `update`, `upsert` et `delete` ;
   - il refuse les tables de plateforme (`user`, `membre`, `eglise`…), cachées aussi du type TypeScript ;
   - il exécute chaque requête dans une transaction `[set_config('app.eglise_id'), requête]`.
 - `db.$tx(fn)` ouvre une transaction interactive, positionne `app.eglise_id` en premier, puis y exécute toutes les opérations (via `AsyncLocalStorage`). `$transaction` n'est pas exposé.

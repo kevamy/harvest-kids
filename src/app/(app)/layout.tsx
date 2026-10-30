@@ -1,10 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Repeat } from "lucide-react";
+import { LogOut, Repeat, Settings } from "lucide-react";
 import { Providers } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { seDeconnecter } from "@/app/actions/session";
+import { peut } from "@/lib/rbac";
 import { getSessionCourante } from "@/lib/session";
 import { AccesRefuse, getEgliseActive, type ContexteEglise } from "@/lib/tenant";
 import {
@@ -60,6 +61,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
           <nav className="flex items-center gap-3" aria-label="Compte">
             <span className="hidden text-label text-nuit-doux sm:inline">{session.nom}</span>
+            {peut(contexte.roles, "eglise.parametrer") || peut(contexte.roles, "classes.gerer") ? (
+              <Button
+                asChild
+                variant="sombre"
+                className="shadow-[inset_0_0_0_2px_var(--color-nuit-doux)]"
+              >
+                <Link href="/parametres">
+                  <Settings aria-hidden />
+                  Paramètres
+                </Link>
+              </Button>
+            ) : null}
             {eglises.length > 1 ? (
               <Button
                 asChild
