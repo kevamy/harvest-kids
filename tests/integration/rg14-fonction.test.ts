@@ -114,6 +114,25 @@ describe("RG-14 : hk_jeton_autre_eglise()", () => {
     expect(publics[0].n).toBe(0);
   });
 
+  it("la seule politique hors tenant_isolation est la lecture propriétaire de CarteFamille", async () => {
+    const { rows } = await proprietaire.query(`
+      SELECT tablename, policyname, cmd, roles::text[] AS roles, permissive, qual, with_check
+      FROM pg_policies
+      WHERE schemaname = 'public' AND policyname <> 'tenant_isolation'`);
+    const { rows: courant } = await proprietaire.query("SELECT current_user AS role");
+    expect(rows).toEqual([
+      {
+        tablename: "CarteFamille",
+        policyname: "rg14_lecture_proprietaire",
+        cmd: "SELECT", // read only: no INSERT, UPDATE or DELETE
+        roles: [courant[0].role],
+        permissive: "PERMISSIVE",
+        qual: "true",
+        with_check: null,
+      },
+    ]);
+  });
+
   it("répond vrai pour une carte ou un badge d'une autre église, même révoquée", async () => {
     expect(await autreEglise(empreinte(CARTE_B))).toEqual([{ autre: true }]);
     expect(await autreEglise(empreinte(CARTE_B_REVOQUEE))).toEqual([{ autre: true }]);

@@ -44,12 +44,42 @@ BEGIN
 END
 $$;
 
-ALTER TABLE "CarteFamille" ALTER COLUMN "tokenHash" SET NOT NULL;
-ALTER TABLE "CarteFamille" DROP COLUMN "token";
-
 ALTER TABLE "Membre" ADD COLUMN "badgeTokenHash" TEXT;
 UPDATE "Membre" SET "badgeTokenHash" = encode(sha256(convert_to("badgeToken", 'UTF8')), 'hex')
   WHERE "badgeToken" IS NOT NULL;
+
+-- Garde-fou avant de supprimer les jetons en clair : chaque carte et chaque badge doit avoir
+-- une empreinte bien formée. Sinon la migration échoue ; elle s'exécute dans une transaction,
+-- donc rien n'est perdu. Le contrôle des cartes se fait dans chaque église (RLS forcée) ;
+-- toute carte appartient à une église existante (clé étrangère), donc toutes sont vues.
+DO $$
+DECLARE
+  e record;
+  manquantes integer := 0;
+  n integer;
+BEGIN
+  FOR e IN SELECT id FROM "Eglise" LOOP
+    PERFORM set_config('app.eglise_id', e.id, true);
+    SELECT count(*) INTO n FROM "CarteFamille"
+      WHERE "tokenHash" IS NULL OR "tokenHash" !~ '^[0-9a-f]{64}$';
+    manquantes := manquantes + n;
+  END LOOP;
+  PERFORM set_config('app.eglise_id', '', true);
+  IF manquantes > 0 THEN
+    RAISE EXCEPTION 'Migration interrompue : % carte(s) sans empreinte valide, jetons conservés.', manquantes;
+  END IF;
+
+  SELECT count(*) INTO n FROM "Membre"
+    WHERE "badgeToken" IS NOT NULL
+      AND ("badgeTokenHash" IS NULL OR "badgeTokenHash" !~ '^[0-9a-f]{64}$');
+  IF n > 0 THEN
+    RAISE EXCEPTION 'Migration interrompue : % badge(s) sans empreinte valide, jetons conservés.', n;
+  END IF;
+END
+$$;
+
+ALTER TABLE "CarteFamille" ALTER COLUMN "tokenHash" SET NOT NULL;
+ALTER TABLE "CarteFamille" DROP COLUMN "token";
 ALTER TABLE "Membre" DROP COLUMN "badgeToken";
 
 -- ---------------------------------------------------------------------

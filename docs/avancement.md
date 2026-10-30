@@ -5,7 +5,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | Lot                              | État                                                                            | Branche et pull request            |
 | -------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2 |
-| 1. Familles et cartes            | plan à valider                                                                  | —                                  |
+| 1. Familles et cartes            | **en cours** : étape 1 validée                                                  | `lot-1`, PR `lot-1` → `main`       |
 | 2. Sessions, check-in, check-out | à faire                                                                         | —                                  |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                  |
 | 4. Transition et pilotage        | à faire                                                                         | —                                  |
@@ -39,10 +39,21 @@ Décisions : ADR 0001 à 0007 dans `docs/decisions/`. Exploitation : `docs/explo
 
 Hors lot 0, reporté : Sentry ; écran d'appel et son appareil dédié (lot 3) ; déploiement sur le VPS (lot 5).
 
-## Avant le lot 1
+## Lot 1 — Familles et cartes (en cours)
 
 Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de carte par église (RG-16), classes et tranches d'âge par église (RG-17), impression des cartes par chaque église dans cinq formats (section 7.10). Points 1, 2 et 5 de la section 17 tranchés.
 
-Points encore ouverts (section 17) : check-out à la porte des classes (3), horaires des cultes et délai d'alerte (4), lieu de rendez-vous de l'écran d'appel (6), conservation des données (7), domaine et exploitant (8), paramètres par défaut d'une nouvelle église (9).
+Étapes (plan validé le 2026-10-30) :
 
-Le lot 1 ne commence qu'après validation de son plan.
+1. [x] Schéma, empreintes des jetons, cycle de vie des cartes (en attente, active, révoquée), fonction RG-14 (ADR 0008).
+2. [ ] Page Paramètres et profil de l'église.
+3. [ ] Familles, brouillons et tâche quotidienne.
+4. [ ] Cartes PDF, aperçus et scan.
+5. [ ] Mode de carte et réémission groupée.
+6. [ ] Badges moniteurs.
+7. [ ] Import CSV.
+8. [ ] Finition, fusion et démonstration.
+
+**Démonstration** : sur https://harvest-kids.vercel.app, **après la fusion** de la PR du lot 1. La prévisualisation `lot-1` utilise la base Neon partagée, qui n'est migrée par « Migrations Neon » qu'après la fusion : les fonctions du lot 1 n'y sont pas utilisables avant. Les corrections éventuelles issues de la démonstration passeront par une petite PR.
+
+Points encore ouverts (section 17) : check-out à la porte des classes (3), horaires des cultes et délai d'alerte (4), lieu de rendez-vous de l'écran d'appel (6), conservation des données (7), domaine et exploitant (8), paramètres par défaut d'une nouvelle église (9).

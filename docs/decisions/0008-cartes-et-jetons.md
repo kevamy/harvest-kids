@@ -9,7 +9,11 @@ L'ADR 0002 prévoyait pour le lot 1 de ne stocker que l'empreinte des jetons et 
 
 ## Décision
 
-**Empreintes.** `CarteFamille.tokenHash` et `Membre.badgeTokenHash` contiennent le SHA-256 hexadécimal du jeton (`empreinteJeton()`, `src/lib/jetons.ts`). Le jeton en clair n'existe que dans le PDF imprimé. Les cartes portent le préfixe `HKF1.`, les badges `HKB1.`. La migration a converti les jetons existants en SQL (`encode(sha256(convert_to(token, 'UTF8')), 'hex')`, même valeur que Node), église par église : la RLS forcée s'applique aussi au rôle qui migre, donc chaque `UPDATE` positionne `app.eglise_id`.
+**Empreintes.** `CarteFamille.tokenHash` et `Membre.badgeTokenHash` contiennent le SHA-256 hexadécimal du jeton (`empreinteJeton()`, `src/lib/jetons.ts`). Le jeton en clair n'existe que dans le PDF imprimé. Les cartes portent le préfixe `HKF1.`, les badges `HKB1.`.
+
+La migration a converti les jetons existants en SQL (`encode(sha256(convert_to(token, 'UTF8')), 'hex')`, même valeur que Node), église par église : la RLS forcée s'applique aussi au rôle qui migre, donc chaque `UPDATE` positionne `app.eglise_id`.
+
+Avant de supprimer `token` et `badgeToken`, un garde-fou vérifie que chaque carte et chaque badge porteur d'un jeton a une empreinte bien formée. Sinon, il lève une exception : la migration, transactionnelle, échoue sans rien perdre. `tests/integration/migration-cartes-lot1.test.ts` rejoue la migration telle quelle sur des bases jetables, une fois normalement et une fois sabotée par un déclencheur qui vide l'empreinte.
 
 **Cycle de vie : en attente, active, révoquée** (`src/server/cartes/cycle.ts`).
 
@@ -28,7 +32,7 @@ L'ADR 0002 prévoyait pour le lot 1 de ne stocker que l'empreinte des jetons et 
 - Renvoie seulement un booléen : l'empreinte existe-t-elle, sur une carte (quel que soit son état) ou un badge, dans une autre église que l'église active ? Jamais d'identifiant, de nom ni d'église.
 - Faux sans église active ou si la valeur n'a pas la forme d'un SHA-256 hexadécimal en minuscules.
 - `REVOKE ALL … FROM PUBLIC`, `GRANT EXECUTE … TO hk_app`.
-- `FORCE ROW LEVEL SECURITY` s'applique aussi au propriétaire. La politique `rg14_lecture_proprietaire` (`FOR SELECT TO <rôle qui migre>`, `USING (true)`) lui ouvre la lecture des cartes. Elle ne donne rien de plus au propriétaire, qui peut déjà désactiver la RLS. `hk_app` n'est ni propriétaire ni membre de ce rôle. On ne crée pas de rôle dédié, car `hk_owner` n'a pas `CREATEROLE` sur le VPS.
+- `FORCE ROW LEVEL SECURITY` s'applique aussi au propriétaire. La politique `rg14_lecture_proprietaire` lui ouvre la lecture des cartes. Elle porte **uniquement sur la table `CarteFamille`** et est **en lecture seule (`FOR SELECT`)** : aucune insertion, modification ni suppression, aucune autre table. Elle est réservée au rôle qui exécute les migrations (`TO <rôle qui migre>`) et sa condition est `USING (true)`. `Membre`, où sont les badges, est une table de plateforme hors RLS et n'en a pas besoin. Un test de catalogue vérifie que c'est la seule politique autre que `tenant_isolation`. Elle ne donne rien de plus au propriétaire, qui peut déjà désactiver la RLS. `hk_app` n'est ni propriétaire ni membre de ce rôle. On ne crée pas de rôle dédié, car `hk_owner` n'a pas `CREATEROLE` sur le VPS.
 
 Cette fonction remplace celle qu'annonçait l'ADR 0002 (« renvoyer l'église d'un jeton ») : un booléen suffit au message RG-14 et ne révèle rien d'autre.
 
