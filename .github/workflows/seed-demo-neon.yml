@@ -1,0 +1,46 @@
+# Loads the fictitious demonstration data into the Neon test database, once,
+# by hand only. Never production: the VPS image does not contain the seed, and the
+# seed itself refuses a remote database without HK_SEED_DEMO and a chosen password.
+name: Données de démonstration Neon
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Tapez DEMONSTRATION pour charger les données fictives dans la base Neon de test"
+        required: true
+
+concurrency:
+  group: neon-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Charger les données fictives
+    if: inputs.confirmation == 'DEMONSTRATION'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: neon-test
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      HK_SEED_DEMO: autorise
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEED_MOT_DE_PASSE: ${{ secrets.SEED_MOT_DE_PASSE }}
+      STORAGE_DRIVER: vercel-blob
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      SUPER_ADMIN_EMAIL: ${{ vars.SUPER_ADMIN_EMAIL }}
+      BETTER_AUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Secret jetable (validation de la configuration, inutilisé par le seed)
+        run: echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - run: pnpm db:seed

@@ -1,0 +1,90 @@
+/* Harvest Kids — tokens du design system (source : design system « Harvest Kids »)
+   À importer dans src/app/globals.css après `@import "tailwindcss";`
+   Les polices sont chargées par next/font (Fredoka, Nunito) qui exposent --font-fredoka et --font-nunito. */
+
+@theme {
+  /* Couleurs */
+  --color-nuit: #1f2557;         /* encre + grandes surfaces sombres */
+  --color-nuit-doux: #b9bee0;    /* texte secondaire sur nuit */
+  --color-bleu: #2369c4;         /* action principale, texte blanc */
+  --color-bleu-layette: #8cc8f5; /* grandes surfaces bleues, texte nuit */
+  --color-bleu-voile: #dceefc;   /* fonds d'info, statut Présent */
+  --color-rose: #f58ab6;         /* grandes surfaces roses, texte nuit (jamais blanc) */
+  --color-rose-fonce: #c7366f;   /* action de sortie (check-out), texte blanc */
+  --color-rose-voile: #fde3ee;   /* encadrés doux, alertes médicales */
+  --color-soleil: #ffd45c;       /* appel parent, chiffres-clés */
+  --color-creme: #fbf0f2;        /* fond de page + couleur des encoches */
+  --color-blanc: #ffffff;
+  --color-texte-doux: #5b6085;
+  --color-ligne: #eadde2;
+  --color-succes: #21734f;       /* statut Récupéré */
+  --color-alerte: #c9353b;       /* statut Infirmerie, erreurs */
+
+  /* Typographie */
+  --font-display: var(--font-fredoka), "Nunito", system-ui, sans-serif;
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+
+  --text-display: 56px;  --text-display--line-height: 60px;
+  --text-h1: 40px;       --text-h1--line-height: 46px;
+  --text-h2: 28px;       --text-h2--line-height: 34px;
+  --text-h3: 22px;       --text-h3--line-height: 28px;
+  --text-matricule: 36px;--text-matricule--line-height: 40px;
+  --text-body-lg: 18px;  --text-body-lg--line-height: 28px;
+  --text-body: 16px;     --text-body--line-height: 24px;
+  --text-label: 14px;    --text-label--line-height: 20px;
+  --text-caption: 13px;  --text-caption--line-height: 18px;
+
+  /* Rayons */
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+
+  /* Ombre unique */
+  --shadow-card: 0 18px 40px -24px rgba(31, 37, 87, 0.35);
+
+  /* Tailles */
+  --spacing-touch: 56px;   /* h-touch / min-h-touch : cible tactile minimale */
+}
+
+:root {
+  --notch-w: 84px;
+  --notch-h: 56px;
+}
+
+body {
+  background: var(--color-creme);
+  color: var(--color-nuit);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 28px;
+}
+
+/* Carte à encoche : forme signature. Redéfinir --ground si la carte n'est pas posée sur creme. */
+@layer components {
+  .hk-notch {
+    --ground: var(--color-creme);
+    --r: var(--radius-md);
+    position: relative; overflow: hidden; isolation: isolate;
+    border-radius: var(--radius-lg); border-top-right-radius: 0;
+    padding: 24px;
+  }
+  .hk-notch > :first-child { margin-right: calc(var(--notch-w) - 16px); }
+  .hk-notch::after {
+    content: ""; position: absolute; top: 0; right: 0; z-index: 2;
+    width: var(--notch-w); height: var(--notch-h);
+    background: var(--ground); border-bottom-left-radius: var(--r);
+  }
+  .hk-notch::before {
+    content: ""; position: absolute; top: 0; right: 0; z-index: 2; pointer-events: none;
+    width: calc(var(--notch-w) + var(--r)); height: calc(var(--notch-h) + var(--r));
+    background:
+      radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), var(--ground) var(--r)) 0 0 / var(--r) var(--r) no-repeat,
+      radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), var(--ground) var(--r)) 100% 100% / var(--r) var(--r) no-repeat;
+  }
+  .hk-notch__corner {
+    position: absolute; top: 8px; right: 10px; z-index: 3;
+    width: calc(var(--notch-w) - 20px); height: calc(var(--notch-h) - 16px);
+    display: grid; place-items: center;
+  }
+}
