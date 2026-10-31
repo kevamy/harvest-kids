@@ -1,18 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prismaPourBadges } from "@/server/plateforme/badges";
+import { moniteursDeLEglise, prismaPourMoniteurs } from "@/server/plateforme/badges";
 import { CarteImpossible, activerCarte, revoquerCarte } from "@/server/cartes/cycle";
 import { detailCarte } from "@/server/cartes/lecture";
-import { MESSAGES_SCAN, resoudreJeton } from "@/server/cartes/resolution";
+import { MESSAGES_SCAN, resoudreJeton, type ResolutionJeton } from "@/server/cartes/resolution";
 import { RefusMetier, executerAction, executerActionAvec } from "../executer-action";
 
 export type ResultatVerification = {
-  statut: "active" | "en_attente" | "revoquee" | "perimee" | "autre_eglise" | "inconnue";
+  statut: ResolutionJeton["statut"];
   message: string;
   carteId?: string;
   type?: "famille" | "enfant" | "badge";
   famille?: { id: string; nom: string; enfants: { prenom: string; matricule: string | null }[] };
+  /** Name of the badge's monitor. */
+  moniteur?: string;
 };
 
 /**
@@ -23,22 +25,23 @@ export type ResultatVerification = {
 export async function verifierCarte(jeton: unknown) {
   return executerActionAvec(["checkin", "familles.gerer"], async ({ db, contexte }) => {
     const valeur = typeof jeton === "string" ? jeton.slice(0, 64) : "";
-    const resolution = await resoudreJeton(db, valeur, prismaPourBadges(contexte));
+    const resolution = await resoudreJeton(db, valeur, prismaPourMoniteurs(contexte));
     const resultat: ResultatVerification = {
       statut: resolution.statut,
-      message:
-        resolution.statut === "active"
-          ? "Carte valide."
-          : MESSAGES_SCAN[resolution.statut as keyof typeof MESSAGES_SCAN],
+      message: resolution.statut === "active" ? "Carte valide." : MESSAGES_SCAN[resolution.statut],
     };
     if ("familleId" in resolution) {
       const famille = await detailCarte(db, resolution);
       resultat.carteId = resolution.carteId;
       resultat.type = resolution.type;
       if (famille) resultat.famille = famille;
-    } else if (resolution.statut === "active") {
+    } else if ("membreId" in resolution) {
       resultat.type = "badge";
       resultat.message = "Badge moniteur valide.";
+      const moniteur = (await moniteursDeLEglise(contexte)).find(
+        (m) => m.membreId === resolution.membreId,
+      );
+      if (moniteur) resultat.moniteur = moniteur.nom;
     }
     return resultat;
   });

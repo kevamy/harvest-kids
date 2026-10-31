@@ -5,7 +5,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | Lot                              | État                                                                            | Branche et pull request            |
 | -------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2 |
-| 1. Familles et cartes            | **en cours** : étapes 1 à 5 faites                                              | `lot-1`, PR `lot-1` → `main`       |
+| 1. Familles et cartes            | **en cours** : étapes 1 à 6 faites                                              | `lot-1`, PR `lot-1` → `main`       |
 | 2. Sessions, check-in, check-out | à faire                                                                         | —                                  |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                  |
 | 4. Transition et pilotage        | à faire                                                                         | —                                  |
@@ -50,7 +50,7 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 3. [x] Familles, brouillons et tâche quotidienne ; téléphones au format E.164.
 4. [x] Cartes PDF (cinq formats, CR80 et planche A4), aperçus, PDF d'essai, remise et vérification par scan (ADR 0009).
 5. [x] Mode de carte et réémission groupée ; textes de carte par église, contrôlés dans les cinq formats (ADR 0012).
-6. [ ] Badges moniteurs.
+6. [x] Badges moniteurs (table `BadgeMoniteur` sous RLS, révocation au remplacement, à la désactivation ou à la perte du rôle MONITEUR, ADR 0008) ; tests e2e d'écriture sur des églises créées pour le test, garde des données de démonstration.
 7. [ ] Import CSV.
 8. [ ] Finition, fusion et démonstration.
 
@@ -59,7 +59,9 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 Notes pour les lots suivants :
 
 - **Cartes** : l'inscription ne crée pas de carte ; la première impression (étape 4) crée la carte, directement active (ADR 0008), car le jeton en clair n'existe que dans le PDF.
-- **Lot 2** : le check-in et le check-out appellent `activerAuPremierScan` (cartes en attente, y compris celles d'une réémission) ; les heures des présences pourront passer par `@date-fns/tz` à la place de `src/lib/fuseau.ts` (ADR 0012).
+- **Lot 2** : le check-in et le check-out appellent `activerAuPremierScan` (cartes en attente, y compris celles d'une réémission) ; les heures des présences s'affichent dans le fuseau de l'église avec `@date-fns/tz` (`src/lib/fuseau.ts`, ADR 0012).
+- **Comptes et rôles** (gestion des comptes, cahier §7.10) : tout changement de rôle ou désactivation d'un membre passe par `modifierMembre` (`src/server/plateforme/badges.ts`), qui révoque le badge d'un membre qui n'est plus moniteur actif. **Lot 2** : le check-in d'un moniteur par badge utilise `resoudreJeton` (statuts `badge_remplace` et `badge_refuse`).
+- **Tests e2e** : un test qui écrit travaille dans une église créée pour lui (`tests/e2e/support/eglise-isolee.ts`) ; la garde `support/garde-demo.ts` fait échouer la suite si les données de démonstration changent.
 - **Téléphones** (ADR 0011) : enregistrés au format E.164 (`+2290197451233`), affichés formatés. L'import CSV (étape 7) applique la même normalisation. **Lot 3** : les liens `tel:` et `https://wa.me/` utilisent ce format (sans le « + » pour wa.me).
 
 Points encore ouverts (section 17) : check-out à la porte des classes (3), horaires des cultes et délai d'alerte (4), lieu de rendez-vous de l'écran d'appel (6), conservation des données (7), domaine et exploitant (8), paramètres par défaut d'une nouvelle église (9).

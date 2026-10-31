@@ -73,6 +73,9 @@ export function Verification({ peutRemettre }: { peutRemettre: boolean }) {
               </ul>
             </div>
           ) : null}
+          {resultat.moniteur ? (
+            <p className="m-0 font-bold text-nuit">Moniteur : {resultat.moniteur}</p>
+          ) : null}
           {attente && peutRemettre && resultat.carteId && !remise ? (
             <Button
               type="button"

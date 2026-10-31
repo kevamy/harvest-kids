@@ -3,7 +3,7 @@ import { Font } from "@react-pdf/renderer";
 import { FORMATS, type FormatCarte } from "./formats";
 import { MM_EN_POINTS, calculerGabarit, zoneVerso } from "./planche";
 import { piedDe, type EgliseImpression } from "./pdf-carte";
-import { TEXTES_CARTE_PAR_DEFAUT, TYPO, ligneTelephone } from "./textes";
+import { TEXTES_CARTE_PAR_DEFAUT, TYPO, ligneTelephone, nomBadge } from "./textes";
 
 /**
  * Fit check of the card texts: measures each line with the real font metrics of the
@@ -49,7 +49,48 @@ export async function nombreLignes(
   return lignes;
 }
 
-export type DepassementTexte = { format: FormatCarte["id"]; zone: "pied" | "verso" };
+export type DepassementTexte = { format: FormatCarte["id"]; zone: "pied" | "verso" | "nom" };
+
+/**
+ * Type size of a monitor's name on a badge: the base size of the format, lowered by half
+ * points down to `TYPO.badge.nomMin` until the mention and the (shortened) name fit the
+ * text zone. Null when even the smallest size does not fit.
+ */
+export async function corpsNomBadge(
+  nom: string,
+  format: Pick<FormatCarte, "largeurMm" | "hauteurMm" | "orientation">,
+  rectoSeul: boolean,
+): Promise<number | null> {
+  const b = TYPO.badge;
+  const portrait = format.orientation === "portrait";
+  const mention = portrait ? b.mention.portrait : b.mention.paysage;
+  const zone = calculerGabarit(format, rectoSeul).texte;
+  for (let corps = portrait ? b.nom.portrait : b.nom.paysage; corps >= b.nomMin; corps -= 0.5) {
+    const lignes = await nombreLignes(
+      nomBadge(nom),
+      "Fredoka",
+      600,
+      corps,
+      zone.largeur * MM_EN_POINTS,
+    );
+    if ((mention + corps * lignes) * TYPO.interligne <= zone.hauteur * MM_EN_POINTS) return corps;
+  }
+  return null;
+}
+
+/** Formats where a monitor's name would not fit, front only or both sides (empty: all fit). */
+export async function verifierNomBadge(nom: string): Promise<DepassementTexte[]> {
+  const depassements: DepassementTexte[] = [];
+  for (const format of FORMATS) {
+    for (const rectoSeul of [true, false]) {
+      if ((await corpsNomBadge(nom, format, rectoSeul)) === null) {
+        depassements.push({ format: format.id, zone: "nom" });
+        break;
+      }
+    }
+  }
+  return depassements;
+}
 
 /** Zones whose text would leave its space, in any of the five formats (empty: all fit). */
 export async function verifierTextesCarte(eglise: EgliseImpression): Promise<DepassementTexte[]> {

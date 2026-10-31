@@ -39,7 +39,7 @@ Chaque église règle le pied du recto (téléphone de l'accueil enfants et cons
   - La tâche quotidienne la révoque ensuite, avec audit (ADR 0010).
 - Audit `reemission.creee` : mode, format, date limite et nombres de familles et de cartes, sans donnée personnelle.
 - `ClientEglise.$tx` accepte un `timeout` (45 s pour la réémission). La route déclare `maxDuration = 60`, la limite du plan Vercel.
-- Fuseau : `src/lib/fuseau.ts`, fondé sur `Intl`, sans dépendance nouvelle. `@date-fns/tz`, prévu par la stack, pourra le remplacer quand il sera ajouté (lot 2, heures des présences).
+- Fuseau : `src/lib/fuseau.ts`, fondé sur `date-fns` 4.4.0 et `@date-fns/tz` 1.5.0 (section 10 du cahier, versions épinglées). Ses tests couvrent un jour de changement d'heure et passent quel que soit le fuseau de la machine.
 
 ## Conséquences
 

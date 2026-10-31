@@ -30,6 +30,7 @@ import {
   TEXTES_CARTE_PAR_DEFAUT,
   TYPO,
   ligneTelephone,
+  nomBadge,
   textePied,
   type TextesCarte,
 } from "./textes";
@@ -56,6 +57,14 @@ export type ContenuCarte = {
   famille: string;
   enfants: { prenom: string; matricule: string }[];
 };
+
+/**
+ * Monitor badge (cahier §7.10): same layout as a card, the monitor's name instead.
+ * `corpsNom`: size that fits the format (mesure.ts, corpsNomBadge); base size otherwise.
+ */
+export type ContenuBadge = { jeton: string; moniteur: string; corpsNom?: number };
+
+export type ContenuImprime = ContenuCarte | ContenuBadge;
 
 export type EgliseImpression = {
   nom: string;
@@ -111,6 +120,90 @@ function Qr({ jeton, gabarit }: { jeton: string; gabarit: Gabarit }) {
   );
 }
 
+function Famille({
+  carte,
+  gabarit,
+  portrait,
+}: {
+  carte: ContenuCarte;
+  gabarit: Gabarit;
+  portrait: boolean;
+}) {
+  const { affiches, reste } = lignesEnfants(carte.enfants, gabarit);
+  return (
+    <>
+      <Text
+        style={{
+          fontFamily: "Nunito",
+          fontWeight: 700,
+          fontSize: portrait ? 10 : 7.5,
+          color: C.nuit,
+        }}
+      >
+        Famille {carte.famille}
+      </Text>
+      {affiches.map((e, i) => (
+        <View
+          key={i}
+          style={{ flexDirection: "row", alignItems: "baseline", gap: 3, marginTop: 1 }}
+        >
+          <Text
+            style={{
+              fontFamily: "Fredoka",
+              fontWeight: 600,
+              fontSize: gabarit.corpsMatricule,
+              color: C.nuit,
+            }}
+          >
+            {e.matricule}
+          </Text>
+          <Text
+            style={{ fontFamily: "Nunito", fontSize: portrait ? 9 : 7, color: C["texte-doux"] }}
+          >
+            {e.prenom}
+          </Text>
+        </View>
+      ))}
+      {reste > 0 ? (
+        <Text style={{ fontFamily: "Nunito", fontSize: 6.5, color: C["texte-doux"], marginTop: 1 }}>
+          + {reste} autre{reste > 1 ? "s" : ""}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+function Moniteur({ badge, portrait }: { badge: ContenuBadge; portrait: boolean }) {
+  const b = TYPO.badge;
+  return (
+    <>
+      <Text
+        style={{
+          fontFamily: "Nunito",
+          fontWeight: 700,
+          fontSize: portrait ? b.mention.portrait : b.mention.paysage,
+          lineHeight: TYPO.interligne,
+          color: C["texte-doux"],
+        }}
+      >
+        Badge moniteur
+      </Text>
+      <Text
+        style={{
+          fontFamily: "Fredoka",
+          fontWeight: 600,
+          fontSize: badge.corpsNom ?? (portrait ? b.nom.portrait : b.nom.paysage),
+          lineHeight: TYPO.interligne,
+          color: C.nuit,
+          textAlign: portrait ? "center" : "left",
+        }}
+      >
+        {nomBadge(badge.moniteur)}
+      </Text>
+    </>
+  );
+}
+
 function Recto({
   carte,
   eglise,
@@ -118,13 +211,12 @@ function Recto({
   options,
   fondPerdu,
 }: {
-  carte: ContenuCarte;
+  carte: ContenuImprime;
   eglise: EgliseImpression;
   gabarit: Gabarit;
   options: OptionsImpression;
   fondPerdu: number;
 }) {
-  const { affiches, reste } = lignesEnfants(carte.enfants, gabarit);
   const portrait = options.format.orientation === "portrait";
   const b = gabarit.bandeau;
   return (
@@ -187,45 +279,11 @@ function Recto({
           alignItems: portrait ? "center" : "flex-start",
         }}
       >
-        <Text
-          style={{
-            fontFamily: "Nunito",
-            fontWeight: 700,
-            fontSize: portrait ? 10 : 7.5,
-            color: C.nuit,
-          }}
-        >
-          Famille {carte.famille}
-        </Text>
-        {affiches.map((e, i) => (
-          <View
-            key={i}
-            style={{ flexDirection: "row", alignItems: "baseline", gap: 3, marginTop: 1 }}
-          >
-            <Text
-              style={{
-                fontFamily: "Fredoka",
-                fontWeight: 600,
-                fontSize: gabarit.corpsMatricule,
-                color: C.nuit,
-              }}
-            >
-              {e.matricule}
-            </Text>
-            <Text
-              style={{ fontFamily: "Nunito", fontSize: portrait ? 9 : 7, color: C["texte-doux"] }}
-            >
-              {e.prenom}
-            </Text>
-          </View>
-        ))}
-        {reste > 0 ? (
-          <Text
-            style={{ fontFamily: "Nunito", fontSize: 6.5, color: C["texte-doux"], marginTop: 1 }}
-          >
-            + {reste} autre{reste > 1 ? "s" : ""}
-          </Text>
-        ) : null}
+        {"moniteur" in carte ? (
+          <Moniteur badge={carte} portrait={portrait} />
+        ) : (
+          <Famille carte={carte} gabarit={gabarit} portrait={portrait} />
+        )}
       </View>
 
       <Qr jeton={carte.jeton} gabarit={gabarit} />
@@ -438,12 +496,14 @@ function DocumentCartes({
   eglise,
   options,
 }: {
-  cartes: ContenuCarte[];
+  cartes: ContenuImprime[];
   eglise: EgliseImpression;
   options: OptionsImpression;
 }) {
   const gabarit = calculerGabarit(options.format, !options.rectoVerso);
-  const titre = options.essai ? "Carte d'essai" : `Cartes — ${eglise.nom}`;
+  const titre = options.essai
+    ? "Carte d'essai"
+    : `${cartes.some((c) => "moniteur" in c) ? "Badges" : "Cartes"} — ${eglise.nom}`;
 
   if (options.sortie === "unitaire") {
     // Exact size, not rounded: content of exactly the card's height must not overflow
@@ -482,7 +542,7 @@ function DocumentCartes({
 
   const planche = disposerPlanche(options.format);
   const verso = positionsVerso(planche);
-  const pages: ContenuCarte[][] = [];
+  const pages: ContenuImprime[][] = [];
   for (let i = 0; i < cartes.length; i += planche.parPage)
     pages.push(cartes.slice(i, i + planche.parPage));
   return (
@@ -535,7 +595,7 @@ function DocumentCartes({
 }
 
 export function genererPdfCartes(
-  cartes: ContenuCarte[],
+  cartes: ContenuImprime[],
   eglise: EgliseImpression,
   options: OptionsImpression,
 ): Promise<Buffer> {

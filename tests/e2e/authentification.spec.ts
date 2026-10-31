@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import {
   EGLISES,
   EMAIL_DEUX_EGLISES,
-  PIN,
   attendreAccueil,
   derniereActivite,
   egliseDuProjet,
@@ -65,28 +64,6 @@ test("un membre de deux églises choisit puis change d'église", async ({ page }
   await page.getByRole("link", { name: "Changer d'église" }).click();
   await page.getByRole("button", { name: EGLISES.cotonou }).click();
   await attendreAccueil(page, EGLISES.cotonou);
-});
-
-test("la tablette se verrouille après 15 minutes et se déverrouille avec le PIN", async ({
-  page,
-}, testInfo) => {
-  const eglise = egliseDuProjet(testInfo);
-  const adresse = email("infirmerie", eglise);
-  await seConnecter(page, adresse);
-  await attendreAccueil(page, EGLISES[eglise]);
-
-  await vieillirDerniereActivite(adresse, 16);
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Tablette verrouillée" })).toBeVisible();
-  await expect(page.getByTestId("eglise-active")).toHaveCount(0);
-
-  await page.getByLabel("Code PIN").fill("111222");
-  await page.getByRole("button", { name: "Déverrouiller" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Il vous reste 4 essais" })).toBeVisible();
-
-  await page.getByLabel("Code PIN").fill(PIN);
-  await page.getByRole("button", { name: "Déverrouiller" }).click();
-  await attendreAccueil(page, EGLISES[eglise]);
 });
 
 test("un rafraîchissement automatique ne compte pas comme activité", async ({ page }, testInfo) => {

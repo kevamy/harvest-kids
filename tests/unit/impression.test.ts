@@ -12,8 +12,10 @@ import {
   enPoints,
   positionsVerso,
 } from "@/server/impression/planche";
+import { genererPdfCartes } from "@/server/impression/pdf-carte";
 import { matriceQr } from "@/server/impression/qr";
-import { genererJetonCarte } from "@/lib/jetons";
+import { TEXTES_BADGE } from "@/server/impression/textes";
+import { genererJetonBadge, genererJetonCarte } from "@/lib/jetons";
 
 const EGLISE = { nom: "Église de démonstration", logo: null, telephoneAccueil: "+2290197451233" };
 
@@ -111,5 +113,47 @@ describe("dimensions exactes des PDF (taille de page en points)", () => {
     expect(pages).toHaveLength(1);
     expect(pages[0]![0]).toBeCloseTo(595.28, 1);
     expect(pages[0]![1]).toBeCloseTo(841.89, 1);
+  });
+});
+
+describe("badges moniteurs : mêmes formats que les cartes (cahier §7.10)", () => {
+  const badges = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      jeton: genererJetonBadge(),
+      moniteur: `Moniteur ${i + 1}`,
+    }));
+
+  it.each(FORMATS.map((f) => [f.id]))(
+    "badge %s carte par carte : une page au format exact par face",
+    async (id) => {
+      const format = formatParId(id as (typeof FORMATS)[number]["id"]);
+      const pdf = await genererPdfCartes(
+        badges(2),
+        { ...EGLISE, textes: TEXTES_BADGE },
+        { format, rectoVerso: true, sortie: "unitaire" },
+      );
+      const pages = taillesPages(pdf);
+      expect(pages).toHaveLength(4);
+      for (const [l, h] of pages) {
+        expect(l).toBeCloseTo(enPoints(format.largeurMm), 1);
+        expect(h).toBeCloseTo(enPoints(format.hauteurMm), 1);
+      }
+    },
+  );
+
+  it("planche A4 : autant de badges par page que de cartes", async () => {
+    const format = formatParId("90x54");
+    const { parPage } = disposerPlanche(format);
+    const pdf = await genererPdfCartes(
+      badges(parPage + 1),
+      { ...EGLISE, textes: TEXTES_BADGE },
+      { format, rectoVerso: false, sortie: "planche" },
+    );
+    const pages = taillesPages(pdf);
+    expect(pages).toHaveLength(2);
+    for (const [l, h] of pages) {
+      expect(l).toBeCloseTo(595.28, 1);
+      expect(h).toBeCloseTo(841.89, 1);
+    }
   });
 });

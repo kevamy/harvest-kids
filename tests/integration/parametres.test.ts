@@ -326,11 +326,10 @@ describe("logos", () => {
     // The old file stays served (tablets still showing the old page) until the daily task
     // deletes it, at least 24 hours later.
     expect(await stockage.get(cle1)).not.toBeNull();
-    const programmes = await dbA.fichierASupprimer.findMany({
-      select: { cle: true, apresLe: true },
-    });
-    expect(programmes.map((p) => p.cle)).toEqual([cle1]);
-    expect(programmes[0]!.apresLe.getTime()).toBeGreaterThan(Date.now() + 23 * 3600 * 1000);
+    // Due in 24 hours, measured on the database's clock (the one that set the date).
+    const programmes = await dbA.$queryRaw<{ cle: string; dans24h: boolean }[]>`
+      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"`;
+    expect(programmes).toEqual([{ cle: cle1, dans24h: true }]);
     expect(await stockage.get(cle2)).not.toBeNull();
 
     // Removing the light variant empties it; church B is untouched.

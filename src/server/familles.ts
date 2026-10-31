@@ -430,7 +430,7 @@ export async function enregistrerFamille(
         }
       }
 
-      for (const cle of contexte.remplacees) await programmerSuppression(tx, cle, maintenant);
+      for (const cle of contexte.remplacees) await programmerSuppression(tx, cle);
 
       await journaliser(tx, auteur, {
         action: !existante
@@ -632,15 +632,17 @@ export function listerBrouillons(db: Pick<ClientDeBase, "famille">) {
 /**
  * Deletes the drafts not finalised within the church's delay, with an audit entry
  * (identifiers only). Called by the daily task only, never when a page is rendered.
+ * The age is measured by PostgreSQL (`now()`), the clock that set `createdAt`.
  */
 export async function purgerBrouillonsExpires(
   db: ClientEglise,
   delaiJours: number,
-  maintenant = new Date(),
 ): Promise<number> {
-  const limite = new Date(maintenant.getTime() - delaiJours * 24 * 60 * 60 * 1000);
+  const ids = await db.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "Famille"
+    WHERE "finaliseeLe" IS NULL AND "createdAt" < now() - make_interval(days => ${delaiJours}::int)`;
   const expires = await db.famille.findMany({
-    where: { finaliseeLe: null, createdAt: { lt: limite } },
+    where: { id: { in: ids.map((f) => f.id) }, finaliseeLe: null },
     select: {
       id: true,
       enfants: { select: { photoKey: true } },
@@ -655,7 +657,7 @@ export async function purgerBrouillonsExpires(
       const photos = [...famille.enfants, ...famille.autorises].flatMap((p) =>
         p.photoKey ? [p.photoKey] : [],
       );
-      for (const cle of photos) await programmerSuppression(tx, cle, maintenant);
+      for (const cle of photos) await programmerSuppression(tx, cle);
       await journaliser(
         tx,
         { userId: null, appareil: "tache-quotidienne" },

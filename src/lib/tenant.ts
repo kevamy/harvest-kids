@@ -21,6 +21,7 @@ export const MODELES_EGLISE = [
   "Enfant",
   "CarteFamille",
   "ReemissionCartes",
+  "BadgeMoniteur",
   "Classe",
   "Culte",
   "Session",

@@ -303,11 +303,11 @@ describe("modification", () => {
       avant.enfants.map((e) => e.matricule).sort(),
     );
 
-    const programmes = await dbA.fichierASupprimer.findMany({
-      select: { cle: true, apresLe: true },
-    });
+    // Due in 24 hours, measured on the database's clock (the one that set the date).
+    const programmes = await dbA.$queryRaw<{ cle: string; dans24h: boolean }[]>`
+      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"`;
     expect(programmes.map((p) => p.cle).sort()).toEqual([ancienneAdulte, ancienneAyo].sort());
-    expect(programmes.every((p) => p.apresLe.getTime() > Date.now() + 23 * 3600 * 1000)).toBe(true);
+    expect(programmes.every((p) => p.dans24h)).toBe(true);
     expect(await stockage.get(ancienneAdulte)).not.toBeNull();
   });
 });

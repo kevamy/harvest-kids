@@ -42,6 +42,7 @@ L'application sert plusieurs églises depuis une seule installation (section 3 b
 - Le QR code ne contient jamais de matricule ni de nom (RG-02).
 - Les photos ne sont jamais servies en URL publique : route `/api/photos/[key]` authentifiée (RG-11).
 - Fuseau horaire de l'église active (par défaut `Africa/Porto-Novo`, RG-12) ; stocker en UTC, afficher en heure locale de l'église.
+- Une seule horloge par comparaison de dates. Ce qui compare une date stockée à « maintenant » (échéances, dates limites, purges, tâche quotidienne) le fait en SQL avec `now()` de PostgreSQL. Une date destinée à une telle comparaison est posée par la base (`DEFAULT now()`, `now() + interval …`), jamais par `new Date()` côté Node. Une date que le serveur pose et compare lui-même (activité de session, blocage du PIN, limitation) reste côté serveur. En test, on fait passer le temps en reculant les dates stockées depuis leur propre valeur, jamais en passant une date simulée.
 - Les écrans en direct utilisent `useLiveQuery` (TanStack Query, intervalle 3 à 5 s), jamais un `setInterval` maison.
 - Une action non enregistrée côté serveur ne doit jamais afficher de succès : gérer les erreurs réseau avec un message explicite.
 - Noms de domaine en français dans le code métier (`Famille`, `Enfant`, `Presence`, `codeRetrait`) ; code technique en anglais courant.

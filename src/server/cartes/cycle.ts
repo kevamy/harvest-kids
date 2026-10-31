@@ -3,7 +3,12 @@ import type { Prisma } from "@/generated/prisma/client";
 import { journaliser } from "@/lib/audit";
 import { empreinteJeton, genererJetonCarte } from "@/lib/jetons";
 import type { ClientDeBase, ClientEglise, ContexteEglise } from "@/lib/tenant";
-import { estPerimee, resoudreJeton, type RechercheBadge, type ResolutionJeton } from "./resolution";
+import {
+  cartesPerimees,
+  resoudreJeton,
+  type ResolutionJeton,
+  type VerificationMoniteur,
+} from "./resolution";
 
 /**
  * Card lifecycle (RG-16, ADR 0008): pending → active → revoked.
@@ -107,14 +112,13 @@ export async function emettreCarte(
 
   const active = (await activesCouvrant(tx, couverture)).length === 0;
   const jeton = options.jeton ?? genererJetonCarte();
-  const maintenant = new Date();
   const carte = await tx.carteFamille.create({
     data: {
       familleId: couverture.familleId,
       enfantId,
       tokenHash: empreinteJeton(jeton),
-      emiseLe: maintenant,
-      activeLe: active ? maintenant : null,
+      // emiseLe: set by PostgreSQL (DEFAULT now()), the clock that compares it (cartesPerimees).
+      activeLe: active ? new Date() : null,
       reemissionId: options.reemissionId ?? null,
     } as Prisma.CarteFamilleUncheckedCreateInput, // egliseId is added by the scoped client
     select: { id: true },
@@ -175,12 +179,12 @@ export async function activerCarte(
  * pending, activates it in the same transaction. Never used by the verification scan.
  */
 export async function activerAuPremierScan(
-  tx: Tx,
+  tx: Tx & Pick<ClientDeBase, "badgeMoniteur">,
   auteur: Auteur,
   jeton: string,
-  rechercherBadge: RechercheBadge,
+  estMoniteurActif: VerificationMoniteur,
 ): Promise<ResolutionJeton> {
-  const resolution = await resoudreJeton(tx, jeton, rechercherBadge);
+  const resolution = await resoudreJeton(tx, jeton, estMoniteurActif);
   if (resolution.statut !== "en_attente") return resolution;
   await activerCarte(tx, auteur, resolution.carteId);
   return { ...resolution, statut: "active" };
@@ -250,21 +254,12 @@ export async function revoquerCarte(tx: Tx, auteur: Auteur, carteId: string): Pr
  * Daily task (RG-16): once a bulk reissue's deadline has passed, the old cards it covers
  * are revoked, with an audit entry. At scan time they are already refused (read-only).
  */
-export async function revoquerCartesPerimees(
-  db: Tx & Pick<ClientEglise, "$tx">,
-  maintenant = new Date(),
-): Promise<number> {
-  const actives = await db.carteFamille.findMany({
-    where: { revoqueeLe: null, activeLe: { not: null } },
-    select: { id: true, familleId: true, enfantId: true, emiseLe: true },
-  });
-  let revoquees = 0;
-  for (const carte of actives) {
-    if (!(await estPerimee(db, carte, maintenant))) continue;
+export async function revoquerCartesPerimees(db: Tx & Pick<ClientEglise, "$tx">): Promise<number> {
+  const perimees = await cartesPerimees(db);
+  for (const carteId of perimees) {
     await db.$tx((tx) =>
-      revoquer(tx, { userId: null, appareil: "tache-quotidienne" }, [carte.id], "date_limite"),
+      revoquer(tx, { userId: null, appareil: "tache-quotidienne" }, [carteId], "date_limite"),
     );
-    revoquees++;
   }
-  return revoquees;
+  return perimees.length;
 }

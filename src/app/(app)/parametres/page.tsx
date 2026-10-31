@@ -33,6 +33,12 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
     action: "eglise.parametrer",
   },
   {
+    href: "/parametres/badges",
+    titre: "Badges moniteurs",
+    description: "Badges à scanner pour la présence des moniteurs, aux formats des cartes.",
+    action: "comptes.gerer",
+  },
+  {
     href: "/parametres/familles",
     titre: "Familles à compléter",
     description: "Délai avant la suppression des familles importées non finalisées.",
@@ -41,7 +47,7 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
 ];
 
 export default async function Parametres() {
-  const acces = await contextePage("eglise.parametrer", "classes.gerer");
+  const acces = await contextePage("eglise.parametrer", "classes.gerer", "comptes.gerer");
   if (!acces) return null;
   const sections = SECTIONS.filter((s) => peut(acces.contexte.roles, s.action));
 

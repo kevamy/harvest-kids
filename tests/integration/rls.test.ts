@@ -1,4 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { getDMMF } from "@prisma/internals";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { MODELES_EGLISE } from "@/lib/tenant";
 import {
   type Client,
   type Jeu,
@@ -9,8 +12,27 @@ import {
   viderBase,
 } from "./support/db";
 
-// Platform tables are outside RLS; every other table carrying "egliseId" must be isolated.
-const TABLES_PLATEFORME = ["Membre", "AccesSupport", "AuditPlateforme"];
+// Platform tables (CLAUDE.md) are outside RLS; every other model carrying "egliseId" is a
+// church table. The list is read from the Prisma schema (DMMF), so a table added later is
+// checked without touching this file.
+const TABLES_PLATEFORME = [
+  "Eglise",
+  "User",
+  "Membre",
+  "AccesSupport",
+  "AuditPlateforme",
+  "AuthSession",
+  "AuthAccount",
+  "AuthVerification",
+  "AuthRateLimit",
+];
+const { datamodel } = await getDMMF({
+  datamodel: await readFile("prisma/schema.prisma", "utf8"),
+});
+const MODELES = datamodel.models.filter(
+  (m) => m.fields.some((f) => f.name === "egliseId") && !TABLES_PLATEFORME.includes(m.name),
+);
+const TABLES_EGLISE = MODELES.map((m) => m.dbName ?? m.name);
 
 let app: Client;
 let proprietaire: Client;
@@ -34,29 +56,33 @@ beforeEach(async () => {
 });
 
 describe("catalogue PostgreSQL", () => {
-  it("chaque table d'église a la RLS activée, forcée et sa politique", async () => {
-    const { rows } = await proprietaire.query<{
-      table: string;
-      rls: boolean;
-      force: boolean;
-      politiques: number;
-    }>(`
-      SELECT c.relname AS table, c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
-             (SELECT count(*)::int FROM pg_policies p
-               WHERE p.tablename = c.relname AND p.policyname = 'tenant_isolation') AS politiques
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-      WHERE c.relkind = 'r'
-        AND EXISTS (SELECT 1 FROM information_schema.columns col
-                    WHERE col.table_schema = 'public' AND col.table_name = c.relname
-                      AND col.column_name = 'egliseId')
-    `);
-    const tenant = rows.filter((r) => !TABLES_PLATEFORME.includes(r.table));
-    expect(tenant.length).toBe(19);
-    for (const table of tenant) {
-      expect(table, table.table).toMatchObject({ rls: true, force: true, politiques: 1 });
-    }
+  it("le schéma déclare des tables d'église, toutes connues de la barrière applicative", () => {
+    expect(TABLES_EGLISE.length).toBeGreaterThan(0);
+    // getTenantDb() only reaches the models of MODELES_EGLISE: both lists must agree.
+    expect(MODELES.map((m) => m.name).sort()).toEqual([...MODELES_EGLISE].sort());
   });
+
+  it.each(TABLES_EGLISE)(
+    "table d'église %s : RLS activée, forcée, avec sa politique tenant_isolation",
+    async (table) => {
+      const { rows } = await proprietaire.query<{
+        rls: boolean;
+        force: boolean;
+        politiques: number;
+      }>(
+        `SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
+                (SELECT count(*)::int FROM pg_policies p
+                  WHERE p.schemaname = 'public' AND p.tablename = c.relname
+                    AND p.policyname = 'tenant_isolation') AS politiques
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+         WHERE c.relkind = 'r' AND c.relname = $1`,
+        [table],
+      );
+      expect(rows, `table ${table} absente de la base`).toHaveLength(1);
+      expect(rows[0], `table ${table}`).toEqual({ rls: true, force: true, politiques: 1 });
+    },
+  );
 
   it("le rôle applicatif n'est ni superutilisateur, ni BYPASSRLS, ni propriétaire", async () => {
     const { rows } = await proprietaire.query(

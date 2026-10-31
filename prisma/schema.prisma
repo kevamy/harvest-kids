@@ -91,6 +91,7 @@ model Eglise {
   enfants             Enfant[]
   cartes              CarteFamille[]
   reemissions         ReemissionCartes[]
+  badges              BadgeMoniteur[]
   classes             Classe[]
   cultes              Culte[]
   sessions            Session[]
@@ -140,12 +141,12 @@ model Membre {
   pinHash         String?
   pinEchecs       Int       @default(0)
   pinBloqueJusqua DateTime?
-  badgeTokenHash  String?   @unique // empreinte SHA-256 du jeton du badge moniteur (ADR 0008)
   actif           Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   affectations AffectationMoniteur[]
+  badges       BadgeMoniteur[]
 
   @@unique([egliseId, userId])
   @@unique([id, egliseId])
@@ -369,6 +370,25 @@ model CarteFamille {
   @@unique([enfantId], where: raw("\"revoqueeLe\" IS NULL AND \"activeLe\" IS NULL AND \"enfantId\" IS NOT NULL"), map: "CarteFamille_enfant_en_attente")
   @@index([familleId])
   @@index([reemissionId])
+}
+
+// Badge moniteur (RG-02, RG-03, RG-14, ADR 0008) : historique des badges d'un membre de
+// l'église. Le nouveau badge est actif dès l'impression et révoque le précédent ; au plus un
+// badge non révoqué par membre (index partiel). Un membre désactivé ou qui perd le rôle
+// MONITEUR voit son badge révoqué.
+model BadgeMoniteur {
+  id        String    @id @default(cuid())
+  egliseId  String
+  eglise    Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  membreId  String
+  membre    Membre    @relation(fields: [membreId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 hexadécimal du jeton HKB1. ; le jeton en clair n'est jamais stocké
+  emisLe    DateTime  @default(now())
+  revoqueLe DateTime?
+
+  @@unique([id, egliseId])
+  @@unique([membreId], where: raw("\"revoqueLe\" IS NULL"), map: "BadgeMoniteur_un_actif_par_membre")
+  @@index([egliseId, membreId])
 }
 
 // Réémission groupée (RG-16) : changement de mode, de logo ou de format. Les cartes émises

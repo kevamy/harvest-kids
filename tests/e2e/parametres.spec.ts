@@ -1,49 +1,19 @@
-import { expect, test } from "@playwright/test";
 import {
   EGLISES,
   attendreAccueil,
-  avecBase,
   egliseDuProjet,
   email,
   reinitialiserLimites,
   seConnecter,
 } from "./support/base";
+import { expect, test } from "./support/eglise-isolee";
 
-const PREFIXE_CLASSE = "E2E ";
+// Tests that change settings work in a church created for them (support/eglise-isolee.ts).
+test.beforeEach(reinitialiserLimites);
 
-/**
- * Puts the demonstration church back as the seed left it: default settings, no test
- * class. Owner connection, inside the church (FORCE RLS applies to the owner too).
- */
-async function remettreEnEtat(nomEglise: string) {
-  await avecBase(async (client) => {
-    const { rows } = await client.query<{ id: string }>(`SELECT id FROM "Eglise" WHERE nom = $1`, [
-      nomEglise,
-    ]);
-    const egliseId = rows[0]!.id;
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.eglise_id', $1, true)", [egliseId]);
-    await client.query(
-      `DELETE FROM "Parametre" WHERE cle IN ('cartes.mode', 'impression', 'cartes.textes')`,
-    );
-    await client.query(`DELETE FROM "Classe" WHERE nom LIKE $1`, [`${PREFIXE_CLASSE}%`]);
-    await client.query("COMMIT");
-  });
-}
-
-test.beforeEach(async ({}, testInfo) => {
-  await reinitialiserLimites();
-  await remettreEnEtat(EGLISES[egliseDuProjet(testInfo)]);
-});
-
-test.afterEach(async ({}, testInfo) => {
-  await remettreEnEtat(EGLISES[egliseDuProjet(testInfo)]);
-});
-
-test("l'administrateur règle l'impression et le mode de carte", async ({ page }, testInfo) => {
-  const eglise = egliseDuProjet(testInfo);
-  await seConnecter(page, email("admin", eglise));
-  await attendreAccueil(page, EGLISES[eglise]);
+test("l'administrateur règle l'impression et le mode de carte", async ({ page, eglise }) => {
+  await seConnecter(page, eglise.email("ADMIN"));
+  await attendreAccueil(page, eglise.nom);
 
   await page.getByRole("link", { name: "Paramètres" }).click();
   await expect(page.getByRole("heading", { name: "Paramètres", level: 1 })).toBeVisible();
@@ -86,15 +56,24 @@ test("l'administrateur règle l'impression et le mode de carte", async ({ page }
 
 test("l'administrateur règle les textes de la carte, repris par les aperçus", async ({
   page,
+  eglise,
 }, testInfo) => {
-  const eglise = egliseDuProjet(testInfo);
-  await seConnecter(page, email("admin", eglise));
-  await attendreAccueil(page, EGLISES[eglise]);
+  await eglise.dansEglise((c) =>
+    c.query(`UPDATE "Eglise" SET "telephoneAccueil" = '+2290197451233' WHERE id = $1`, [eglise.id]),
+  );
+  await seConnecter(page, eglise.email("ADMIN"));
+  await attendreAccueil(page, eglise.nom);
   await page.goto("/parametres/impression");
 
-  // Defaults, front only: the footer shows the short instruction in all five formats.
+  // Defaults, front only: the footer shows the reception phone and the short instruction
+  // in all five formats.
   const pieds = page.locator("[data-testid^='pied-']");
   await expect(pieds).toHaveCount(5);
+  for (const pied of await pieds.all()) {
+    await expect(pied).toHaveText(
+      /^Accueil enfants : .+ · Présentez cette carte à chaque dépôt et à chaque retrait\.$/,
+    );
+  }
   await expect(page.getByLabel("Consigne courte du recto")).toHaveAttribute("maxlength", "60");
 
   await page.getByLabel(/Afficher le téléphone de l'accueil enfants/).uncheck();
@@ -131,10 +110,10 @@ test("l'administrateur règle les textes de la carte, repris par les aperçus", 
 
 test("le responsable gère les classes, sans accès aux autres paramètres", async ({
   page,
-}, testInfo) => {
-  const eglise = egliseDuProjet(testInfo);
-  await seConnecter(page, email("responsable", eglise));
-  await attendreAccueil(page, EGLISES[eglise]);
+  eglise,
+}) => {
+  await seConnecter(page, eglise.email("RESPONSABLE"));
+  await attendreAccueil(page, eglise.nom);
 
   await page.getByRole("link", { name: "Paramètres" }).click();
   await expect(page.getByRole("link", { name: /^Classes et tranches d'âge/ })).toBeVisible();
@@ -145,7 +124,7 @@ test("le responsable gère les classes, sans accès aux autres paramètres", asy
     expect(reponse?.status(), chemin).toBe(404);
   }
 
-  // The seed's classes follow one another: nothing to report.
+  // The default classes follow one another: nothing to report.
   await page.goto("/parametres/classes");
   await expect(
     page.getByText("Les tranches des classes actives se suivent sans chevauchement ni trou."),
@@ -157,18 +136,16 @@ test("le responsable gère les classes, sans accès aux autres paramètres", asy
     .or(
       page.locator("section", { has: page.getByRole("heading", { name: "Ajouter une classe" }) }),
     );
-  await ajout.getByLabel("Nom de la classe").fill(`${PREFIXE_CLASSE}Chevauchement`);
+  await ajout.getByLabel("Nom de la classe").fill("Chevauchement");
   await ajout.getByLabel("Âge minimum (mois)").fill("30");
   await ajout.getByLabel("Âge maximum (mois)").fill("40");
   await ajout.getByRole("button", { name: "Ajouter la classe" }).click();
   await expect(ajout.getByRole("status")).toHaveText("Classe ajoutée.");
-  await expect(page.getByTestId("signalements-tranches")).toContainText(
-    `${PREFIXE_CLASSE}Chevauchement`,
-  );
+  await expect(page.getByTestId("signalements-tranches")).toContainText("Chevauchement");
   await expect(page.getByTestId("signalements-tranches")).toContainText("se chevauchent");
 
   // Deactivating it removes the warning.
-  const carte = page.getByRole("region", { name: `Classe ${PREFIXE_CLASSE}Chevauchement` });
+  const carte = page.getByRole("region", { name: "Classe Chevauchement" });
   await carte.getByLabel("Classe active").uncheck();
   await carte.getByRole("button", { name: "Enregistrer la classe" }).click();
   await expect(carte.getByRole("status")).toHaveText("Classe enregistrée.");
@@ -195,67 +172,57 @@ const PNG = Buffer.from(
 
 test("l'administrateur téléverse un logo, converti par sharp sur le build de production", async ({
   page,
+  eglise,
 }) => {
-  // Porto-Novo has no logo in the seed: it is restored to exactly that state afterwards.
-  const nomEglise = EGLISES["porto-novo"];
-  const sansLogo = () =>
-    avecBase((c) =>
-      c.query(`UPDATE "Eglise" SET "logoKey" = NULL, "logoClairKey" = NULL WHERE nom = $1`, [
-        nomEglise,
-      ]),
-    );
-  await sansLogo();
-  try {
-    await seConnecter(page, email("admin", "porto-novo"));
-    await attendreAccueil(page, nomEglise);
-    await page.goto("/parametres/eglise");
+  // A church created for the test, without logo; its files go with it afterwards.
+  const nomEglise = eglise.nom;
+  await seConnecter(page, eglise.email("ADMIN"));
+  await attendreAccueil(page, nomEglise);
+  await page.goto("/parametres/eglise");
 
-    const carte = page.locator("section", {
-      has: page.getByRole("heading", { name: "Logo", exact: true }),
+  const carte = page.locator("section", {
+    has: page.getByRole("heading", { name: "Logo", exact: true }),
+  });
+  const apercu = carte.getByRole("img", { name: `Logo de ${nomEglise}` });
+  const televerser = async (precedent?: string) => {
+    await carte.getByLabel("Fichier PNG ou SVG (2 Mo au plus)").setInputFiles({
+      name: "logo.png",
+      mimeType: "image/png",
+      buffer: PNG,
     });
-    const apercu = carte.getByRole("img", { name: `Logo de ${nomEglise}` });
-    const televerser = async (precedent?: string) => {
-      await carte.getByLabel("Fichier PNG ou SVG (2 Mo au plus)").setInputFiles({
-        name: "logo.png",
-        mimeType: "image/png",
-        buffer: PNG,
-      });
-      await carte.getByRole("button", { name: "Enregistrer le logo" }).click();
-      await expect(carte.getByRole("status")).toHaveText("Logo enregistré.");
-      // The message of a previous upload may still be shown: wait for the new image.
-      if (precedent) await expect(apercu).not.toHaveAttribute("src", precedent);
-      // The stored PNG is served by the authenticated route and decoded by the browser.
-      await expect(apercu).toHaveAttribute(
-        "src",
-        /^\/api\/fichiers\/eglises\/.+\/logo\/principal-.+\.png$/,
-      );
-      await expect
-        .poll(() => apercu.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
-        .toBeGreaterThan(0);
-      return (await apercu.getAttribute("src"))!;
-    };
+    await carte.getByRole("button", { name: "Enregistrer le logo" }).click();
+    await expect(carte.getByRole("status")).toHaveText("Logo enregistré.");
+    // The message of a previous upload may still be shown: wait for the new image.
+    if (precedent) await expect(apercu).not.toHaveAttribute("src", precedent);
+    // The stored PNG is served by the authenticated route and decoded by the browser.
+    await expect(apercu).toHaveAttribute(
+      "src",
+      /^\/api\/fichiers\/eglises\/.+\/logo\/principal-.+\.png$/,
+    );
+    await expect
+      .poll(() => apercu.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+      .toBeGreaterThan(0);
+    return (await apercu.getAttribute("src"))!;
+  };
 
-    const premier = await televerser();
-    await expect(
-      page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
-    ).toHaveAttribute("src", premier);
+  const premier = await televerser();
+  await expect(
+    page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
+  ).toHaveAttribute("src", premier);
 
-    // Same file again: a new key, so no browser cache can serve the old logo. The old file
-    // stays served (tablets still showing the old page) until the daily task deletes it, 24 h
-    // later at the earliest.
-    const second = await televerser(premier);
-    expect(second).not.toBe(premier);
-    await expect(
-      page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
-    ).toHaveAttribute("src", second);
-    expect((await page.request.get(premier)).status()).toBe(200);
-    expect((await page.request.get(second)).status()).toBe(200);
+  // Same file again: a new key, so no browser cache can serve the old logo. The old file
+  // stays served (tablets still showing the old page) until the daily task deletes it, 24 h
+  // later at the earliest.
+  const second = await televerser(premier);
+  expect(second).not.toBe(premier);
+  await expect(
+    page.getByRole("banner").getByRole("img", { name: `Logo de ${nomEglise}` }),
+  ).toHaveAttribute("src", second);
+  expect((await page.request.get(premier)).status()).toBe(200);
+  expect((await page.request.get(second)).status()).toBe(200);
 
-    // Saving a logo must not invalidate the prerendered service worker.
-    const sw = await page.request.get("/serwist/sw.js");
-    expect(sw.status()).toBe(200);
-    expect(await sw.text()).toContain("hors-connexion");
-  } finally {
-    await sansLogo();
-  }
+  // Saving a logo must not invalidate the prerendered service worker.
+  const sw = await page.request.get("/serwist/sw.js");
+  expect(sw.status()).toBe(200);
+  expect(await sw.text()).toContain("hors-connexion");
 });

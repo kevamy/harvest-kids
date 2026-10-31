@@ -47,7 +47,41 @@ export const TYPO = {
     /** Space below the title, between instructions and above the name, in points. */
     ecart: 2,
   },
+  /**
+   * Monitor badge, front: the "Badge moniteur" mention and the monitor's name, set at its
+   * base size or lowered down to `nomMin` to fit (mesure.ts, corpsNomBadge).
+   */
+  badge: {
+    mention: { paysage: 7, portrait: 8 },
+    nom: { paysage: 10, portrait: 12 },
+    nomMin: 7,
+  },
 } as const;
+
+/**
+ * Monitor badges (cahier §7.10): fixed texts, through the same footer and back as the cards.
+ * Checked in the five formats by the same unit test as the card texts.
+ */
+export const TEXTES_BADGE: TextesCarte = {
+  afficherTelephone: false,
+  consigneCourte: "Badge personnel : scannez-le à votre arrivée.",
+  titreVerso: "Badge moniteur",
+  consignesVerso: [
+    "Scannez ce badge à votre arrivée pour enregistrer votre présence.",
+    "Badge personnel : ne le prêtez pas.",
+    "Badge perdu : signalez-le à un administrateur.",
+  ],
+};
+
+/** Longest monitor name printed on a badge; beyond, it is shortened with "…". */
+export const NOM_BADGE_MAX = 40;
+
+export function nomBadge(nom: string): string {
+  const propre = nom.trim().replace(/\s+/g, " ");
+  return propre.length <= NOM_BADGE_MAX
+    ? propre
+    : `${propre.slice(0, NOM_BADGE_MAX - 1).trimEnd()}…`;
+}
 
 /** Reception phone line, or null when hidden or not set in the church profile. */
 export function ligneTelephone(textes: TextesCarte, telephoneAccueil: string | null) {

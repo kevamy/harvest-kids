@@ -58,11 +58,15 @@ export async function attendreAccueil(page: Page, eglise: string) {
   await expect(page.getByTestId("eglise-active")).toHaveText(eglise);
 }
 
-/** Moves the latest session's last activity into the past (simulated idle time). */
+/**
+ * Moves the latest session's last activity into the past (simulated idle time). The date
+ * was set by the server's clock, which also compares it: it is shifted from its own value,
+ * never replaced by the database's now() (one clock per comparison).
+ */
 export async function vieillirDerniereActivite(adresse: string, minutes: number) {
   await avecBase((c) =>
     c.query(
-      `UPDATE "AuthSession" SET "derniereActivite" = now() - make_interval(mins => $2)
+      `UPDATE "AuthSession" SET "derniereActivite" = "derniereActivite" - make_interval(mins => $2)
        WHERE id = (SELECT s.id FROM "AuthSession" s JOIN "User" u ON u.id = s."userId"
                    WHERE u.email = $1 ORDER BY s."createdAt" DESC LIMIT 1)`,
       [adresse, minutes],

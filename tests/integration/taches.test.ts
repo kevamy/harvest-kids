@@ -27,8 +27,13 @@ let dbA: ClientEglise;
 let dossier: string;
 
 const AUTEUR = { userId: "user_test", appareil: null };
-const JOUR = 24 * 60 * 60 * 1000;
-const dansJours = (jours: number) => new Date(Date.now() + jours * JOUR);
+
+/**
+ * The task compares dates with PostgreSQL's `now()` (one clock): time passes here by
+ * moving the stored dates back, on the database's clock as well.
+ */
+const dansEgliseA = (sql: string) =>
+  enEglise(proprietaire, a.egliseId, () => proprietaire.query(sql));
 
 beforeAll(async () => {
   base = creerClientPlateforme(urlsDeTest().app);
@@ -128,8 +133,9 @@ describe("révocation à date limite (RG-16)", () => {
     const ancienne = await dbA.$tx((tx) => emettreCarte(tx, AUTEUR, { familleId: a.familleId }));
     await enEglise(proprietaire, a.egliseId, () =>
       proprietaire.query(
-        `INSERT INTO "ReemissionCartes" (id, "egliseId", mode, "dateLimite", "creePar") VALUES ('r', $1, 'ENFANT', $2, 'u')`,
-        [a.egliseId, dansJours(3)],
+        `INSERT INTO "ReemissionCartes" (id, "egliseId", mode, "dateLimite", "creePar")
+         VALUES ('r', $1, 'ENFANT', now() + interval '3 days', 'u')`,
+        [a.egliseId],
       ),
     );
     await dbA.$tx((tx) =>
@@ -143,15 +149,18 @@ describe("révocation à date limite (RG-16)", () => {
     const stockage = creerStockageLocal(dossier);
 
     expect((await executerTachesQuotidiennes(base, stockage)).cartesRevoquees).toBe(0);
-    const bilan = await executerTachesQuotidiennes(base, stockage, dansJours(4));
+    // Four days later: the deadline has passed.
+    await dansEgliseA(
+      `UPDATE "ReemissionCartes" SET "dateLimite" = "dateLimite" - interval '4 days'`,
+    );
+    const bilan = await executerTachesQuotidiennes(base, stockage);
     expect(bilan.cartesRevoquees).toBe(1);
     const carte = await dbA.carteFamille.findUnique({ where: { id: ancienne.carteId } });
     expect(carte?.revoqueeLe).not.toBeNull();
     expect((await audit(a)).at(-1)).toMatchObject({ action: "carte.revoquee", userId: null });
 
-    expect((await executerTachesQuotidiennes(base, stockage, dansJours(5))).cartesRevoquees).toBe(
-      0,
-    );
+    // Idempotent.
+    expect((await executerTachesQuotidiennes(base, stockage)).cartesRevoquees).toBe(0);
   });
 });
 
@@ -175,14 +184,13 @@ describe("suppression différée des fichiers remplacés", () => {
     expect(await stockage.get(cle)).not.toBeNull();
     expect(await stockage.get(cleB)).not.toBeNull();
 
-    expect(
-      (await executerTachesQuotidiennes(base, stockage, dansJours(1.01))).fichiersSupprimes,
-    ).toBe(1);
+    // 24 hours later: the replaced file is due.
+    await dansEgliseA(`UPDATE "FichierASupprimer" SET "apresLe" = "apresLe" - interval '24 hours'`);
+    expect((await executerTachesQuotidiennes(base, stockage)).fichiersSupprimes).toBe(1);
     expect(await stockage.get(cle)).toBeNull();
     expect(await dbA.fichierASupprimer.count()).toBe(0);
-    expect((await executerTachesQuotidiennes(base, stockage, dansJours(2))).fichiersSupprimes).toBe(
-      0,
-    );
+    // Idempotent.
+    expect((await executerTachesQuotidiennes(base, stockage)).fichiersSupprimes).toBe(0);
   });
 });
 

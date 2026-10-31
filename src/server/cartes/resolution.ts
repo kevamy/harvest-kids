@@ -16,8 +16,11 @@ export type ResolutionJeton =
       familleId: string;
       enfantId: string | null;
     }
-  | { statut: "active"; type: "badge"; membreId: string }
-  | { statut: "revoquee" | "perimee" | "autre_eglise" | "inconnue" };
+  | { statut: "active"; type: "badge"; badgeId: string; membreId: string }
+  | {
+      statut:
+        "revoquee" | "perimee" | "badge_remplace" | "badge_refuse" | "autre_eglise" | "inconnue";
+    };
 
 /** Messages shown after a scan (cahier §8). */
 export const MESSAGES_SCAN = {
@@ -28,17 +31,24 @@ export const MESSAGES_SCAN = {
   autre_eglise: "Cette carte n'appartient pas à cette église.",
   inconnue: "Carte inconnue. Vérifiez la carte ou recherchez la famille.",
   en_attente: "Carte en attente : elle sera activée à sa première utilisation.",
+  badge_remplace:
+    "Ce badge a été remplacé. Utilisez votre nouveau badge ou sélectionnez-vous dans la liste.",
+  badge_refuse:
+    "Ce badge n'est plus valide : son titulaire n'est plus moniteur actif dans cette église. Adressez-vous à un administrateur.",
 } as const;
 
-/** Looks up an active monitor badge of the active church by fingerprint (platform table). */
-export type RechercheBadge = (empreinte: string) => Promise<{ membreId: string } | null>;
+/**
+ * Is this member an active monitor of the active church (member and account active, MONITEUR
+ * role)? `Membre` is a platform table: the check is injected (src/server/plateforme/badges.ts).
+ */
+export type VerificationMoniteur = (membreId: string) => Promise<boolean>;
 
-type Lecture = Pick<ClientDeBase, "carteFamille" | "$queryRaw">;
+type Lecture = Pick<ClientDeBase, "carteFamille" | "badgeMoniteur" | "$queryRaw">;
 
 export async function resoudreJeton(
   db: Lecture,
   jeton: string,
-  rechercherBadge: RechercheBadge,
+  estMoniteurActif: VerificationMoniteur,
 ): Promise<ResolutionJeton> {
   const valeur = jeton.trim();
   const type = typeJeton(valeur);
@@ -46,8 +56,16 @@ export async function resoudreJeton(
   const empreinte = empreinteJeton(valeur);
 
   if (type === "badge") {
-    const badge = await rechercherBadge(empreinte);
-    if (badge) return { statut: "active", type: "badge", membreId: badge.membreId };
+    const badge = await db.badgeMoniteur.findUnique({
+      where: { tokenHash: empreinte },
+      select: { id: true, membreId: true, revoqueLe: true },
+    });
+    if (badge) {
+      // A badge revoked because its holder left the role reads as such, not as "replaced".
+      if (!(await estMoniteurActif(badge.membreId))) return { statut: "badge_refuse" };
+      if (badge.revoqueLe) return { statut: "badge_remplace" };
+      return { statut: "active", type: "badge", badgeId: badge.id, membreId: badge.membreId };
+    }
   } else {
     const carte = await db.carteFamille.findUnique({
       where: { tokenHash: empreinte },
@@ -81,26 +99,34 @@ export async function resoudreJeton(
 }
 
 /**
- * An active card is out of date once a bulk reissue covering the same children has
- * passed its deadline (RG-16). Read-only: the daily task revokes it with an audit entry.
+ * Active cards out of date (RG-16): a newer card covering the same children belongs to a
+ * bulk reissue whose deadline has passed. A family card is replaced by any newer card of
+ * the family; a child card by a newer card of the same child or a newer family card.
+ * The deadline is compared with PostgreSQL's `now()`, one clock for the scan and the daily
+ * task. `carteId`: that card only. Read-only, inside the active church (RLS).
  */
+export async function cartesPerimees(
+  db: Pick<ClientDeBase, "$queryRaw">,
+  carteId: string | null = null,
+): Promise<string[]> {
+  const lignes = await db.$queryRaw<{ id: string }[]>`
+    SELECT a.id FROM "CarteFamille" a
+    WHERE a."revoqueeLe" IS NULL AND a."activeLe" IS NOT NULL
+      AND (${carteId}::text IS NULL OR a.id = ${carteId}::text)
+      AND EXISTS (
+        SELECT 1 FROM "CarteFamille" n
+        JOIN "ReemissionCartes" r ON r.id = n."reemissionId" AND r."egliseId" = n."egliseId"
+        WHERE n."familleId" = a."familleId" AND n.id <> a.id AND n."revoqueeLe" IS NULL
+          AND n."emiseLe" > a."emiseLe" AND r."dateLimite" < now()
+          AND (a."enfantId" IS NULL OR n."enfantId" IS NULL OR n."enfantId" = a."enfantId")
+      )
+    ORDER BY a.id`;
+  return lignes.map((l) => l.id);
+}
+
 export async function estPerimee(
-  db: Lecture,
-  carte: { id: string; familleId: string; enfantId: string | null; emiseLe: Date },
-  maintenant = new Date(),
+  db: Pick<ClientDeBase, "$queryRaw">,
+  carte: { id: string },
 ): Promise<boolean> {
-  const remplacante = await db.carteFamille.findFirst({
-    where: {
-      id: { not: carte.id },
-      familleId: carte.familleId,
-      revoqueeLe: null,
-      emiseLe: { gt: carte.emiseLe },
-      reemission: { dateLimite: { lt: maintenant } },
-      // A family card is replaced by any newer card of the family; a child card by a
-      // newer card of the same child or a newer family card.
-      ...(carte.enfantId ? { OR: [{ enfantId: carte.enfantId }, { enfantId: null }] } : {}),
-    },
-    select: { id: true },
-  });
-  return remplacante !== null;
+  return (await cartesPerimees(db, carte.id)).length > 0;
 }

@@ -21,12 +21,12 @@ export type BilanTaches = {
  * Church by church, through each church's scoped client: purge of expired drafts,
  * revocation of cards past a reissue deadline, deletion of replaced files after 24 h.
  * Idempotent: running it twice changes nothing more. One church failing does not stop
- * the others; only counts are reported, never personal data.
+ * the others; only counts are reported, never personal data. Every "is it due?" test is
+ * made by PostgreSQL against its own `now()`: one clock, whatever the server's.
  */
 export async function executerTachesQuotidiennes(
   base: PrismaClient,
   stockage: Stockage,
-  maintenant = new Date(),
 ): Promise<BilanTaches> {
   const bilan: BilanTaches = {
     eglises: 0,
@@ -43,10 +43,9 @@ export async function executerTachesQuotidiennes(
       bilan.brouillonsPurges += await purgerBrouillonsExpires(
         db,
         parametres["familles.delaiPurgeBrouillonsJours"],
-        maintenant,
       );
-      bilan.cartesRevoquees += await revoquerCartesPerimees(db, maintenant);
-      bilan.fichiersSupprimes += await supprimerFichiersEchus(db, id, stockage, maintenant);
+      bilan.cartesRevoquees += await revoquerCartesPerimees(db);
+      bilan.fichiersSupprimes += await supprimerFichiersEchus(db, id, stockage);
       bilan.eglises++;
     } catch (erreur) {
       bilan.erreurs++;

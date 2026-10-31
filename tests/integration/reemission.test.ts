@@ -28,13 +28,14 @@ vi.mock("@/server/impression/pdf-carte", async (importOriginal) => {
     ...reel,
     genererPdfCartes: (...args: Parameters<typeof reel.genererPdfCartes>) => {
       if (rendu.echoue) return Promise.reject(new Error("rendu impossible"));
-      rendu.cartes = args[0];
+      rendu.cartes = args[0] as ContenuCarte[]; // a reissue prints cards only
+
       rendu.options = args[2];
       return reel.genererPdfCartes(...args);
     },
   };
 });
-import { rechercheBadge } from "@/server/plateforme/badges";
+import { verificationMoniteur } from "@/server/plateforme/badges";
 import { creerClientPlateforme } from "@/server/plateforme/db";
 import {
   type Client,
@@ -125,7 +126,7 @@ const jetonImprime = (prenom: string) =>
   rendu.cartes.find((c) => c.enfants.length === 1 && c.enfants[0]!.prenom === prenom)!.jeton;
 
 const resoudre = (jeton: string) =>
-  resoudreJeton(dbA, jeton, rechercheBadge(base, contexteVerifie(a)));
+  resoudreJeton(dbA, jeton, verificationMoniteur(base, contexteVerifie(a)));
 
 /** Invariant: for each child, at most one active card covers it (family or child card). */
 async function expectUneCarteActiveAuPlus() {
@@ -188,7 +189,7 @@ describe("réémission groupée", () => {
 
     // First check-in scan of the eldest's card: active, the family card is revoked.
     await dbA.$tx((tx) =>
-      activerAuPremierScan(tx, AUTEUR, jetonAine, rechercheBadge(base, contexteVerifie(a))),
+      activerAuPremierScan(tx, AUTEUR, jetonAine, verificationMoniteur(base, contexteVerifie(a))),
     );
     expect(await resoudre(jetonAine)).toMatchObject({ statut: "active" });
     expect(await resoudre(ancienne.jeton)).toEqual({ statut: "revoquee" });

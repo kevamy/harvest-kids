@@ -7,7 +7,7 @@ import { INDICATIF_PAR_DEFAUT, normaliserTelephone } from "@/lib/telephone";
 import type { ContexteEglise } from "@/lib/tenant";
 import { stockage, type Stockage } from "@/lib/storage";
 import { prismaPlateforme, withEglise } from "./db";
-import { dateSuppression } from "@/server/fichiers-differes";
+import { programmerSuppression } from "@/server/fichiers-differes";
 import { FUSEAUX_PROPOSES } from "./eglises";
 
 /**
@@ -189,12 +189,7 @@ export async function remplacerLogo(
         { variante, cle: ancienneCle },
         { variante, cle: nouvelleCle },
       );
-      if (ancienneCle) {
-        await tx.fichierASupprimer.createMany({
-          data: [{ egliseId: auteur.egliseId, cle: ancienneCle, apresLe: dateSuppression() }],
-          skipDuplicates: true,
-        });
-      }
+      if (ancienneCle) await programmerSuppression(tx, ancienneCle);
     });
   } catch (erreur) {
     // Nothing points to the new file: remove it.
