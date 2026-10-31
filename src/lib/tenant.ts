@@ -289,18 +289,26 @@ export type ClientDeBase = Omit<
 
 export type ClientEglise = ClientDeBase & {
   readonly egliseId: string;
-  /** Several operations in one transaction, inside the active church. */
-  $tx<T>(fn: (tx: ClientDeBase) => Promise<T>): Promise<T>;
+  /**
+   * Several operations in one transaction, inside the active church. `timeout` (ms)
+   * lengthens Prisma's 5 s limit for bulk work (card reissue).
+   */
+  $tx<T>(fn: (tx: ClientDeBase) => Promise<T>, options?: { timeout?: number }): Promise<T>;
 };
 
 export function clientEglise(base: PrismaClient, egliseId: string): ClientEglise {
   const etendu = etendre(base, egliseId);
-  const $tx = <T>(fn: (tx: ClientDeBase) => Promise<T>): Promise<T> =>
-    etendu.$transaction((tx) =>
-      transactionEnCours.run(egliseId, async () => {
-        await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
-        return fn(tx as unknown as ClientDeBase);
-      }),
+  const $tx = <T>(
+    fn: (tx: ClientDeBase) => Promise<T>,
+    options: { timeout?: number } = {},
+  ): Promise<T> =>
+    etendu.$transaction(
+      (tx) =>
+        transactionEnCours.run(egliseId, async () => {
+          await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
+          return fn(tx as unknown as ClientDeBase);
+        }),
+      options.timeout ? { timeout: options.timeout } : undefined,
     );
   return new Proxy(etendu, {
     get(cible, propriete) {

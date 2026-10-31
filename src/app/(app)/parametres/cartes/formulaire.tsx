@@ -69,7 +69,8 @@ export function FormulaireModeCarte({ modeActuel }: { modeActuel: Mode }) {
           <TriangleAlert aria-hidden className="mt-0.5 size-6 shrink-0" />
           <p className="m-0">
             Les cartes déjà remises restent valides jusqu&apos;à leur révocation. Seules les
-            nouvelles cartes seront émises en mode « {LIBELLES[choix].titre.toLowerCase()} ».
+            nouvelles cartes seront émises en mode « {LIBELLES[choix].titre.toLowerCase()} ». Pour
+            les familles déjà inscrites, réémettez ensuite les cartes ci-dessous.
           </p>
         </div>
       ) : null}

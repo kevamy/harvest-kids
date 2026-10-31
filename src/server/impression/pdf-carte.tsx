@@ -13,7 +13,6 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { COULEURS_HORS_CSS as C } from "@/lib/couleurs";
-import { formaterTelephone } from "@/lib/telephone";
 import type { FormatCarte } from "./formats";
 import {
   A4,
@@ -23,9 +22,17 @@ import {
   disposerPlanche,
   MM_EN_POINTS,
   positionsVerso,
+  zoneVerso,
   type Gabarit,
 } from "./planche";
 import { matriceQr } from "./qr";
+import {
+  TEXTES_CARTE_PAR_DEFAUT,
+  TYPO,
+  ligneTelephone,
+  textePied,
+  type TextesCarte,
+} from "./textes";
 
 /**
  * Printed cards (cahier §7.10, RG-02): the church's logo, never Harvest Kids'. Fonts are
@@ -55,6 +62,8 @@ export type EgliseImpression = {
   /** PNG logo for light backgrounds, or null: the name is then set in Fredoka. */
   logo: Buffer | null;
   telephoneAccueil: string | null;
+  /** Card texts of the church (Paramètres › Impression); defaults when absent. */
+  textes?: TextesCarte;
 };
 
 export type OptionsImpression = {
@@ -67,12 +76,11 @@ export type OptionsImpression = {
 };
 
 const mm = (valeur: number) => `${valeur}mm`;
-const CONSIGNE_COURTE = "Présentez cette carte à chaque dépôt et à chaque retrait.";
-const CONSIGNES = [
-  CONSIGNE_COURTE,
-  "Seules les personnes autorisées par la famille peuvent récupérer les enfants.",
-  "Carte perdue ou abîmée : signalez-le à l'accueil enfants, une nouvelle carte vous sera remise.",
-];
+const textesDe = (eglise: EgliseImpression) => eglise.textes ?? TEXTES_CARTE_PAR_DEFAUT;
+
+/** Front footer of a church's cards (see textes.ts). */
+export const piedDe = (eglise: EgliseImpression) =>
+  textePied(textesDe(eglise), eglise.telephoneAccueil);
 
 /** Children shown on a card; beyond what fits, "+ n autres". */
 function lignesEnfants(enfants: ContenuCarte["enfants"], gabarit: Gabarit) {
@@ -236,15 +244,13 @@ function Recto({
           <Text
             style={{
               fontFamily: "Nunito",
-              fontSize: portrait ? 7.5 : 6,
+              fontSize: portrait ? TYPO.pied.portrait : TYPO.pied.paysage,
+              lineHeight: TYPO.interligne,
               color: C.nuit,
               textAlign: portrait ? "center" : "left",
             }}
           >
-            {eglise.telephoneAccueil
-              ? `Accueil enfants : ${formaterTelephone(eglise.telephoneAccueil)} · `
-              : ""}
-            {CONSIGNE_COURTE}
+            {piedDe(eglise)}
           </Text>
         </View>
       ) : null}
@@ -272,49 +278,67 @@ function Recto({
 }
 
 function Verso({ eglise, gabarit }: { eglise: EgliseImpression; gabarit: Gabarit }) {
-  const s = gabarit.securite;
+  const zone = zoneVerso(gabarit);
+  const textes = textesDe(eglise);
+  const telephone = ligneTelephone(textes, eglise.telephoneAccueil);
+  const v = TYPO.verso;
   return (
     <View
       style={{
         position: "absolute",
-        left: mm(s.x),
-        top: mm(s.y + (gabarit.perforation?.hauteur ?? 0)),
-        width: mm(s.largeur),
+        left: mm(zone.x),
+        top: mm(zone.y),
+        width: mm(zone.largeur),
       }}
     >
       <Text
         style={{
           fontFamily: "Fredoka",
           fontWeight: 600,
-          fontSize: 9,
+          fontSize: v.titre,
+          lineHeight: TYPO.interligne,
           color: C.nuit,
-          marginBottom: 2,
+          marginBottom: v.ecart,
         }}
       >
-        Dépôt et retrait des enfants
+        {textes.titreVerso}
       </Text>
-      {CONSIGNES.map((consigne, i) => (
+      {textes.consignesVerso.map((consigne, i) => (
         <Text
           key={i}
-          style={{ fontFamily: "Nunito", fontSize: 7, color: C.nuit, marginBottom: 1.5 }}
+          style={{
+            fontFamily: "Nunito",
+            fontSize: v.consigne,
+            lineHeight: TYPO.interligne,
+            color: C.nuit,
+            marginBottom: v.ecart,
+          }}
         >
           {consigne}
         </Text>
       ))}
-      {eglise.telephoneAccueil ? (
+      {telephone ? (
         <Text
           style={{
             fontFamily: "Nunito",
             fontWeight: 700,
-            fontSize: 8,
+            fontSize: v.telephone,
+            lineHeight: TYPO.interligne,
             color: C.nuit,
-            marginTop: 2,
           }}
         >
-          Accueil enfants : {formaterTelephone(eglise.telephoneAccueil)}
+          {telephone}
         </Text>
       ) : null}
-      <Text style={{ fontFamily: "Nunito", fontSize: 6.5, color: C["texte-doux"], marginTop: 2 }}>
+      <Text
+        style={{
+          fontFamily: "Nunito",
+          fontSize: v.nom,
+          lineHeight: TYPO.interligne,
+          color: C["texte-doux"],
+          marginTop: v.ecart,
+        }}
+      >
         {eglise.nom}
       </Text>
     </View>

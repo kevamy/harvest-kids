@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { creerClasse, modifierClasse } from "@/server/classes";
-import { ecrireParametre } from "@/server/parametres";
+import { formatParId } from "@/server/impression/formats";
+import { verifierTextesCarte } from "@/server/impression/mesure";
+import { SCHEMAS_PARAMETRES, ecrireParametre } from "@/server/parametres";
 import {
   LogoRefuse,
   ProfilRefuse,
   enregistrerLogo,
   enregistrerProfilEglise,
+  profilEglise,
   type VarianteLogo,
 } from "@/server/plateforme/profil-eglise";
 import { RefusMetier, executerAction, type ResultatAction } from "../executer-action";
@@ -80,6 +83,30 @@ export async function enregistrerModeCarte(mode: unknown): Promise<ResultatActio
 export async function enregistrerImpression(saisie: unknown): Promise<ResultatAction> {
   const resultat = await executerAction("eglise.parametrer", async ({ db, contexte }) => {
     await db.$tx((tx) => ecrireParametre(tx, contexte, "impression", saisie));
+  });
+  if (resultat.ok) revalidatePath("/parametres/impression");
+  return resultat;
+}
+
+export async function enregistrerTextesCarte(saisie: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("eglise.parametrer", async ({ db, contexte }) => {
+    const textes = SCHEMAS_PARAMETRES["cartes.textes"].parse(saisie);
+    // The lengths are capped so that any text fits (unit test); this second check measures
+    // the text with the church's real name and phone, in all five formats.
+    const profil = await profilEglise(contexte);
+    const depassements = await verifierTextesCarte({
+      nom: profil.nom,
+      logo: null,
+      telephoneAccueil: profil.telephoneAccueil,
+      textes,
+    });
+    if (depassements.length > 0) {
+      const { format, zone } = depassements[0]!;
+      throw new RefusMetier(
+        `Le texte du ${zone === "pied" ? "recto" : "verso"} dépasse de la carte au format ${formatParId(format).libelle} : raccourcissez-le.`,
+      );
+    }
+    await db.$tx((tx) => ecrireParametre(tx, contexte, "cartes.textes", textes));
   });
   if (resultat.ok) revalidatePath("/parametres/impression");
   return resultat;

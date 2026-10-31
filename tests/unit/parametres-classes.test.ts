@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ageLisible, analyserTranches, schemaClasse, type Tranche } from "@/server/classes";
 import { FORMATS, IDS_FORMAT, dimensionsLisibles, formatParId } from "@/server/impression/formats";
+import { TEXTES_CARTE_PAR_DEFAUT } from "@/server/impression/textes";
 import { PARAMETRES_PAR_DEFAUT, SCHEMAS_PARAMETRES } from "@/server/parametres";
 import { schemaProfilEglise } from "@/server/plateforme/profil-eglise";
 
@@ -114,6 +115,7 @@ describe("paramètres de l'église", () => {
       impression: { format: "90x54", rectoVerso: false },
       "familles.delaiPurgeBrouillonsJours": 90,
       "telephone.indicatifParDefaut": "229",
+      "cartes.textes": TEXTES_CARTE_PAR_DEFAUT,
     });
   });
 

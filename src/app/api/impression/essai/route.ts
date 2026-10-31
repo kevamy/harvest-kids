@@ -1,7 +1,8 @@
 import { peut } from "@/lib/rbac";
-import { AccesRefuse, getEgliseActive } from "@/lib/tenant";
+import { AccesRefuse, getTenantDb } from "@/lib/tenant";
 import { pdfEssai } from "@/server/impression/cartes";
 import { IDS_FORMAT, type IdFormat } from "@/server/impression/formats";
+import { lireParametres } from "@/server/parametres";
 import { informationsImpression } from "@/server/plateforme/profil-eglise";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(requete: Request) {
   try {
-    const contexte = await getEgliseActive();
+    const { db, contexte } = await getTenantDb();
     if (!peut(contexte.roles, "eglise.parametrer")) return new Response(null, { status: 404 });
     const parametres = new URL(requete.url).searchParams;
     const format = parametres.get("format");
@@ -21,7 +22,10 @@ export async function GET(requete: Request) {
     }
     const sortie = parametres.get("sortie");
     const pdf = await pdfEssai(
-      await informationsImpression(contexte),
+      {
+        ...(await informationsImpression(contexte)),
+        textes: (await lireParametres(db))["cartes.textes"],
+      },
       format as IdFormat,
       parametres.get("rectoVerso") === "1",
       sortie === "unitaire" || sortie === "planche" ? sortie : undefined,

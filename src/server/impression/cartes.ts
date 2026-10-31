@@ -35,8 +35,43 @@ export type ChoixImpression = {
 type Auteur = { userId: string; appareil: string | null };
 
 /** CR80 goes to card printers one card per page; the other formats on A4 sheets. */
-const sortieParDefaut = (format: IdFormat): OptionsImpression["sortie"] =>
+export const sortieParDefaut = (format: IdFormat): OptionsImpression["sortie"] =>
   format === "CR80" ? "unitaire" : "planche";
+
+export type CarteAImprimer = { couverture: Couverture; contenu: ContenuCarte };
+
+/**
+ * RG-16: one card for the family, or one card per child, each with a freshly drawn
+ * token. `enfants`: the active children that have a matricule, in birth order.
+ */
+export function cartesAImprimer(
+  famille: {
+    id: string;
+    nom: string;
+    enfants: { id: string; prenom: string; matricule: string | null }[];
+  },
+  mode: "FAMILLE" | "ENFANT",
+): CarteAImprimer[] {
+  const enfants = famille.enfants.map((e) => ({ prenom: e.prenom, matricule: e.matricule! }));
+  return mode === "FAMILLE"
+    ? [
+        {
+          couverture: { familleId: famille.id },
+          contenu: { jeton: genererJetonCarte(), famille: famille.nom, enfants },
+        },
+      ]
+    : famille.enfants.map((e, i) => ({
+        couverture: { familleId: famille.id, enfantId: e.id },
+        contenu: { jeton: genererJetonCarte(), famille: famille.nom, enfants: [enfants[i]!] },
+      }));
+}
+
+/** Children printed on cards: active, with a matricule (finalised family), oldest first. */
+export const ENFANTS_IMPRIMES = {
+  where: { actif: true, matricule: { not: null } },
+  orderBy: { dateNaissance: "asc" },
+  select: { id: true, prenom: true, matricule: true },
+} as const;
 
 export async function imprimerCartesFamille(
   db: ClientEglise,
@@ -51,11 +86,7 @@ export async function imprimerCartesFamille(
     select: {
       nom: true,
       finaliseeLe: true,
-      enfants: {
-        where: { actif: true, matricule: { not: null } },
-        orderBy: { dateNaissance: "asc" },
-        select: { id: true, prenom: true, matricule: true },
-      },
+      enfants: ENFANTS_IMPRIMES,
     },
   });
   // A family of another church is invisible (scoped client): same answer as a missing one.
@@ -66,25 +97,16 @@ export async function imprimerCartesFamille(
     );
   }
 
-  const enfants = famille.enfants.map((e) => ({ prenom: e.prenom, matricule: e.matricule! }));
-  // RG-16: one card for the family, or one card per child.
-  const aImprimer: { couverture: Couverture; contenu: ContenuCarte }[] =
-    parametres["cartes.mode"] === "FAMILLE"
-      ? [
-          {
-            couverture: { familleId },
-            contenu: { jeton: genererJetonCarte(), famille: famille.nom, enfants },
-          },
-        ]
-      : famille.enfants.map((e, i) => ({
-          couverture: { familleId, enfantId: e.id },
-          contenu: { jeton: genererJetonCarte(), famille: famille.nom, enfants: [enfants[i]!] },
-        }));
+  const aImprimer = cartesAImprimer(
+    { id: familleId, nom: famille.nom, enfants: famille.enfants },
+    parametres["cartes.mode"],
+  );
 
   const idFormat = choix.format ?? parametres.impression.format;
   const pdf = await genererPdfCartes(
     aImprimer.map((c) => c.contenu),
-    eglise,
+    // The church's own card texts (Paramètres › Impression).
+    { ...eglise, textes: parametres["cartes.textes"] },
     {
       format: formatParId(idFormat),
       rectoVerso: choix.rectoVerso ?? parametres.impression.rectoVerso,

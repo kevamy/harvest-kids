@@ -208,6 +208,34 @@ export async function declarerCartePerdue(
   return { carteId, jeton, revoquees };
 }
 
+/**
+ * Bulk reissue after a mode change: pending cards of the other type were never handed
+ * over and would, once activated, revoke the new cards. They are revoked first.
+ */
+export async function revoquerEnAttenteHorsMode(
+  tx: Tx,
+  auteur: Auteur,
+  familleId: string,
+  mode: "FAMILLE" | "ENFANT",
+): Promise<void> {
+  await verrouillerFamille(tx, familleId);
+  const obsoletes = await tx.carteFamille.findMany({
+    where: {
+      familleId,
+      revoqueeLe: null,
+      activeLe: null,
+      enfantId: mode === "FAMILLE" ? { not: null } : null,
+    },
+    select: { id: true },
+  });
+  await revoquer(
+    tx,
+    auteur,
+    obsoletes.map((c) => c.id),
+    "mode_change",
+  );
+}
+
 /** Revokes a card at once (lost card without reprint, card withdrawn), with audit. */
 export async function revoquerCarte(tx: Tx, auteur: Auteur, carteId: string): Promise<void> {
   const carte = await tx.carteFamille.findUnique({

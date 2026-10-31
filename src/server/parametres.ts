@@ -5,6 +5,7 @@ import { journaliser } from "@/lib/audit";
 import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
 import { REGLES_TELEPHONE } from "@/lib/telephone";
 import { IDS_FORMAT } from "@/server/impression/formats";
+import { LIMITES_TEXTES_CARTE, TEXTES_CARTE_PAR_DEFAUT } from "@/server/impression/textes";
 
 /**
  * Church settings stored in `Parametre` (church table, under RLS), one row per key,
@@ -30,6 +31,43 @@ export const SCHEMAS_PARAMETRES = {
     REGLES_TELEPHONE.map((r) => r.indicatif) as [string, ...string[]],
     { message: "Choisissez un indicatif de la liste." },
   ),
+  // Card texts (cahier §7.1, §7.10). Lengths are capped so that the text fits every format;
+  // a unit test renders the longest allowed text in each one.
+  "cartes.textes": z.object({
+    afficherTelephone: z.boolean(),
+    consigneCourte: z
+      .string()
+      .trim()
+      .min(1, "Saisissez la consigne courte du recto.")
+      .max(
+        LIMITES_TEXTES_CARTE.consigneCourte,
+        `La consigne courte compte ${LIMITES_TEXTES_CARTE.consigneCourte} caractères au plus.`,
+      ),
+    titreVerso: z
+      .string()
+      .trim()
+      .min(1, "Saisissez le titre du verso.")
+      .max(
+        LIMITES_TEXTES_CARTE.titreVerso,
+        `Le titre du verso compte ${LIMITES_TEXTES_CARTE.titreVerso} caractères au plus.`,
+      ),
+    consignesVerso: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1, "Une consigne du verso est vide : complétez-la ou retirez-la.")
+          .max(
+            LIMITES_TEXTES_CARTE.consigneVerso,
+            `Une consigne du verso compte ${LIMITES_TEXTES_CARTE.consigneVerso} caractères au plus.`,
+          ),
+      )
+      .min(1, "Saisissez au moins une consigne au verso.")
+      .max(
+        LIMITES_TEXTES_CARTE.nombreConsignesVerso,
+        `${LIMITES_TEXTES_CARTE.nombreConsignesVerso} consignes au plus au verso.`,
+      ),
+  }),
 } as const;
 
 export type CleParametre = keyof typeof SCHEMAS_PARAMETRES;
@@ -41,6 +79,7 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   impression: { format: "90x54", rectoVerso: false },
   "familles.delaiPurgeBrouillonsJours": 90,
   "telephone.indicatifParDefaut": "229",
+  "cartes.textes": TEXTES_CARTE_PAR_DEFAUT,
 };
 
 const CLES = Object.keys(SCHEMAS_PARAMETRES) as CleParametre[];

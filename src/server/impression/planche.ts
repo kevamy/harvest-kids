@@ -161,3 +161,10 @@ export function calculerGabarit(
     corpsMatricule: 10,
   };
 }
+
+/** Back side: the zone available inside the safety margins (and below the lanyard strip). */
+export function zoneVerso(gabarit: Gabarit): Zone {
+  const s = gabarit.securite;
+  const haut = s.y + (gabarit.perforation?.hauteur ?? 0);
+  return { x: s.x, y: haut, largeur: s.largeur, hauteur: s.y + s.hauteur - haut };
+}

@@ -137,6 +137,29 @@ describe("paramètres", () => {
     expect(await audit(b)).toEqual([]);
   });
 
+  it("textes de carte : enregistrés nettoyés, refusés trop longs, propres à chaque église", async () => {
+    const textes = {
+      afficherTelephone: false,
+      consigneCourte: "  Carte à présenter à l'accueil.  ",
+      titreVerso: "Accueil des enfants",
+      consignesVerso: ["Présentez la carte.", "Signalez une carte perdue."],
+    };
+    await dbA.$tx((tx) => ecrireParametre(tx, auteur(a), "cartes.textes", textes));
+    expect((await lireParametres(dbA))["cartes.textes"]).toEqual({
+      ...textes,
+      consigneCourte: "Carte à présenter à l'accueil.",
+    });
+    await expect(
+      dbA.$tx((tx) =>
+        ecrireParametre(tx, auteur(a), "cartes.textes", { ...textes, titreVerso: "x".repeat(41) }),
+      ),
+    ).rejects.toThrow(ZodError);
+    expect((await lireParametres(dbB))["cartes.textes"]).toEqual(
+      PARAMETRES_PAR_DEFAUT["cartes.textes"],
+    );
+    expect(await audit(b)).toEqual([]);
+  });
+
   it("isolation A/B : une requête forcée sur un paramètre de B est refusée", async () => {
     await dbB.$tx((tx) => ecrireParametre(tx, auteur(b), "cartes.mode", "ENFANT"));
     const cleB = { egliseId_cle: { egliseId: b.egliseId, cle: "cartes.mode" } };

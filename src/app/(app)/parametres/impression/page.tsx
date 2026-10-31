@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { NotchCard } from "@/components/hk/notch-card";
+import { formaterTelephone } from "@/lib/telephone";
 import { FORMATS } from "@/server/impression/formats";
 import { lireParametres } from "@/server/parametres";
 import { contextePage } from "../../acces";
@@ -7,13 +8,14 @@ import { EnteteSection } from "../entete";
 import { profilEglise } from "@/server/plateforme/profil-eglise";
 import { ApercusCartes } from "./apercus";
 import { FormulaireImpression } from "./formulaire";
+import { FormulaireTextesCarte } from "./textes";
 
 export const metadata: Metadata = { title: "Impression — Paramètres — Harvest Kids" };
 
 export default async function ParametresImpression() {
   const acces = await contextePage("eglise.parametrer");
   if (!acces) return null;
-  const [{ impression }, eglise] = await Promise.all([
+  const [{ impression, "cartes.textes": textes }, eglise] = await Promise.all([
     lireParametres(acces.db),
     profilEglise(acces.contexte),
   ]);
@@ -31,12 +33,25 @@ export default async function ParametresImpression() {
         </p>
         <ApercusCartes
           formats={FORMATS}
-          eglise={{ nom: eglise.nom, logoKey: eglise.logoKey }}
+          eglise={{
+            nom: eglise.nom,
+            logoKey: eglise.logoKey,
+            telephoneAccueil: eglise.telephoneAccueil,
+            textes,
+          }}
           rectoSeul={!impression.rectoVerso}
         />
       </NotchCard>
       <NotchCard couleur="blanc">
         <FormulaireImpression formats={FORMATS} valeurs={impression} />
+      </NotchCard>
+      <NotchCard couleur="blanc">
+        <FormulaireTextesCarte
+          valeurs={textes}
+          telephoneAccueil={
+            eglise.telephoneAccueil ? formaterTelephone(eglise.telephoneAccueil) : null
+          }
+        />
       </NotchCard>
     </div>
   );

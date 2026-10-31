@@ -8,13 +8,17 @@ import { clientEglise, type ClientEglise } from "@/lib/tenant";
 import { ImpressionRefusee, imprimerCartesFamille } from "@/server/impression/cartes";
 
 // The real renderer, except when a test asks for a rendering failure.
-const rendu = vi.hoisted(() => ({ echoue: false }));
+const rendu = vi.hoisted(() => ({ echoue: false, eglise: null as unknown }));
 vi.mock("@/server/impression/pdf-carte", async (importOriginal) => {
   const reel = await importOriginal<typeof import("@/server/impression/pdf-carte")>();
   return {
     ...reel,
-    genererPdfCartes: (...args: Parameters<typeof reel.genererPdfCartes>) =>
-      rendu.echoue ? Promise.reject(new Error("rendu impossible")) : reel.genererPdfCartes(...args),
+    genererPdfCartes: (...args: Parameters<typeof reel.genererPdfCartes>) => {
+      rendu.eglise = args[1];
+      return rendu.echoue
+        ? Promise.reject(new Error("rendu impossible"))
+        : reel.genererPdfCartes(...args);
+    },
   };
 });
 import { creerClientPlateforme } from "@/server/plateforme/db";
@@ -102,6 +106,23 @@ describe("impression des cartes d'une famille", () => {
     expect(new Set(enBase.map((c) => c.enfantId))).toEqual(
       new Set([a.enfantId, "enfant_a_2", "enfant_a_3"]),
     );
+  });
+
+  it("le PDF reprend les textes de carte de l'église", async () => {
+    const textes = {
+      afficherTelephone: false,
+      consigneCourte: "Consigne de l'église A.",
+      titreVerso: "Titre A",
+      consignesVerso: ["Consigne A."],
+    };
+    await enEglise(proprietaire, a.egliseId, () =>
+      proprietaire.query(
+        `INSERT INTO "Parametre" ("egliseId", cle, valeur) VALUES ($1, 'cartes.textes', $2)`,
+        [a.egliseId, JSON.stringify(textes)],
+      ),
+    );
+    await imprimer();
+    expect(rendu.eglise).toEqual({ ...EGLISE, textes });
   });
 
   it("un rendu PDF en échec ne crée aucune carte", async () => {

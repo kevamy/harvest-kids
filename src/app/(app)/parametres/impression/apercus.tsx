@@ -1,16 +1,27 @@
 import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { dimensionsLisibles, type FormatCarte } from "@/server/impression/formats";
-import { calculerGabarit } from "@/server/impression/planche";
+import { calculerGabarit, zoneVerso, type Gabarit } from "@/server/impression/planche";
 import { matriceQr } from "@/server/impression/qr";
+import { TYPO, ligneTelephone, textePied, type TextesCarte } from "@/server/impression/textes";
 
 /** Same scale for every format: proportions are real (cahier §7.10). */
 const PX_PAR_MM = 3;
 const px = (mm: number) => `${mm * PX_PAR_MM}px`;
+/** Type sizes of the PDF (points), at the preview's scale. */
+const corps = (points: number) => `${((points * 25.4) / 72) * PX_PAR_MM}px`;
 const JETON_EXEMPLE = "HKF1.Exemple000000000000000";
 
+type EgliseApercu = {
+  nom: string;
+  logoKey: string | null;
+  telephoneAccueil: string | null;
+  textes: TextesCarte;
+};
+
 /**
- * The five formats side by side, drawn with the PDF's own layout (planche.ts), the
- * church's real logo and a fictitious family. Pure rendering: nothing is written.
+ * The five formats side by side, drawn with the PDF's own layout (planche.ts), type sizes
+ * and texts (textes.ts), the church's real logo and a fictitious family. The back is shown
+ * when cards are printed on both sides. Pure rendering: nothing is written.
  */
 export function ApercusCartes({
   formats,
@@ -18,7 +29,7 @@ export function ApercusCartes({
   rectoSeul,
 }: {
   formats: readonly FormatCarte[];
-  eglise: { nom: string; logoKey: string | null };
+  eglise: EgliseApercu;
   rectoSeul: boolean;
 }) {
   const qr = matriceQr(JETON_EXEMPLE);
@@ -96,13 +107,25 @@ export function ApercusCartes({
               </svg>
               {g.pied ? (
                 <span
-                  className="absolute text-[8px] leading-tight text-nuit"
-                  style={{ left: px(g.pied.x), top: px(g.pied.y), width: px(g.pied.largeur) }}
+                  data-testid={`pied-${format.id}`}
+                  className="absolute flex items-center text-nuit"
+                  style={{
+                    left: px(g.pied.x),
+                    top: px(g.pied.y),
+                    width: px(g.pied.largeur),
+                    height: px(g.pied.hauteur),
+                    fontSize: corps(
+                      format.orientation === "portrait" ? TYPO.pied.portrait : TYPO.pied.paysage,
+                    ),
+                    lineHeight: TYPO.interligne,
+                    textAlign: format.orientation === "portrait" ? "center" : "left",
+                  }}
                 >
-                  Accueil enfants · Présentez cette carte à chaque dépôt et à chaque retrait.
+                  {textePied(eglise.textes, eglise.telephoneAccueil)}
                 </span>
               ) : null}
             </div>
+            {rectoSeul ? null : <ApercuVerso format={format} gabarit={g} eglise={eglise} />}
             <p className="m-0 max-w-64 text-label">
               <strong>{format.libelle}</strong>
               <br />
@@ -114,5 +137,59 @@ export function ApercusCartes({
         );
       })}
     </ul>
+  );
+}
+
+function ApercuVerso({
+  format,
+  gabarit,
+  eglise,
+}: {
+  format: FormatCarte;
+  gabarit: Gabarit;
+  eglise: EgliseApercu;
+}) {
+  const zone = zoneVerso(gabarit);
+  const v = TYPO.verso;
+  const telephone = ligneTelephone(eglise.textes, eglise.telephoneAccueil);
+  const ecart = corps(v.ecart);
+  return (
+    <div
+      data-testid={`verso-${format.id}`}
+      role="img"
+      aria-label={`Verso ${format.libelle}`}
+      className="relative overflow-hidden rounded-sm bg-blanc shadow-card"
+      style={{ width: px(format.largeurMm), height: px(format.hauteurMm) }}
+    >
+      <div
+        className="absolute text-nuit"
+        style={{
+          left: px(zone.x),
+          top: px(zone.y),
+          width: px(zone.largeur),
+          lineHeight: TYPO.interligne,
+        }}
+      >
+        <p
+          className="m-0 font-display font-semibold"
+          style={{ fontSize: corps(v.titre), marginBottom: ecart }}
+        >
+          {eglise.textes.titreVerso}
+        </p>
+        {eglise.textes.consignesVerso.map((consigne, i) => (
+          <p key={i} className="m-0" style={{ fontSize: corps(v.consigne), marginBottom: ecart }}>
+            {consigne}
+          </p>
+        ))}
+        {telephone ? (
+          <p className="m-0 font-bold" style={{ fontSize: corps(v.telephone) }}>
+            {telephone}
+          </p>
+        ) : null}
+        <p className="m-0 text-texte-doux" style={{ fontSize: corps(v.nom), marginTop: ecart }}>
+          {eglise.nom}
+        </p>
+      </div>
+    </div>
   );
 }

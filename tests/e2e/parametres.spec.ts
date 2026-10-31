@@ -23,7 +23,9 @@ async function remettreEnEtat(nomEglise: string) {
     const egliseId = rows[0]!.id;
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.eglise_id', $1, true)", [egliseId]);
-    await client.query(`DELETE FROM "Parametre" WHERE cle IN ('cartes.mode', 'impression')`);
+    await client.query(
+      `DELETE FROM "Parametre" WHERE cle IN ('cartes.mode', 'impression', 'cartes.textes')`,
+    );
     await client.query(`DELETE FROM "Classe" WHERE nom LIKE $1`, [`${PREFIXE_CLASSE}%`]);
     await client.query("COMMIT");
   });
@@ -80,6 +82,51 @@ test("l'administrateur règle l'impression et le mode de carte", async ({ page }
   await expect(page.getByRole("status")).toHaveText("Mode de carte changé.");
   await page.reload();
   await expect(page.getByRole("radio", { name: /Une carte par enfant/ })).toBeChecked();
+});
+
+test("l'administrateur règle les textes de la carte, repris par les aperçus", async ({
+  page,
+}, testInfo) => {
+  const eglise = egliseDuProjet(testInfo);
+  await seConnecter(page, email("admin", eglise));
+  await attendreAccueil(page, EGLISES[eglise]);
+  await page.goto("/parametres/impression");
+
+  // Defaults, front only: the footer shows the short instruction in all five formats.
+  const pieds = page.locator("[data-testid^='pied-']");
+  await expect(pieds).toHaveCount(5);
+  await expect(page.getByLabel("Consigne courte du recto")).toHaveAttribute("maxlength", "60");
+
+  await page.getByLabel(/Afficher le téléphone de l'accueil enfants/).uncheck();
+  await page.getByLabel("Consigne courte du recto").fill("Carte à présenter à l'accueil.");
+  await page.getByLabel("Titre du verso").fill("Accueil des enfants");
+  await page.getByRole("button", { name: "Retirer la consigne 3" }).click();
+  await page
+    .getByRole("textbox", { name: "Consigne 2", exact: true })
+    .fill("Signalez une carte perdue.");
+  await page.getByRole("button", { name: "Enregistrer les textes de la carte" }).click();
+  await expect(page.getByRole("status")).toHaveText("Textes de la carte enregistrés.");
+
+  await page.reload();
+  for (const pied of await pieds.all()) {
+    await expect(pied).toHaveText("Carte à présenter à l'accueil.");
+  }
+
+  // Both sides: the back previews show the title and the instructions.
+  await page.getByRole("radio", { name: /Recto-verso/ }).check();
+  await page.getByRole("button", { name: "Enregistrer les réglages d'impression" }).click();
+  await expect(page.getByRole("status").first()).toHaveText("Réglages d'impression enregistrés.");
+  await page.reload();
+  const versos = page.locator("[data-testid^='verso-']");
+  await expect(versos).toHaveCount(5);
+  for (const verso of await versos.all()) {
+    await expect(verso).toContainText("Accueil des enfants");
+    await expect(verso).toContainText("Signalez une carte perdue.");
+    await expect(verso).not.toContainText("Accueil enfants :");
+  }
+  await page.locator("[data-testid='verso-CR80']").screenshot({
+    path: testInfo.outputPath("verso-cr80.png"),
+  });
 });
 
 test("le responsable gère les classes, sans accès aux autres paramètres", async ({
