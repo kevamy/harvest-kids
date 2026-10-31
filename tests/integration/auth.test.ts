@@ -10,7 +10,7 @@ import { MAX_ECHECS_PIN } from "@/lib/pin";
 import { creerCompte, rattacherMembre } from "@/server/plateforme/comptes";
 import { creerClientPlateforme } from "@/server/plateforme/db";
 import { consommer, REGLES_CONNEXION } from "@/server/plateforme/limitation";
-import { definirPin, deverrouillerAvecPin } from "@/server/plateforme/pin";
+import { definirPin, deverrouillerAvecPin, reinitialiserEchecsPin } from "@/server/plateforme/pin";
 import {
   choisirEgliseActive,
   eglisesDuCompte,
@@ -206,6 +206,25 @@ describe("code PIN", () => {
     }
     expect(await deverrouillerAvecPin(base, c, "111222", maintenant)).toEqual({ statut: "bloque" });
     expect(await deverrouillerAvecPin(base, c, "482913", maintenant)).toEqual({ statut: "bloque" });
+  });
+
+  it("une connexion réussie efface les échecs de PIN, sans rien écrire quand il n'y en a pas", async () => {
+    const membre = () =>
+      base.membre.findUniqueOrThrow({
+        where: { egliseId_userId: { egliseId: a.egliseId, userId: comptes.accueilA } },
+        select: { pinEchecs: true, pinBloqueJusqua: true, updatedAt: true },
+      });
+    const intact = await membre();
+    await reinitialiserEchecsPin(base, comptes.accueilA);
+    // An ordinary sign-in leaves the membership as it was, updatedAt included.
+    expect(await membre()).toEqual(intact);
+
+    const c = await cible();
+    await deverrouillerAvecPin(base, c, "111222", new Date());
+    await deverrouillerAvecPin(base, c, "111222", new Date());
+    expect((await membre()).pinEchecs).toBe(2);
+    await reinitialiserEchecsPin(base, comptes.accueilA);
+    expect(await membre()).toMatchObject({ pinEchecs: 0, pinBloqueJusqua: null });
   });
 
   it("le PIN d'une église ne sert pas dans une autre", async () => {

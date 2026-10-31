@@ -15,6 +15,8 @@ const CHEMINS_PUBLICS = [
   "/hors-connexion",
   "/api/auth",
   "/api/sante",
+  // Daily task: no session, protected by its own secret (Authorization: Bearer CRON_SECRET).
+  "/api/taches",
   "/serwist",
 ];
 

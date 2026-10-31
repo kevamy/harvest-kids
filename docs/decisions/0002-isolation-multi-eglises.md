@@ -22,7 +22,7 @@ Une seule base sert toutes les églises (cahier §3 bis, RG-13). Une requête ou
 **Index partiels uniques (préversion Prisma `partialIndexes`).** Deux règles sont garanties par la base plutôt que par le seul code :
 
 - `Presence_une_ouverte_par_enfant` : `UNIQUE (enfantId) WHERE statut <> 'RECUPERE' AND basculeVers IS NULL` (RG-08) ;
-- `CarteFamille_une_active_par_famille` : `UNIQUE (familleId) WHERE revoqueeLe IS NULL`.
+- `CarteFamille_une_active_par_famille` : `UNIQUE (familleId) WHERE revoqueeLe IS NULL` (remplacé au lot 1 par quatre index, ADR 0008).
 
 On utilise la fonction en préversion `partialIndexes` de Prisma 7.10 (`@@unique(..., where: raw(...))`) plutôt qu'un index écrit à la main dans une migration SQL : Prisma connaît alors l'index et ne propose pas de le supprimer à la migration suivante (pas de dérive de schéma). Contrepartie : une fonction en préversion peut évoluer. Garde-fou : `tests/integration/rls.test.ts` vérifie que les deux index existent en base, avec leur condition `WHERE`, et qu'ils refusent une seconde présence ouverte ou une seconde carte active (`23505`). Si une mise à jour de Prisma change ce comportement, la CI échoue.
 
@@ -37,7 +37,7 @@ On a vérifié que ces tests échouent quand on désactive la RLS d'une table.
 
 - Toute nouvelle table d'église doit inclure sa politique dans la même migration, sinon le test de catalogue échoue. Elle reste de toute façon illisible sans politique, car `FORCE` sans politique ne laisse passer aucune ligne.
 - Le seed et les opérations de plateforme qui écrivent dans une église doivent positionner `app.eglise_id` (même mécanisme que l'application).
-- Lot 1 : un QR d'une autre église (RG-14) est invisible sous RLS. Pour afficher « Cette carte n'appartient pas à cette église » plutôt que « carte inconnue », il faudra une fonction `SECURITY DEFINER` qui renvoie seulement l'église d'un jeton, sans aucune donnée nominative.
+- Lot 1 : un QR d'une autre église (RG-14) est invisible sous RLS. Pour afficher « Cette carte n'appartient pas à cette église » plutôt que « carte inconnue », il faudra une fonction `SECURITY DEFINER` qui renvoie seulement l'église d'un jeton, sans aucune donnée nominative. Réalisé au lot 1 sous la forme d'un booléen seulement : voir l'ADR 0008.
 
 ## Barrière applicative (étape 4)
 
@@ -47,6 +47,7 @@ On a vérifié que ces tests échouent quand on désactive la RLS d'une table.
 - `clientEglise(egliseId)` étend Prisma (`$extends`, `query.$allOperations`) :
   - il ajoute `egliseId` à chaque `where` et à chaque création ;
   - il refuse avec `RequeteHorsEglise` une requête qui nomme une autre église ou tente de déplacer une ligne vers une autre église ;
+  - depuis le lot 1, cette vérification est **récursive et exhaustive** (`verifierArgumentsEglise`) : elle parcourt tous les arguments de la requête, à toute profondeur, sans liste de clés connues (`where`, `data`, `create`, `update`, clés uniques composées, `connect`, `connectOrCreate`, filtres et écritures imbriqués). Elle refuse tout `egliseId` qui n'est pas l'église active, tout filtre sur `egliseId` autre que l'égalité (`not`, `notIn`, intervalles…) et toute mention de la relation `eglise`. Seules les projections (`select`, `include`, `orderBy`…) sont ignorées, mais pas les requêtes qu'elles contiennent. `tests/integration/isolation-cles-composees.test.ts` génère ses cas à partir du DMMF : chaque clé composée contenant `egliseId`, avec `findUnique`, `update`, `upsert` et `delete` ;
   - il refuse les tables de plateforme (`user`, `membre`, `eglise`…), cachées aussi du type TypeScript ;
   - il exécute chaque requête dans une transaction `[set_config('app.eglise_id'), requête]`.
 - `db.$tx(fn)` ouvre une transaction interactive, positionne `app.eglise_id` en premier, puis y exécute toutes les opérations (via `AsyncLocalStorage`). `$transaction` n'est pas exposé.
@@ -61,4 +62,4 @@ On a vérifié que ces tests échouent quand on désactive la RLS d'une table.
 - Les jetons QR (`HKF1.` + 22 caractères base62, environ 131 bits) sont tirés par `randomBytes` (`node:crypto`), jamais par `Math.random`.
 - La base ne stocke que l'empreinte SHA-256 du jeton : `CarteFamille.tokenHash` et `Membre.badgeTokenHash`, uniques, à la place des colonnes en clair `token` et `badgeToken`. Au scan, on calcule l'empreinte du jeton lu et on cherche sur l'empreinte. Une fuite de la base ne permet donc pas de fabriquer une carte valide.
 - Le jeton en clair n'existe qu'au moment de produire le PDF de la carte ou du badge. Conséquence assumée : une réimpression génère un nouveau jeton et révoque l'ancien.
-- Réalisation au lot 1, avec la génération des cartes : migration qui remplace les colonnes, adaptation du seed, fonction `SECURITY DEFINER` de RG-14 appelée avec l'empreinte.
+- Réalisation au lot 1, avec la génération des cartes : migration qui remplace les colonnes, adaptation du seed, fonction `SECURITY DEFINER` de RG-14 appelée avec l'empreinte. Réalisé : ADR 0008.
