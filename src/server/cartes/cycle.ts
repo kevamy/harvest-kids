@@ -87,7 +87,8 @@ export async function emettreCarte(
   tx: Tx,
   auteur: Auteur,
   couverture: Couverture,
-  options: { reemissionId?: string } = {},
+  // `jeton`: drawn beforehand by the caller, which renders the PDF before this transaction.
+  options: { reemissionId?: string; jeton?: string } = {},
 ): Promise<{ carteId: string; jeton: string; active: boolean }> {
   await verrouillerFamille(tx, couverture.familleId);
   const enfantId = couverture.enfantId ?? null;
@@ -105,7 +106,7 @@ export async function emettreCarte(
   );
 
   const active = (await activesCouvrant(tx, couverture)).length === 0;
-  const jeton = genererJetonCarte();
+  const jeton = options.jeton ?? genererJetonCarte();
   const maintenant = new Date();
   const carte = await tx.carteFamille.create({
     data: {
@@ -193,8 +194,9 @@ export async function declarerCartePerdue(
   tx: Tx,
   auteur: Auteur,
   couverture: Couverture,
+  options: { jeton?: string } = {},
 ): Promise<{ carteId: string; jeton: string; revoquees: string[] }> {
-  const { carteId, jeton, active } = await emettreCarte(tx, auteur, couverture);
+  const { carteId, jeton, active } = await emettreCarte(tx, auteur, couverture, options);
   let revoquees: string[] = [];
   if (!active) ({ revoquees } = await activerCarte(tx, auteur, carteId));
   await journaliser(tx, auteur, {
@@ -204,6 +206,16 @@ export async function declarerCartePerdue(
     apres: { revoquees },
   });
   return { carteId, jeton, revoquees };
+}
+
+/** Revokes a card at once (lost card without reprint, card withdrawn), with audit. */
+export async function revoquerCarte(tx: Tx, auteur: Auteur, carteId: string): Promise<void> {
+  const carte = await tx.carteFamille.findUnique({
+    where: { id: carteId },
+    select: { revoqueeLe: true },
+  });
+  if (!carte) throw new CarteImpossible("carte_inconnue");
+  if (!carte.revoqueeLe) await revoquer(tx, auteur, [carteId], "revoquee_par_l_accueil");
 }
 
 /**

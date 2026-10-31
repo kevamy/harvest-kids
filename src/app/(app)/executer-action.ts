@@ -1,6 +1,6 @@
 import "server-only";
 import { ZodError } from "zod";
-import { ActionInterdite, exigerDroit, type Action } from "@/lib/rbac";
+import { ActionInterdite, exigerDroit, peut, type Action } from "@/lib/rbac";
 import { AccesRefuse, getTenantDb, type ClientEglise, type ContexteEglise } from "@/lib/tenant";
 
 /** Answer of a church Server Action: never a success unless the server saved it. */
@@ -29,11 +29,21 @@ export async function executerAction(
   action: Action,
   fn: (acces: { db: ClientEglise; contexte: ContexteEglise }) => Promise<void>,
 ): Promise<ResultatAction> {
+  const resultat = await executerActionAvec(action, fn);
+  return resultat.ok ? { ok: true } : resultat;
+}
+
+/** Same frame, for an action that returns data (read-only scan, for instance). */
+export async function executerActionAvec<T>(
+  action: Action | Action[],
+  fn: (acces: { db: ClientEglise; contexte: ContexteEglise }) => Promise<T>,
+): Promise<{ ok: true; donnees: T } | { ok: false; erreur: string }> {
   try {
     const acces = await getTenantDb();
-    exigerDroit(acces.contexte, action);
-    await fn(acces);
-    return { ok: true };
+    const actions = Array.isArray(action) ? action : [action];
+    if (!actions.some((a) => peut(acces.contexte.roles, a)))
+      exigerDroit(acces.contexte, actions[0]!);
+    return { ok: true, donnees: await fn(acces) };
   } catch (erreur) {
     if (erreur instanceof AccesRefuse) return { ok: false, erreur: MESSAGES.acces };
     if (erreur instanceof ActionInterdite) return { ok: false, erreur: MESSAGES.droit };

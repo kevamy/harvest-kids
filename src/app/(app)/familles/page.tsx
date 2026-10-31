@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus, ScanLine, Search } from "lucide-react";
 import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
@@ -55,12 +55,20 @@ export default async function Familles({ searchParams }: PageProps<"/familles">)
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="m-0 font-display text-h1 font-semibold">Familles</h1>
-        <Button asChild variant="bleu">
-          <Link href="/familles/nouvelle">
-            <Plus aria-hidden />
-            Inscrire une famille
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="ghost">
+            <Link href="/cartes/verifier">
+              <ScanLine aria-hidden />
+              Vérifier une carte
+            </Link>
+          </Button>
+          <Button asChild variant="bleu">
+            <Link href="/familles/nouvelle">
+              <Plus aria-hidden />
+              Inscrire une famille
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <NotchCard couleur="blanc">

@@ -10,6 +10,9 @@ Application web (tablette) d'accueil, de suivi et de retrait sécurisé des enfa
 - Termine chaque tâche par : `pnpm lint`, `pnpm typecheck`, `pnpm test` (et `pnpm test:e2e` quand un parcours est touché). Ne déclare pas une tâche finie si l'une de ces commandes échoue.
 - Tiens `docs/decisions/` à jour : un court fichier ADR par choix technique non trivial.
 - Si une exigence du cahier des charges est ambiguë, pose la question au lieu de supposer.
+- Modifie les fichiers uniquement avec l'outil d'édition de fichiers, jamais par des scripts shell (`sed`, `python`, `node -e`, here-documents) : ils altèrent les antislashs, les guillemets et les accents (au lot 1, l'expression régulière du matricule a été cassée ainsi).
+- Si un test dépasse anormalement sa durée, relève l'état de la base avant de relancer quoi que ce soit (`pg_stat_activity` : transactions ouvertes, requêtes en attente de verrou, `pg_locks` non accordés), pour pouvoir en identifier la cause.
+- Ne lance jamais deux suites de tests ou deux builds en même temps (même base, même port, poste à 16 Go).
 
 ## Stack imposée
 

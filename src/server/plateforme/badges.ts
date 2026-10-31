@@ -2,6 +2,7 @@ import "server-only";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { ContexteEglise } from "@/lib/tenant";
 import type { RechercheBadge } from "@/server/cartes/resolution";
+import { prismaPlateforme } from "./db";
 
 /**
  * Monitor badges live on `Membre`, a platform table (outside RLS): they are read here,
@@ -20,4 +21,9 @@ export function rechercheBadge(base: PrismaClient, contexte: ContexteEglise): Re
     });
     return membre ? { membreId: membre.id } : null;
   };
+}
+
+/** Badge lookup of the active church, with the shared platform client (pages, actions). */
+export function prismaPourBadges(contexte: ContexteEglise): RechercheBadge {
+  return rechercheBadge(prismaPlateforme(), contexte);
 }

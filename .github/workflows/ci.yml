@@ -132,3 +132,5 @@ jobs:
               .then((sortie) => { if (sortie.length === 0) throw new Error('PNG vide'); console.log('sharp', sharp.versions.sharp, 'libvips', sharp.versions.vips); })
               .catch((erreur) => { console.error(erreur); process.exit(1); });
           "
+      - name: react-pdf et polices des cartes présents dans l'image (rendu d'un vrai PDF)
+        run: docker run --rm -i --entrypoint node harvest-kids:ci --input-type=module < scripts/verifier-pdf.mjs

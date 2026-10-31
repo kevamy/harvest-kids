@@ -224,3 +224,14 @@ export async function enregistrerLogo(
   const png = fichier ? await convertirLogo(fichier) : null;
   await remplacerLogo(prismaPlateforme(), stockage(), auteur, variante, png);
 }
+
+/** What a printed card shows of the church: name, logo (PNG, light backgrounds), phone. */
+export async function informationsImpression(contexte: ContexteEglise) {
+  const profil = await lireProfilEglise(prismaPlateforme(), contexte);
+  const fichier = profil.logoKey ? await stockage().get(profil.logoKey) : null;
+  return {
+    nom: profil.nom,
+    logo: fichier ? Buffer.from(fichier.donnees) : null,
+    telephoneAccueil: profil.telephoneAccueil,
+  };
+}

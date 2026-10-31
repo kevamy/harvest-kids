@@ -6,7 +6,9 @@ import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
 import { formaterTelephone } from "@/lib/telephone";
+import { listerCartesFamille } from "@/server/cartes/lecture";
 import { ALERTES_RAPIDES, lireFamille } from "@/server/familles";
+import { CartesFamille } from "./cartes";
 import { contextePage } from "../../acces";
 
 export const metadata: Metadata = { title: "Famille — Harvest Kids" };
@@ -34,6 +36,7 @@ export default async function FicheFamille({ params }: PageProps<"/familles/[id]
   const fiche = await lireFamille(acces.db, (await params).id);
   if (!fiche) notFound();
   const brouillon = fiche.finaliseeLe === null;
+  const cartes = brouillon ? [] : await listerCartesFamille(acces.db, fiche.id);
   const adultes = [
     ...fiche.tuteurs
       .filter((t) => t.autorise?.actif)
@@ -134,6 +137,22 @@ export default async function FicheFamille({ params }: PageProps<"/familles/[id]
           )}
         </NotchCard>
       </div>
+
+      {brouillon ? null : (
+        <NotchCard couleur="blanc">
+          <h2 className="m-0 mb-4 font-display text-h2 font-semibold">Cartes</h2>
+          <CartesFamille
+            familleId={fiche.id}
+            cartes={cartes.map((c) => ({
+              id: c.id,
+              emiseLe: c.emiseLe.toISOString(),
+              activeLe: c.activeLe?.toISOString() ?? null,
+              revoqueeLe: c.revoqueeLe?.toISOString() ?? null,
+              enfant: c.enfant ? c.enfant.prenom : null,
+            }))}
+          />
+        </NotchCard>
+      )}
 
       <NotchCard couleur="blanc">
         <h2 className="m-0 mb-2 font-display text-h2 font-semibold">Consentements</h2>

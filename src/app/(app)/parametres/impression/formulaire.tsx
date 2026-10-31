@@ -82,14 +82,20 @@ export function FormulaireImpression({
           description="Les consignes de dépôt et de retrait sont imprimées au verso."
         />
       </GroupeChoix>
-      <Button
-        type="submit"
-        variant="bleu"
-        className="justify-self-start"
-        disabled={!change || enCours}
-      >
-        Enregistrer les réglages d&apos;impression
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" variant="bleu" disabled={!change || enCours}>
+          Enregistrer les réglages d&apos;impression
+        </Button>
+        {/* Test card in the chosen format: read-only, its token is registered nowhere. */}
+        <Button asChild variant="ghost">
+          <a
+            href={`/api/impression/essai?format=${choix.format}&rectoVerso=${choix.rectoVerso ? "1" : "0"}`}
+            download
+          >
+            Télécharger un PDF d&apos;essai
+          </a>
+        </Button>
+      </div>
     </form>
   );
 }
