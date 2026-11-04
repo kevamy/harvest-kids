@@ -1,4 +1,4 @@
-// Harvest Kids — schéma de données (lot 0)
+// Harvest Kids — schéma de données (lots 0 et 1)
 //
 // Deux familles de tables :
 // - PLATEFORME (hors RLS) : Eglise, User, Membre, AccesSupport, AuditPlateforme et
@@ -58,6 +58,12 @@ enum TypeIncident {
   AUTRE
 }
 
+// RG-16 : une carte par famille (par défaut) ou une carte par enfant.
+enum ModeCarte {
+  FAMILLE
+  ENFANT
+}
+
 // =====================================================================
 // PLATEFORME (hors RLS)
 // =====================================================================
@@ -84,6 +90,8 @@ model Eglise {
   personnesAutorisees PersonneAutorisee[]
   enfants             Enfant[]
   cartes              CarteFamille[]
+  reemissions         ReemissionCartes[]
+  badges              BadgeMoniteur[]
   classes             Classe[]
   cultes              Culte[]
   sessions            Session[]
@@ -96,6 +104,7 @@ model Eglise {
   incidents           Incident[]
   auditLogs           AuditLog[]
   parametres          Parametre[]
+  fichiersASupprimer  FichierASupprimer[]
 }
 
 // Compte (Better Auth). `name` et `email` sont imposés par Better Auth ; un compte créé par
@@ -132,12 +141,12 @@ model Membre {
   pinHash         String?
   pinEchecs       Int       @default(0)
   pinBloqueJusqua DateTime?
-  badgeToken      String?   @unique // QR du badge moniteur (RG-02 : jeton opaque)
   actif           Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   affectations AffectationMoniteur[]
+  badges       BadgeMoniteur[]
 
   @@unique([egliseId, userId])
   @@unique([id, egliseId])
@@ -240,6 +249,9 @@ model Famille {
   notes               String?
   consentementDonnees DateTime?
   consentementPhotos  DateTime?
+  // null = brouillon (import CSV) : ni matricule, ni carte, ni check-in, purgé après le délai
+  // de l'église. Renseigné à la finalisation (consentement + personne autorisée avec photo).
+  finaliseeLe         DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -293,13 +305,15 @@ model PersonneAutorisee {
   @@unique([tuteurId, egliseId])
   @@unique([id, egliseId])
   @@index([familleId])
+  // Recherche par téléphone limitée à l'église active (ADR 0011).
+  @@index([egliseId, telephone])
 }
 
 model Enfant {
   id             String   @id @default(cuid())
   egliseId       String
   eglise         Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
-  matricule      String // HK-0001, unique dans l'église (RG-01)
+  matricule      String? // HK-0001, unique dans l'église (RG-01) ; null tant que la famille est en brouillon
   familleId      String
   famille        Famille  @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Restrict)
   prenom         String
@@ -319,26 +333,80 @@ model Enfant {
   presences           Presence[]
   incidents           Incident[]
   appelsTelephoniques AppelTelephonique[]
+  cartes              CarteFamille[]
 
   @@unique([egliseId, matricule])
   @@unique([id, egliseId])
+  // Cible de la clé composite des cartes enfant : l'enfant appartient à la famille de la carte.
+  @@unique([id, familleId, egliseId])
   @@index([familleId])
   @@index([egliseId, nom, prenom])
 }
 
+// Carte famille (enfantId null) ou carte enfant (RG-16). Cycle de vie (ADR 0008) :
+// en attente (activeLe null) → active (activeLe renseigné) → révoquée (revoqueeLe renseigné).
+// Une carte réimprimée reste en attente jusqu'à sa remise ou sa première utilisation ;
+// l'ancienne reste valide jusque-là. Au plus une carte active et une carte en attente par
+// couverture (famille ou enfant), garanties par les index partiels ci-dessous.
 model CarteFamille {
+  id           String            @id @default(cuid())
+  egliseId     String
+  eglise       Eglise            @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  familleId    String
+  famille      Famille           @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  enfantId     String?
+  enfant       Enfant?           @relation(fields: [enfantId, familleId, egliseId], references: [id, familleId, egliseId], onDelete: Restrict)
+  tokenHash    String            @unique // SHA-256 hexadécimal du jeton HKF1. (RG-02) ; le jeton en clair n'est jamais stocké
+  emiseLe      DateTime          @default(now())
+  activeLe     DateTime? // null = en attente
+  revoqueeLe   DateTime? // RG-03
+  reemissionId String?
+  reemission   ReemissionCartes? @relation(fields: [reemissionId, egliseId], references: [id, egliseId], onDelete: Restrict)
+
+  @@unique([id, egliseId])
+  @@unique([familleId], where: raw("\"revoqueeLe\" IS NULL AND \"activeLe\" IS NOT NULL AND \"enfantId\" IS NULL"), map: "CarteFamille_famille_active")
+  @@unique([enfantId], where: raw("\"revoqueeLe\" IS NULL AND \"activeLe\" IS NOT NULL AND \"enfantId\" IS NOT NULL"), map: "CarteFamille_enfant_active")
+  @@unique([familleId], where: raw("\"revoqueeLe\" IS NULL AND \"activeLe\" IS NULL AND \"enfantId\" IS NULL"), map: "CarteFamille_famille_en_attente")
+  @@unique([enfantId], where: raw("\"revoqueeLe\" IS NULL AND \"activeLe\" IS NULL AND \"enfantId\" IS NOT NULL"), map: "CarteFamille_enfant_en_attente")
+  @@index([familleId])
+  @@index([reemissionId])
+}
+
+// Badge moniteur (RG-02, RG-03, RG-14, ADR 0008) : historique des badges d'un membre de
+// l'église. Le nouveau badge est actif dès l'impression et révoque le précédent ; au plus un
+// badge non révoqué par membre (index partiel). Un membre désactivé ou qui perd le rôle
+// MONITEUR voit son badge révoqué.
+model BadgeMoniteur {
+  id        String    @id @default(cuid())
+  egliseId  String
+  eglise    Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  membreId  String
+  membre    Membre    @relation(fields: [membreId, egliseId], references: [id, egliseId], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 hexadécimal du jeton HKB1. ; le jeton en clair n'est jamais stocké
+  emisLe    DateTime  @default(now())
+  revoqueLe DateTime?
+
+  @@unique([id, egliseId])
+  @@unique([membreId], where: raw("\"revoqueLe\" IS NULL"), map: "BadgeMoniteur_un_actif_par_membre")
+  @@index([egliseId, membreId])
+}
+
+// Réémission groupée (RG-16) : changement de mode, de logo ou de format. Les cartes émises
+// restent en attente ; après la date limite, les anciennes cartes non remplacées sont refusées
+// au scan et révoquées par la tâche quotidienne.
+model ReemissionCartes {
   id         String    @id @default(cuid())
   egliseId   String
   eglise     Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
-  familleId  String
-  famille    Famille   @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Cascade)
-  token      String    @unique // HKF1. + 22 caractères base62 (RG-02), globalement unique
-  emiseLe    DateTime  @default(now())
-  revoqueeLe DateTime? // RG-03
+  mode       ModeCarte
+  dateLimite DateTime?
+  creeLe     DateTime  @default(now())
+  creePar    String
+
+  cartes CarteFamille[]
 
   @@unique([id, egliseId])
-  // Une seule carte active par famille.
-  @@unique([familleId], where: raw("\"revoqueeLe\" IS NULL"), map: "CarteFamille_une_active_par_famille")
+  @@index([egliseId, creeLe])
 }
 
 model Classe {
@@ -565,4 +633,20 @@ model Parametre {
   valeur   Json
 
   @@id([egliseId, cle])
+}
+
+// Fichier remplacé (ancien logo, ancienne photo), supprimé par la tâche quotidienne à partir de
+// `apresLe` (24 h après le remplacement) : une tablette qui affiche encore l'ancienne page ne
+// montre jamais une image cassée. La clé est vérifiée (préfixe de l'église) avant suppression.
+model FichierASupprimer {
+  id       String   @id @default(cuid())
+  egliseId String
+  eglise   Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  cle      String // eglises/{egliseId}/...
+  apresLe  DateTime
+  creeLe   DateTime @default(now())
+
+  @@unique([id, egliseId])
+  @@unique([egliseId, cle])
+  @@index([apresLe])
 }

@@ -20,6 +20,8 @@ export const MODELES_EGLISE = [
   "PersonneAutorisee",
   "Enfant",
   "CarteFamille",
+  "ReemissionCartes",
+  "BadgeMoniteur",
   "Classe",
   "Culte",
   "Session",
@@ -32,6 +34,7 @@ export const MODELES_EGLISE = [
   "Incident",
   "AuditLog",
   "Parametre",
+  "FichierASupprimer",
 ] as const;
 
 const MODELES = new Set<string>(MODELES_EGLISE);
@@ -60,6 +63,13 @@ export class RequeteHorsEglise extends Error {
   }
 }
 
+declare const contexteVerifie: unique symbol;
+
+/**
+ * Checked context of the active church. Only verifierContexte() produces one (the brand
+ * cannot be written by hand without an explicit cast): a service that receives it gets
+ * a church taken from the session, never from a call argument.
+ */
 export type ContexteEglise = {
   egliseId: string;
   userId: string;
@@ -67,6 +77,7 @@ export type ContexteEglise = {
   roles: Role[];
   /** Short device description for the audit log (user agent). */
   appareil: string | null;
+  readonly [contexteVerifie]: true;
 };
 
 /**
@@ -103,7 +114,7 @@ export async function verifierContexte(
     membreId: membre.id,
     roles: membre.roles,
     appareil: session.appareil,
-  };
+  } as ContexteEglise;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,28 +145,82 @@ type Args = Record<string, unknown> & {
   update?: Record<string, unknown>;
 };
 
+// Arguments that name fields to return or sort by, not rows: an `egliseId` key there
+// (`select: { egliseId: true }`) designates nothing. Query arguments nested inside
+// them (`include: { cartes: { where: … } }`) are checked again.
+const PROJECTIONS = new Set(["select", "include", "omit", "orderBy", "_count"]);
+const ARGUMENTS_DE_REQUETE = new Set(["where", "cursor", "having"]);
+
+const estObjetSimple = (valeur: unknown): valeur is Record<string, unknown> => {
+  if (typeof valeur !== "object" || valeur === null) return false;
+  const prototype = Object.getPrototypeOf(valeur);
+  return prototype === Object.prototype || prototype === null;
+};
+
+/** The only ways an `egliseId` may be written: the active church, nothing else. */
+function designeEgliseActive(valeur: unknown, egliseId: string): boolean {
+  if (valeur === egliseId) return true;
+  if (!estObjetSimple(valeur)) return false;
+  const operateurs = Object.entries(valeur).filter(([, v]) => v !== undefined);
+  return (
+    operateurs.length > 0 &&
+    operateurs.every(([operateur, v]) =>
+      operateur === "equals" || operateur === "set"
+        ? v === egliseId
+        : operateur === "in"
+          ? Array.isArray(v) && v.length > 0 && v.every((id) => id === egliseId)
+          : false,
+    )
+  );
+}
+
+/**
+ * Walks every argument of a query, at any depth (where, data, create, update, connect,
+ * connectOrCreate, compound unique keys, relation filters, nested writes…), and refuses
+ * the query as soon as an `egliseId` names anything but the active church. Any filter
+ * on `egliseId` other than equality (`not`, `notIn`, ranges…) is refused too: it would
+ * designate other churches. The `eglise` relation is never named either: the church
+ * comes from the session. No list of known keys: a new compound key is covered.
+ */
+export function verifierArgumentsEglise(
+  valeur: unknown,
+  egliseId: string,
+  projection = false,
+): void {
+  if (Array.isArray(valeur)) {
+    for (const element of valeur) verifierArgumentsEglise(element, egliseId, projection);
+    return;
+  }
+  if (!estObjetSimple(valeur)) return;
+  for (const [cle, contenu] of Object.entries(valeur)) {
+    if (contenu === undefined) continue;
+    if (projection) {
+      verifierArgumentsEglise(contenu, egliseId, !ARGUMENTS_DE_REQUETE.has(cle));
+      continue;
+    }
+    if (cle === "egliseId") {
+      if (!designeEgliseActive(contenu, egliseId)) {
+        throw new RequeteHorsEglise("Une requête ne peut pas viser une autre église.");
+      }
+      continue;
+    }
+    if (cle === "eglise") {
+      throw new RequeteHorsEglise(
+        "La relation « eglise » ne se nomme pas dans une requête : l'église vient de la session.",
+      );
+    }
+    verifierArgumentsEglise(contenu, egliseId, PROJECTIONS.has(cle));
+  }
+}
+
 function injecterEglise(operation: string, args: Args | undefined, egliseId: string): Args {
+  verifierArgumentsEglise(args, egliseId);
   const resultat: Args = { ...(args ?? {}) };
 
-  const verifier = (valeur: unknown) => {
-    if (valeur !== undefined && valeur !== egliseId) {
-      throw new RequeteHorsEglise("Une requête ne peut pas viser une autre église.");
-    }
-  };
   // New rows always belong to the active church.
-  const pourCreation = (data: unknown) => {
-    const ligne = (data ?? {}) as Record<string, unknown>;
-    verifier(ligne.egliseId);
-    return { ...ligne, egliseId };
-  };
-  // Updates cannot move a row to another church.
-  const pourModification = (data: unknown) => {
-    verifier((data as Record<string, unknown> | undefined)?.egliseId);
-    return data;
-  };
+  const pourCreation = (data: unknown) => ({ ...((data ?? {}) as object), egliseId });
 
   if (OPERATIONS_AVEC_WHERE.has(operation)) {
-    verifier(resultat.where?.egliseId);
     resultat.where = { ...(resultat.where ?? {}), egliseId };
   }
 
@@ -169,14 +234,8 @@ function injecterEglise(operation: string, args: Args | undefined, egliseId: str
         ? resultat.data.map(pourCreation)
         : pourCreation(resultat.data);
       break;
-    case "update":
-    case "updateMany":
-    case "updateManyAndReturn":
-      resultat.data = pourModification(resultat.data);
-      break;
     case "upsert":
       resultat.create = pourCreation(resultat.create);
-      resultat.update = pourModification(resultat.update) as Record<string, unknown>;
       break;
   }
   return resultat;
@@ -231,18 +290,26 @@ export type ClientDeBase = Omit<
 
 export type ClientEglise = ClientDeBase & {
   readonly egliseId: string;
-  /** Several operations in one transaction, inside the active church. */
-  $tx<T>(fn: (tx: ClientDeBase) => Promise<T>): Promise<T>;
+  /**
+   * Several operations in one transaction, inside the active church. `timeout` (ms)
+   * lengthens Prisma's 5 s limit for bulk work (card reissue).
+   */
+  $tx<T>(fn: (tx: ClientDeBase) => Promise<T>, options?: { timeout?: number }): Promise<T>;
 };
 
 export function clientEglise(base: PrismaClient, egliseId: string): ClientEglise {
   const etendu = etendre(base, egliseId);
-  const $tx = <T>(fn: (tx: ClientDeBase) => Promise<T>): Promise<T> =>
-    etendu.$transaction((tx) =>
-      transactionEnCours.run(egliseId, async () => {
-        await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
-        return fn(tx as unknown as ClientDeBase);
-      }),
+  const $tx = <T>(
+    fn: (tx: ClientDeBase) => Promise<T>,
+    options: { timeout?: number } = {},
+  ): Promise<T> =>
+    etendu.$transaction(
+      (tx) =>
+        transactionEnCours.run(egliseId, async () => {
+          await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
+          return fn(tx as unknown as ClientDeBase);
+        }),
+      options.timeout ? { timeout: options.timeout } : undefined,
     );
   return new Proxy(etendu, {
     get(cible, propriete) {

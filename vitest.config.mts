@@ -5,6 +5,8 @@ const src = fileURLToPath(new URL("./src", import.meta.url));
 const serverOnly = fileURLToPath(new URL("./node_modules/server-only/empty.js", import.meta.url));
 
 export default defineConfig({
+  // Server components rendered in tests (PDF cards): automatic JSX runtime, like Next.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": src,

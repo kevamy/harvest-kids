@@ -32,6 +32,8 @@ export type Action = (typeof ACTIONS)[number];
 const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
   RESPONSABLE: [
     "tableau.direct",
+    // Cahier §7.1: family registration by ACCUEIL and RESPONSABLE.
+    "familles.gerer",
     "sessions.gerer",
     "classes.gerer",
     "classe.forcer",

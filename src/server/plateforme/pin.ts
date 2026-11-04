@@ -66,10 +66,14 @@ export async function deverrouillerAvecPin(
   return { statut: "incorrect", essaisRestants: MAX_ECHECS_PIN - pinEchecs };
 }
 
-/** A successful password sign-in clears PIN failures for all the person's memberships. */
+/**
+ * A successful password sign-in clears PIN failures for all the person's memberships.
+ * Only the memberships that have failures or a block are written: an ordinary sign-in
+ * changes nothing (not even `updatedAt`).
+ */
 export async function reinitialiserEchecsPin(base: PrismaClient, userId: string) {
   await base.membre.updateMany({
-    where: { userId },
+    where: { userId, OR: [{ pinEchecs: { gt: 0 } }, { pinBloqueJusqua: { not: null } }] },
     data: { pinEchecs: 0, pinBloqueJusqua: null },
   });
 }

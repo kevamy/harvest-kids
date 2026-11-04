@@ -26,6 +26,8 @@ Versions exactes figées dans `package.json` (pas de `^`), installées avec pnpm
 
 **Démarrage standalone.** `pnpm start` lance `scripts/start-standalone.mjs`, qui reproduit ce que fait l'image Docker (copie de `.next/static` et `public/`, puis `server.js`). Les e2e de la CI tournent donc sur le même artefact que la production.
 
+- Lot 1 : `@prisma/internals` (même version que `prisma`) en dépendance de développement, pour les tests seulement : son `getDMMF()` fournit les clés uniques composées que le client généré n'embarque pas. Il n'entre ni dans l'application ni dans l'image Docker. Accord donné le 2026-10-30.
+
 ## Conséquences
 
 - Remonter TypeScript et ESLint dès que typescript-eslint et `eslint-config-next` les supportent.

@@ -9,7 +9,10 @@ import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
  */
 export async function journaliser(
   db: Pick<ClientDeBase, "auditLog">,
-  contexte: Pick<ContexteEglise, "userId" | "appareil">,
+  // userId null: the daily task (no user), never a request without a session.
+  contexte:
+    | { userId: string | null; appareil: string | null }
+    | Pick<ContexteEglise, "userId" | "appareil">,
   entree: {
     action: string;
     entite: string;

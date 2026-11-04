@@ -31,9 +31,14 @@ export async function withEglise<T>(
   base: PrismaClient,
   egliseId: string,
   fn: (tx: TransactionPrisma) => Promise<T>,
+  // `timeout` (ms) lengthens Prisma's 5 s limit for bulk work (badges of every monitor).
+  options: { timeout?: number } = {},
 ): Promise<T> {
-  return base.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
-    return fn(tx);
-  });
+  return base.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.eglise_id', ${egliseId}, TRUE)`;
+      return fn(tx);
+    },
+    options.timeout ? { timeout: options.timeout } : undefined,
+  );
 }

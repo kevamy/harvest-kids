@@ -20,6 +20,8 @@ export const envSchema = z
     DEFAULT_TIMEZONE: z.string().min(1).default("Africa/Porto-Novo"),
     SUPER_ADMIN_EMAIL: z.email().optional(),
     SENTRY_DSN: z.url().optional(),
+    // Daily task (/api/taches/quotidiennes): absent, the route refuses every call.
+    CRON_SECRET: z.string().min(32, "CRON_SECRET doit faire au moins 32 caractères").optional(),
   })
   .refine((env) => env.STORAGE_DRIVER !== "vercel-blob" || env.BLOB_READ_WRITE_TOKEN, {
     // A Vercel Blob store only injects BLOB_STORE_ID: the token is added by hand.

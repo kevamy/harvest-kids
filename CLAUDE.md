@@ -10,6 +10,9 @@ Application web (tablette) d'accueil, de suivi et de retrait sécurisé des enfa
 - Termine chaque tâche par : `pnpm lint`, `pnpm typecheck`, `pnpm test` (et `pnpm test:e2e` quand un parcours est touché). Ne déclare pas une tâche finie si l'une de ces commandes échoue.
 - Tiens `docs/decisions/` à jour : un court fichier ADR par choix technique non trivial.
 - Si une exigence du cahier des charges est ambiguë, pose la question au lieu de supposer.
+- Modifie les fichiers uniquement avec l'outil d'édition de fichiers, jamais par des scripts shell (`sed`, `python`, `node -e`, here-documents) : ils altèrent les antislashs, les guillemets et les accents (au lot 1, l'expression régulière du matricule a été cassée ainsi).
+- Si un test dépasse anormalement sa durée, relève l'état de la base avant de relancer quoi que ce soit (`pg_stat_activity` : transactions ouvertes, requêtes en attente de verrou, `pg_locks` non accordés), pour pouvoir en identifier la cause.
+- Ne lance jamais deux suites de tests ou deux builds en même temps (même base, même port, poste à 16 Go).
 
 ## Stack imposée
 
@@ -39,6 +42,7 @@ L'application sert plusieurs églises depuis une seule installation (section 3 b
 - Le QR code ne contient jamais de matricule ni de nom (RG-02).
 - Les photos ne sont jamais servies en URL publique : route `/api/photos/[key]` authentifiée (RG-11).
 - Fuseau horaire de l'église active (par défaut `Africa/Porto-Novo`, RG-12) ; stocker en UTC, afficher en heure locale de l'église.
+- Une seule horloge par comparaison de dates. Ce qui compare une date stockée à « maintenant » (échéances, dates limites, purges, tâche quotidienne) le fait en SQL avec `now()` de PostgreSQL. Une date destinée à une telle comparaison est posée par la base (`DEFAULT now()`, `now() + interval …`), jamais par `new Date()` côté Node. Une date que le serveur pose et compare lui-même (activité de session, blocage du PIN, limitation) reste côté serveur. En test, on fait passer le temps en reculant les dates stockées depuis leur propre valeur, jamais en passant une date simulée.
 - Les écrans en direct utilisent `useLiveQuery` (TanStack Query, intervalle 3 à 5 s), jamais un `setInterval` maison.
 - Une action non enregistrée côté serveur ne doit jamais afficher de succès : gérer les erreurs réseau avec un message explicite.
 - Noms de domaine en français dans le code métier (`Famille`, `Enfant`, `Presence`, `codeRetrait`) ; code technique en anglais courant.

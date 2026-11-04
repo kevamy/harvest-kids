@@ -15,6 +15,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  // The demonstration data must come out of the suite unchanged (support/garde-demo.ts).
+  globalSetup: "./tests/e2e/support/garde-demo.ts",
   use: {
     baseURL,
     locale: "fr-FR",

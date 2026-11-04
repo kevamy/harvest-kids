@@ -122,3 +122,15 @@ jobs:
         run: |
           docker build -f docker/Dockerfile --target runner -t harvest-kids:ci .
           docker build -f docker/Dockerfile --target migrate -t harvest-kids-migrate:ci .
+      - name: sharp et libvips présents dans l'image (conversion d'une image en mémoire)
+        run: |
+          docker run --rm --entrypoint node harvest-kids:ci -e "
+            const sharp = require('sharp');
+            sharp({ create: { width: 64, height: 32, channels: 4, background: '#123456' } })
+              .png().toBuffer()
+              .then((png) => sharp(png).resize(16).png().toBuffer())
+              .then((sortie) => { if (sortie.length === 0) throw new Error('PNG vide'); console.log('sharp', sharp.versions.sharp, 'libvips', sharp.versions.vips); })
+              .catch((erreur) => { console.error(erreur); process.exit(1); });
+          "
+      - name: react-pdf et polices des cartes présents dans l'image (rendu d'un vrai PDF)
+        run: docker run --rm -i --entrypoint node harvest-kids:ci --input-type=module < scripts/verifier-pdf.mjs

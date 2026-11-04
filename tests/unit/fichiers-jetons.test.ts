@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { analyserCle, cleAppartientA, cleFichier, typeContenu } from "@/lib/fichiers";
-import { estJetonCarte, genererJetonCarte } from "@/lib/jetons";
+import {
+  FORMAT_EMPREINTE,
+  empreinteJeton,
+  estJetonBadge,
+  estJetonCarte,
+  genererJetonBadge,
+  genererJetonCarte,
+  typeJeton,
+} from "@/lib/jetons";
 
 describe("clés de fichiers (RG-15)", () => {
   it("range chaque fichier sous le préfixe de son église", () => {
@@ -54,5 +62,35 @@ describe("jeton de carte famille (RG-02)", () => {
   it("ne ressemble jamais à un matricule", () => {
     expect(estJetonCarte("HK-0427")).toBe(false);
     expect(genererJetonCarte()).not.toMatch(/HK-\d{4}/);
+  });
+});
+
+describe("jeton de badge moniteur", () => {
+  it("a le format HKB1. + 22 caractères base62 et se distingue d'une carte", () => {
+    const badge = genererJetonBadge();
+    expect(estJetonBadge(badge)).toBe(true);
+    expect(estJetonCarte(badge)).toBe(false);
+    expect(typeJeton(badge)).toBe("badge");
+    expect(typeJeton(genererJetonCarte())).toBe("carte");
+    expect(typeJeton("HK-0427")).toBeNull();
+    expect(typeJeton(" HKF1.AAAAAAAAAAAAAAAAAAAAAA")).toBeNull();
+  });
+});
+
+describe("empreinte d'un jeton (ADR 0008)", () => {
+  it("est le SHA-256 hexadécimal en minuscules, stable et sans le jeton", () => {
+    const jeton = "HKF1.AAAAAAAAAAAAAAAAAAAAAA";
+    const empreinte = empreinteJeton(jeton);
+    expect(empreinte).toMatch(FORMAT_EMPREINTE);
+    expect(empreinteJeton(jeton)).toBe(empreinte);
+    expect(empreinte).not.toContain("AAAA");
+    // Same value as PostgreSQL's encode(sha256(convert_to(token, 'UTF8')), 'hex').
+    expect(empreinteJeton("abc")).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+  });
+
+  it("diffère pour deux jetons différents", () => {
+    expect(empreinteJeton(genererJetonCarte())).not.toBe(empreinteJeton(genererJetonCarte()));
   });
 });
