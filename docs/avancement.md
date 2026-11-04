@@ -2,14 +2,14 @@
 
 Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque lot se termine par une démonstration sur l'environnement Vercel et une validation avant le suivant.
 
-| Lot                              | État                                                                            | Branche et pull request            |
-| -------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
-| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2 |
-| 1. Familles et cartes            | **en cours** : étapes 1 à 6 faites                                              | `lot-1`, PR `lot-1` → `main`       |
-| 2. Sessions, check-in, check-out | à faire                                                                         | —                                  |
-| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                  |
-| 4. Transition et pilotage        | à faire                                                                         | —                                  |
-| 5. Robustesse et borne           | à faire                                                                         | —                                  |
+| Lot                              | État                                                                            | Branche et pull request                   |
+| -------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
+| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2        |
+| 1. Familles et cartes            | **en cours** : étapes 1 à 6 fusionnées dans main le 2026-11-04                  | `lot-1`, PR n°4 ; suite sur `lot-1-suite` |
+| 2. Sessions, check-in, check-out | à faire                                                                         | —                                         |
+| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                         |
+| 4. Transition et pilotage        | à faire                                                                         | —                                         |
+| 5. Robustesse et borne           | à faire                                                                         | —                                         |
 
 ## Lot 0 — Fondations
 
@@ -51,10 +51,12 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 4. [x] Cartes PDF (cinq formats, CR80 et planche A4), aperçus, PDF d'essai, remise et vérification par scan (ADR 0009).
 5. [x] Mode de carte et réémission groupée ; textes de carte par église, contrôlés dans les cinq formats (ADR 0012).
 6. [x] Badges moniteurs (table `BadgeMoniteur` sous RLS, révocation au remplacement, à la désactivation ou à la perte du rôle MONITEUR, ADR 0008) ; tests e2e d'écriture sur des églises créées pour le test, garde des données de démonstration.
-7. [ ] Import CSV.
-8. [ ] Finition, fusion et démonstration.
+7. [ ] Import CSV (branche `lot-1-suite`).
+8. [ ] Finition, fusion et démonstration (branche `lot-1-suite`).
 
-**Démonstration** : sur https://harvest-kids.vercel.app, **après la fusion** de la PR du lot 1. La prévisualisation `lot-1` utilise la base Neon partagée, qui n'est migrée par « Migrations Neon » qu'après la fusion : les fonctions du lot 1 n'y sont pas utilisables avant. Les corrections éventuelles issues de la démonstration passeront par une petite PR.
+**Recette des étapes 1 à 6** : la PR n°4 (`lot-1`) est fusionnée dans `main` avant l'import CSV, pour tester ces étapes sur https://harvest-kids.vercel.app. « Migrations Neon » applique les migrations du lot 1 à la base partagée après la CI verte sur `main` ; avant cela, les prévisualisations ne peuvent pas utiliser les fonctions du lot 1.
+
+**Suite du lot** : les étapes 7 et 8 se font sur la branche `lot-1-suite`, créée depuis `main` après la fusion, avec sa propre PR. Les corrections issues de la recette y passent aussi. La démonstration du lot 1 complet a lieu après la fusion de cette seconde PR.
 
 Notes pour les lots suivants :
 
