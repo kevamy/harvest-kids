@@ -526,9 +526,11 @@ export function analyserFichier(
   }
 
   // Once per guardian kept (not once per child line): numbers to complete at finalisation.
+  // Only the main contact (the first guardian named) must have one; another guardian may not.
   const familles = [...groupes.values()].map((f) => {
     const lignesTuteurs = lignesDesTuteurs.get(f.ref) ?? [];
     const avertissements = [...f.avertissements];
+    const rangPrincipal = f.tuteurs.findIndex(Boolean);
     f.tuteurs.forEach((t, i) => {
       if (!t) return;
       const ligne = lignesTuteurs[i] ?? f.lignes[0]!;
@@ -537,7 +539,7 @@ export function analyserFichier(
           ligne,
           message: `Tuteur ${i + 1} : numéro illisible (« ${t.telephone.saisi} »), à corriger à la finalisation.`,
         });
-      } else if (t.telephone.statut === "absent") {
+      } else if (t.telephone.statut === "absent" && i === rangPrincipal) {
         avertissements.push({
           ligne,
           message: `Tuteur ${i + 1} : aucun numéro, à compléter à la finalisation.`,

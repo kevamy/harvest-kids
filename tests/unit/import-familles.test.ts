@@ -320,6 +320,27 @@ describe("numéros", () => {
     ).toBeNull();
   });
 
+  it("seul le contact principal sans numéro est signalé : un second tuteur peut ne pas en avoir", () => {
+    const [f] = analyser(
+      fichier(
+        "Agossou;Ayo;Agossou;1/2/2020;;Rita;Agossou;Mère;01 97 45 12 33;Paul;Agossou;Père;",
+        "Houngbo;Abla;Houngbo;1/2/2020;;;;;;Marc;Houngbo;Père;",
+      ),
+    ).familles;
+    expect(f!.tuteurs.map((t) => t.prenom)).toEqual(["Rita", "Paul"]);
+    expect(f!.avertissements).toEqual([]);
+    // Guardian 2 only: he becomes the main contact, so his missing number is reported.
+    const [, houngbo] = analyser(
+      fichier(
+        "Agossou;Ayo;Agossou;1/2/2020;;Rita;Agossou;Mère;01 97 45 12 33",
+        "Houngbo;Abla;Houngbo;1/2/2020;;;;;;Marc;Houngbo;Père;",
+      ),
+    ).familles;
+    expect(houngbo!.avertissements).toEqual([
+      { ligne: 3, message: "Tuteur 2 : aucun numéro, à compléter à la finalisation." },
+    ]);
+  });
+
   it("une famille sans tuteur est importée, avec un avertissement", () => {
     const analyse = analyser(fichier("Agossou;Ayo;Agossou;1/2/2020"));
     expect(analyse.familles[0]!.tuteurs).toEqual([]);
