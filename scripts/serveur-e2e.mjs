@@ -2,15 +2,23 @@
 // tests can check that no secret ever reaches the server logs.
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
+import { resolve } from "node:path";
 
 const journal = process.env.HK_JOURNAL_SERVEUR;
 if (!journal) throw new Error("HK_JOURNAL_SERVEUR est obligatoire.");
 
 const fichier = createWriteStream(journal, { flags: "w" });
+// Marks pg's concurrent-query warning in the log (tests/e2e/support/garde-avertissements.ts).
+const garde = resolve("tests/e2e/support/garde-avertissements-serveur.cjs").replaceAll("\\", "/");
+
 // stdin is passed through untouched, exactly as when Playwright runs the command itself.
 const serveur = spawn(process.argv.slice(2).join(" "), {
   shell: true,
   stdio: ["inherit", "pipe", "pipe"],
+  env: {
+    ...process.env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${garde}`.trim(),
+  },
 });
 for (const [source, sortie] of [
   [serveur.stdout, process.stdout],

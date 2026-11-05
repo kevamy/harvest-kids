@@ -97,7 +97,7 @@ Une personne peut avoir plusieurs rôles. Les parents n'ont pas de compte en v1 
 - **Église** : le tenant. Possède un nom, un slug, un logo, un fuseau horaire et tous les paramètres listés en section 3 bis.
 - **Membre** : le rattachement d'un compte utilisateur à une église, avec ses rôles dans cette église.
 - **Famille** : un foyer, avec un ou plusieurs parents ou tuteurs et un ou plusieurs enfants.
-- **Tuteur** : parent ou tuteur légal, avec nom, téléphone principal, téléphone secondaire, WhatsApp, lien avec l'enfant. Un tuteur est « contact principal ».
+- **Tuteur** : parent ou tuteur légal, avec nom, téléphone principal, téléphone secondaire, WhatsApp, lien avec l'enfant. Un tuteur est « contact principal » : il a toujours un numéro de téléphone valide. Les autres tuteurs peuvent ne pas en avoir, mais tout numéro saisi est valide (ni illisible, ni à l'ancien format béninois non confirmé).
 - **Personne autorisée** : adulte autorisé à récupérer un ou plusieurs enfants de la famille (tuteurs compris), avec photo obligatoire, nom, lien et téléphone.
 - **Enfant** : prénom, nom, date de naissance, photo, sexe (facultatif), alertes médicales (allergies, traitements, consignes), notes, consentement photo, **matricule** (`HK-0001`).
 - **Carte famille** : carte remise aux parents, imprimée par l'église elle-même dans l'un des cinq formats proposés (section 7.10), au **logo de l'église** (pas celui de Harvest Kids), portant un QR code. Selon le **mode de carte** de l'église (RG-16), une carte par famille (par défaut : elle donne accès à tous les enfants de la famille) ou une carte par enfant (« carte enfant »). Révocable et remplaçable.
@@ -134,7 +134,7 @@ Chaque changement de statut est horodaté et enregistré dans l'historique de la
 
 ### 7.1 Inscription d'une famille (ACCUEIL, RESPONSABLE)
 
-1. Saisie du ou des tuteurs, puis des enfants, puis des personnes autorisées (photo prise avec la caméra de la tablette).
+1. Saisie du ou des tuteurs, puis des enfants, puis des personnes autorisées (photo prise avec la caméra de la tablette). Le contact principal a toujours un numéro valide, à l'inscription, à la finalisation d'une famille importée et à chaque modification : on ne peut ni retirer son numéro, ni désigner comme contact principal un tuteur sans numéro (le bouton Urgence en dépend).
 2. Saisie des alertes médicales par enfant, en texte libre plus des cases rapides (allergie alimentaire, asthme, épilepsie, traitement en cours, autre).
 3. Recueil du consentement du tuteur : case à cocher datée « J'accepte que les données de mes enfants soient utilisées pour leur sécurité pendant les activités de l'église » et case séparée pour l'usage des photos. Sans le premier consentement, l'inscription ne peut pas être validée.
 4. À la validation : attribution des matricules et génération des cartes selon le mode de carte de l'église (RG-16) : une carte pour la famille, ou une carte par enfant.
@@ -401,7 +401,7 @@ model Tuteur {
   prenom      String
   nom         String
   lien        String
-  telephone   String
+  telephone   String?   // obligatoire pour le contact principal d'une famille finalisée
   telephone2  String?
   whatsapp    String?
   principal   Boolean @default(false)

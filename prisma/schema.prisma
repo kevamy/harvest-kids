@@ -273,8 +273,8 @@ model Tuteur {
   prenom     String
   nom        String
   lien       String
-  /// Null only in a draft (CSV import, number missing, unreadable or not confirmed);
-  /// finalisation requires it (enregistrerFamille).
+  /// Always set for the main contact of a saved family (enregistrerFamille); may be null
+  /// for another guardian, or in a draft (CSV import: missing, unreadable, not confirmed).
   telephone  String?
   telephone2 String?
   whatsapp   String?

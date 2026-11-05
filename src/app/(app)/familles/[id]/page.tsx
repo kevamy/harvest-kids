@@ -113,11 +113,13 @@ export default async function FicheFamille({ params }: PageProps<"/familles/[id]
                   {t.principal ? " · contact principal" : ""}
                 </p>
                 <p className="m-0">
-                  {/* Only a draft can lack it (CSV import): finalisation asks for it. */}
+                  {/* The main contact of a saved family always has one; a draft's may not. */}
                   {t.telephone ? (
                     <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
                   ) : (
-                    <span className="text-texte-doux">Téléphone à compléter</span>
+                    <span className="text-texte-doux">
+                      {brouillon && t.principal ? "Téléphone à compléter" : "Sans numéro"}
+                    </span>
                   )}
                   {t.telephone2 ? <> · {formaterTelephone(t.telephone2)}</> : null}
                 </p>

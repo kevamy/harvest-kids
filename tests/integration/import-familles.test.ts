@@ -13,6 +13,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { creerStockageLocal } from "@/lib/storage/local";
 import { clientEglise, type ClientEglise } from "@/lib/tenant";
 import {
+  MESSAGE_CONTACT_SANS_NUMERO,
   creerBrouillon,
   enregistrerFamille,
   lireFamille,
@@ -318,7 +319,7 @@ describe("après l'import", () => {
       const stockage = creerStockageLocal(dossier);
       await expect(
         enregistrerFamille(dbA, AUTEUR, saisie(""), photos, stockage, familleId),
-      ).rejects.toThrow("Saisissez le téléphone du tuteur.");
+      ).rejects.toThrow(MESSAGE_CONTACT_SANS_NUMERO);
       await enregistrerFamille(dbA, AUTEUR, saisie("01 97 45 12 33"), photos, stockage, familleId);
     } finally {
       await rm(dossier, { recursive: true, force: true });

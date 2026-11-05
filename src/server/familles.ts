@@ -46,8 +46,10 @@ const facultatif = (max: number) =>
     .optional()
     .transform((s) => s ?? null);
 // Typed as entered; normalised to E.164 by the service (lib/telephone.ts).
-const telephone = (message: string) => z.string().trim().min(1, message).max(30);
 const telephoneFacultatif = facultatif(30);
+
+export const MESSAGE_CONTACT_SANS_NUMERO =
+  "Le contact principal doit avoir un numéro de téléphone valide : saisissez-le, ou désignez comme contact principal un tuteur qui en a un.";
 
 /**
  * Phone number in E.164 with the church's default country code. A number that needs
@@ -87,7 +89,8 @@ export const schemaFamille = z.object({
         prenom: texte(60, "Saisissez le prénom du tuteur."),
         nom: texte(60, "Saisissez le nom du tuteur."),
         lien: texte(40, "Précisez le lien du tuteur avec les enfants."),
-        telephone: telephone("Saisissez le téléphone du tuteur."),
+        // Compulsory for the main contact only (checked by the service).
+        telephone: telephoneFacultatif,
         telephone2: telephoneFacultatif,
         whatsapp: telephoneFacultatif,
         principal: z.boolean(),
@@ -230,7 +233,8 @@ export async function enregistrerFamille(
   const indicatif = (await lireParametres(db))["telephone.indicatifParDefaut"];
   for (const [i, t] of saisie.tuteurs.entries()) {
     const libelle = `Tuteur ${i + 1}`;
-    t.telephone = telephoneNormalise(t.telephone, indicatif, `${libelle}, téléphone`);
+    // Any number typed must be valid (unreadable or unconfirmed numbers are refused).
+    t.telephone = telephoneOuNull(t.telephone, indicatif, `${libelle}, téléphone`);
     t.telephone2 = telephoneOuNull(t.telephone2, indicatif, `${libelle}, second téléphone`);
     t.whatsapp = telephoneOuNull(t.whatsapp, indicatif, `${libelle}, WhatsApp`);
   }
@@ -238,9 +242,12 @@ export async function enregistrerFamille(
     a.telephone = telephoneOuNull(a.telephone, indicatif, `Personne autorisée ${i + 1}, téléphone`);
   }
 
-  if (saisie.tuteurs.filter((t) => t.principal).length !== 1) {
+  const principaux = saisie.tuteurs.filter((t) => t.principal);
+  if (principaux.length !== 1) {
     throw new FamilleRefusee("Désignez un seul tuteur comme contact principal.");
   }
+  // The main contact can always be called (urgency button, lot 3).
+  if (!principaux[0]!.telephone) throw new FamilleRefusee(MESSAGE_CONTACT_SANS_NUMERO);
   if (!saisie.enfants.some((e) => e.actif)) throw new FamilleRefusee("Ajoutez au moins un enfant.");
   const dates = saisie.enfants.map((e) => verifierDateNaissance(e.dateNaissance, maintenant));
 
@@ -430,20 +437,17 @@ export async function enregistrerFamille(
         }
       }
 
-      // A saved family is never left without a phone to call (urgency button, lot 3): every
-      // guardian of the family, including one the request did not send (a draft guardian
-      // imported without a number), has a valid number. Checked on the rows themselves.
-      const sansNumero = await tx.tuteur.count({
-        where: { familleId: famille.id, telephone: null },
+      // A saved family always has one main contact, with a number (urgency button, lot 3).
+      // Checked on the rows themselves: a guardian the request did not send (a draft's main
+      // contact imported without a number) still counts. Stored numbers are valid E.164.
+      const principaux = await tx.tuteur.findMany({
+        where: { familleId: famille.id, principal: true },
+        select: { telephone: true },
       });
-      const avecNumero = await tx.tuteur.count({
-        where: { familleId: famille.id, telephone: { not: null } },
-      });
-      if (sansNumero > 0 || avecNumero === 0) {
-        throw new FamilleRefusee(
-          "Chaque tuteur doit avoir un numéro de téléphone valide. Complétez le numéro manquant, puis enregistrez.",
-        );
+      if (principaux.length !== 1) {
+        throw new FamilleRefusee("Désignez un seul tuteur comme contact principal.");
       }
+      if (!principaux[0]!.telephone) throw new FamilleRefusee(MESSAGE_CONTACT_SANS_NUMERO);
 
       for (const cle of contexte.remplacees) await programmerSuppression(tx, cle);
 

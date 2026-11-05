@@ -3,13 +3,46 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { env } from "@/lib/env";
 
+type Transaction = Awaited<
+  ReturnType<Awaited<ReturnType<PrismaPg["connect"]>>["startTransaction"]>
+>;
+
+/**
+ * Chains the queries of one transaction. Prisma 7 runs the independent reads of a query
+ * (the relations of a `select`) in parallel; inside a transaction they share one pg
+ * connection, which pg 8 queues with a deprecation warning and pg 9 will refuse. Every
+ * scoped query runs in a transaction (app.eglise_id first), so this covers them all.
+ */
+function sequentielle(tx: Transaction): Transaction {
+  let file: Promise<unknown> = Promise.resolve();
+  const enFile = <T>(operation: () => Promise<T>): Promise<T> => {
+    const resultat = file.then(operation, operation);
+    file = resultat.catch(() => undefined);
+    return resultat;
+  };
+  const queryRaw = tx.queryRaw.bind(tx);
+  const executeRaw = tx.executeRaw.bind(tx);
+  tx.queryRaw = (requete) => enFile(() => queryRaw(requete));
+  tx.executeRaw = (requete) => enFile(() => executeRaw(requete));
+  return tx;
+}
+
+class PrismaPgSequentiel extends PrismaPg {
+  override async connect() {
+    const adaptateur = await super.connect();
+    const commencer = adaptateur.startTransaction.bind(adaptateur);
+    adaptateur.startTransaction = async (niveau) => sequentielle(await commencer(niveau));
+    return adaptateur;
+  }
+}
+
 /**
  * Raw Prisma client, connected as hk_app (subject to Row-Level Security).
  * Reserved to platform code, lib/tenant.ts and lib/auth.ts (ESLint rule):
  * church data is only reached through getTenantDb().
  */
 export function creerClientPlateforme(connectionString: string): PrismaClient {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  return new PrismaClient({ adapter: new PrismaPgSequentiel({ connectionString }) });
 }
 
 const globalPourPrisma = globalThis as unknown as { prismaPlateforme?: PrismaClient };
