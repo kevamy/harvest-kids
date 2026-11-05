@@ -35,6 +35,8 @@ export default defineConfig({
           // Integration tests share one PostgreSQL database.
           fileParallelism: false,
           globalSetup: ["tests/integration/support/global-setup.ts"],
+          // pg 9 will refuse concurrent queries on one connection: a warning fails the test.
+          setupFiles: ["tests/integration/support/garde-avertissements.ts"],
           testTimeout: 20_000,
           hookTimeout: 20_000,
         },

@@ -7,6 +7,7 @@ import type { Role } from "@/generated/prisma/enums";
 export const ACTIONS = [
   "tableau.direct",
   "familles.gerer",
+  "familles.importer",
   "checkin",
   "checkout",
   "parent.appeler",
@@ -34,6 +35,8 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "tableau.direct",
     // Cahier §7.1: family registration by ACCUEIL and RESPONSABLE.
     "familles.gerer",
+    // CSV import of drafts (ADR 0013): ADMIN and RESPONSABLE, not ACCUEIL.
+    "familles.importer",
     "sessions.gerer",
     "classes.gerer",
     "classe.forcer",

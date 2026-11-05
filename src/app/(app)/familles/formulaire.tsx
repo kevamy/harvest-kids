@@ -286,7 +286,9 @@ export function FormulaireFamille({
             />
             <ChampTelephone
               id={`tuteur-${t.uid}-telephone`}
-              libelle={`Téléphone du tuteur ${i + 1}`}
+              // Compulsory for the main contact only (the one called first).
+              libelle={`Téléphone du tuteur ${i + 1}${t.principal ? "" : " (facultatif)"}`}
+              aide={t.principal ? "Obligatoire pour le contact principal." : undefined}
               indicatif={indicatif}
               value={t.telephone}
               onChange={(valeur) => majTuteur(i, { telephone: valeur })}

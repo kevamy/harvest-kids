@@ -17,6 +17,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   // The demonstration data must come out of the suite unchanged (support/garde-demo.ts).
   globalSetup: "./tests/e2e/support/garde-demo.ts",
+  // pg 9 will refuse concurrent queries on one connection: a server warning fails the run.
+  globalTeardown: "./tests/e2e/support/garde-avertissements.ts",
   use: {
     baseURL,
     locale: "fr-FR",

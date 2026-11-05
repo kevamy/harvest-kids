@@ -108,10 +108,19 @@ export default async function FicheFamille({ params }: PageProps<"/familles/[id]
             {fiche.tuteurs.map((t) => (
               <li key={t.id}>
                 <p className="m-0 font-bold">
-                  {t.prenom} {t.nom} ({t.lien}){t.principal ? " · contact principal" : ""}
+                  {t.prenom} {t.nom}
+                  {t.lien ? ` (${t.lien})` : ""}
+                  {t.principal ? " · contact principal" : ""}
                 </p>
                 <p className="m-0">
-                  <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
+                  {/* The main contact of a saved family always has one; a draft's may not. */}
+                  {t.telephone ? (
+                    <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
+                  ) : (
+                    <span className="text-texte-doux">
+                      {brouillon && t.principal ? "Téléphone à compléter" : "Sans numéro"}
+                    </span>
+                  )}
                   {t.telephone2 ? <> · {formaterTelephone(t.telephone2)}</> : null}
                 </p>
               </li>

@@ -118,7 +118,7 @@ export function valeursFamille(fiche: FicheFamille): ValeursFamille {
       prenom: t.prenom,
       nom: t.nom,
       lien: t.lien,
-      telephone: formaterTelephone(t.telephone),
+      telephone: t.telephone ? formaterTelephone(t.telephone) : "",
       telephone2: t.telephone2 ? formaterTelephone(t.telephone2) : "",
       whatsapp: t.whatsapp ? formaterTelephone(t.whatsapp) : "",
       principal: t.principal,

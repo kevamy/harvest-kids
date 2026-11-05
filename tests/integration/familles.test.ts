@@ -15,6 +15,7 @@ import type { Stockage } from "@/lib/storage";
 import { clientEglise, type ClientEglise } from "@/lib/tenant";
 import {
   FamilleRefusee,
+  MESSAGE_CONTACT_SANS_NUMERO,
   creerBrouillon,
   enregistrerFamille,
   lireFamille,
@@ -385,5 +386,186 @@ describe("isolation A/B", () => {
       proprietaire.query(`SELECT prenom FROM "Enfant" WHERE id = $1`, [b.enfantId]),
     );
     expect(nomB.rows).toEqual([{ prenom: "Prénom" }]);
+  });
+});
+
+// A registered or finalised family always has a main contact with a valid number (urgency
+// button, lot 3). Other guardians may have none, but any number typed must be valid.
+describe("numéro des tuteurs d'une famille enregistrée", () => {
+  const contact = saisie().tuteurs[0]!;
+  const second = {
+    ...contact,
+    prenom: "Paul",
+    lien: "Père",
+    telephone: "",
+    principal: false,
+    autorise: false,
+    photo: null,
+  };
+  const avecTuteurs = (...tuteurs: unknown[]) => saisie({ tuteurs });
+  const inscrire = (donnees: unknown) =>
+    enregistrerFamille(dbA, AUTEUR, donnees, photos("photo-tuteur"), stockage);
+
+  /** Guardians' numbers of a family, read as the owner inside church A. */
+  const numeros = (familleId: string) =>
+    enEglise(proprietaire, a.egliseId, async () => {
+      const { rows } = await proprietaire.query<{ telephone: string | null }>(
+        `SELECT telephone FROM "Tuteur" WHERE "familleId" = $1 ORDER BY principal DESC`,
+        [familleId],
+      );
+      return rows.map((r) => r.telephone);
+    });
+
+  it("l'inscription exige le numéro du contact principal, et refuse tout numéro invalide", async () => {
+    await expect(inscrire(avecTuteurs({ ...contact, telephone: "" }))).rejects.toThrow(
+      MESSAGE_CONTACT_SANS_NUMERO,
+    );
+    await expect(inscrire(avecTuteurs({ ...contact, telephone: "illisible" }))).rejects.toThrow(
+      FamilleRefusee,
+    );
+    await expect(inscrire(avecTuteurs({ ...contact, telephone: "97451233" }))).rejects.toThrow(
+      "Voulez-vous dire 01 97 45 12 33 ?",
+    );
+    // A second guardian without a number is accepted; with an invalid one, refused.
+    await expect(
+      inscrire(avecTuteurs(contact, { ...second, telephone: "illisible" })),
+    ).rejects.toThrow("Tuteur 2, téléphone");
+    await expect(
+      inscrire(avecTuteurs(contact, { ...second, telephone: "97451233" })),
+    ).rejects.toThrow("Voulez-vous dire 01 97 45 12 33 ?");
+    // A main contact without a number, even with a second guardian who has one.
+    await expect(
+      inscrire(
+        avecTuteurs({ ...contact, telephone: "" }, { ...second, telephone: "01 66 77 88 99" }),
+      ),
+    ).rejects.toThrow(MESSAGE_CONTACT_SANS_NUMERO);
+    expect(await dbA.famille.count()).toBe(1); // the fixture family only
+
+    const { familleId } = await inscrire(avecTuteurs(contact, second));
+    expect(await numeros(familleId)).toEqual(["+2290197451233", null]);
+  });
+
+  it("la finalisation refuse un contact principal sans numéro, même absent de la demande", async () => {
+    // Imported draft: the main contact has no number, the second guardian has one.
+    const brouillon = await dbA.$tx((tx) =>
+      creerBrouillon(tx, AUTEUR, "229", {
+        nom: "Houngbo",
+        tuteurs: [
+          { prenom: "Rita", nom: "Houngbo", lien: "Mère", telephone: null, principal: true },
+          {
+            prenom: "Paul",
+            nom: "Houngbo",
+            lien: "Père",
+            telephone: "0166778899",
+            principal: false,
+          },
+        ],
+        enfants: [{ prenom: "Délali", nom: "Houngbo", dateNaissance: new Date("2020-02-02") }],
+      }),
+    );
+    const fiche = (await lireFamille(dbA, brouillon.id))!;
+    const [rita, paul] = fiche.tuteurs;
+    const finalisation = (tuteurs: unknown[]) =>
+      enregistrerFamille(
+        dbA,
+        AUTEUR,
+        saisie({
+          nom: "Houngbo",
+          tuteurs,
+          enfants: [{ ...enfant("Délali", "2020-02-02"), id: fiche.enfants[0]!.id }],
+        }),
+        photos("photo-tuteur"),
+        stockage,
+        brouillon.id,
+      );
+    const tuteurRita = {
+      ...contact,
+      id: rita!.id,
+      prenom: "Rita",
+      nom: "Houngbo",
+      telephone: "",
+    };
+    const tuteurPaul = {
+      ...second,
+      id: paul!.id,
+      nom: "Houngbo",
+      telephone: "01 66 77 88 99",
+    };
+    const resteBrouillon = async () => {
+      const fiche = (await lireFamille(dbA, brouillon.id))!;
+      expect(fiche.finaliseeLe).toBeNull();
+      expect(fiche.enfants[0]!.matricule).toBeNull();
+      expect(await numeros(brouillon.id)).toEqual([null, "+2290166778899"]);
+    };
+
+    await expect(finalisation([tuteurRita, tuteurPaul])).rejects.toThrow(
+      MESSAGE_CONTACT_SANS_NUMERO,
+    );
+    await resteBrouillon();
+
+    // Forged request: Rita left out, Paul made main contact. Her row is still the main
+    // contact, without a number: two main contacts, refused.
+    await expect(
+      finalisation([
+        { ...tuteurPaul, principal: true, autorise: true, photo: { champ: "photo-tuteur" } },
+      ]),
+    ).rejects.toThrow("Désignez un seul tuteur comme contact principal.");
+    await resteBrouillon();
+
+    // Paul becomes the main contact; Rita may stay without a number.
+    await finalisation([
+      { ...tuteurRita, principal: false, autorise: false, photo: null },
+      { ...tuteurPaul, principal: true, autorise: true, photo: { champ: "photo-tuteur" } },
+    ]);
+    expect((await lireFamille(dbA, brouillon.id))!.finaliseeLe).not.toBeNull();
+    expect(await numeros(brouillon.id)).toEqual(["+2290166778899", null]);
+  });
+
+  it("la modification ne retire pas le numéro du contact principal et ne désigne pas un tuteur sans numéro", async () => {
+    const { familleId } = await inscrire(avecTuteurs(contact, second));
+    const fiche = (await lireFamille(dbA, familleId))!;
+    const [mireille, paul] = fiche.tuteurs;
+    const modification = (telephones: [string, string], principal: 0 | 1 = 0) =>
+      enregistrerFamille(
+        dbA,
+        AUTEUR,
+        saisie({
+          tuteurs: [
+            {
+              ...contact,
+              id: mireille!.id,
+              telephone: telephones[0],
+              principal: principal === 0,
+              photo: { conserver: true },
+            },
+            { ...second, id: paul!.id, telephone: telephones[1], principal: principal === 1 },
+          ],
+          enfants: fiche.enfants.map((e) => ({
+            ...enfant(e.prenom, e.dateNaissance.toISOString().slice(0, 10)),
+            id: e.id,
+          })),
+        }),
+        photos(),
+        stockage,
+        familleId,
+      );
+
+    for (const telephone of ["", "   "]) {
+      await expect(modification([telephone, ""])).rejects.toThrow(MESSAGE_CONTACT_SANS_NUMERO);
+    }
+    for (const telephone of ["illisible", "97451233"]) {
+      await expect(modification([telephone, ""]), telephone).rejects.toThrow(FamilleRefusee);
+      await expect(modification(["01 97 45 12 33", telephone]), telephone).rejects.toThrow(
+        FamilleRefusee,
+      );
+    }
+    // Paul, without a number, cannot become the main contact.
+    await expect(modification(["01 97 45 12 33", ""], 1)).rejects.toThrow(
+      MESSAGE_CONTACT_SANS_NUMERO,
+    );
+    expect(await numeros(familleId)).toEqual(["+2290197451233", null]);
+
+    await modification(["01 97 45 12 33", "01 66 77 88 99"], 1);
+    expect(await numeros(familleId)).toEqual(["+2290166778899", "+2290197451233"]);
   });
 });

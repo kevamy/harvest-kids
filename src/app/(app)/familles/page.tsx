@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, ScanLine, Search } from "lucide-react";
+import { Plus, ScanLine, Search, Upload } from "lucide-react";
 import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
+import { peut } from "@/lib/rbac";
 import { listerBrouillons, rechercherFamilles } from "@/server/familles";
 import { contextePage } from "../acces";
 
@@ -62,6 +63,14 @@ export default async function Familles({ searchParams }: PageProps<"/familles">)
               Vérifier une carte
             </Link>
           </Button>
+          {peut(acces.contexte.roles, "familles.importer") ? (
+            <Button asChild variant="ghost">
+              <Link href="/familles/importer">
+                <Upload aria-hidden />
+                Importer des familles
+              </Link>
+            </Button>
+          ) : null}
           <Button asChild variant="bleu">
             <Link href="/familles/nouvelle">
               <Plus aria-hidden />
