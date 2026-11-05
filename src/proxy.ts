@@ -11,6 +11,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const CHEMINS_PUBLICS = [
   "/connexion",
+  // Account activation and password reset links (ADR 0014): the link is the proof.
+  "/activation",
   "/design",
   "/hors-connexion",
   "/api/auth",
@@ -23,6 +25,8 @@ const CHEMINS_PUBLICS = [
 function estPublic(chemin: string) {
   return CHEMINS_PUBLICS.some((p) => chemin === p || chemin.startsWith(`${p}/`));
 }
+
+const estActivation = (chemin: string) => chemin === "/activation";
 
 export function politiqueSecurite(nonce: string, developpement: boolean): string {
   return [
@@ -66,7 +70,12 @@ export function proxy(request: NextRequest) {
   reponse.headers.set("Content-Security-Policy", csp);
   reponse.headers.set("X-Content-Type-Options", "nosniff");
   reponse.headers.set("X-Frame-Options", "DENY");
-  reponse.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  // A one-time link page never leaks its address, even without the token (ADR 0014).
+  reponse.headers.set(
+    "Referrer-Policy",
+    estActivation(pathname) ? "no-referrer" : "strict-origin-when-cross-origin",
+  );
+  if (estActivation(pathname)) reponse.headers.set("X-Robots-Tag", "noindex, nofollow");
   // The scanner uses the tablet's camera (lot 1); nothing else is needed.
   reponse.headers.set(
     "Permissions-Policy",

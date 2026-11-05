@@ -7,8 +7,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Champ, MessageErreur } from "@/components/ui/champ";
+import { LienUnique } from "@/components/ui/lien-unique";
 import { usePret } from "@/lib/use-pret";
-import { changerStatut, creerNouvelleEglise, type ResultatPlateforme } from "./actions";
+import {
+  changerStatut,
+  creerNouvelleEglise,
+  type ResultatCreationEglise,
+  type ResultatPlateforme,
+} from "./actions";
 
 const RESEAU_INDISPONIBLE = "Le serveur ne répond pas. Vérifiez la connexion, puis réessayez.";
 
@@ -66,7 +72,6 @@ const schemaFormulaire = z.object({
   fuseau: z.string().min(1),
   adminNom: z.string().trim().min(2, "Saisissez le nom de l'administrateur."),
   adminEmail: z.email("Saisissez une adresse e-mail valide."),
-  adminMotDePasse: z.string().min(10, "Le mot de passe provisoire compte au moins 10 caractères."),
 });
 type Formulaire = z.infer<typeof schemaFormulaire>;
 
@@ -83,6 +88,7 @@ function versSlug(nom: string) {
 export function FormulaireNouvelleEglise({ fuseaux }: { fuseaux: readonly string[] }) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
+  const [lien, setLien] = useState<string | null>(null);
   const formulaire = useForm<Formulaire>({
     resolver: zodResolver(schemaFormulaire),
     defaultValues: {
@@ -91,33 +97,54 @@ export function FormulaireNouvelleEglise({ fuseaux }: { fuseaux: readonly string
       fuseau: "Africa/Porto-Novo",
       adminNom: "",
       adminEmail: "",
-      adminMotDePasse: "",
     },
   });
   const { errors, isSubmitting } = formulaire.formState;
   const pret = usePret();
+  const terminer = () => {
+    router.replace("/plateforme");
+    router.refresh();
+  };
+
+  if (lien) {
+    return (
+      <div className="grid gap-4">
+        <p role="status" className="m-0 font-bold">
+          Église créée.
+        </p>
+        <LienUnique
+          titre="Lien d'activation du premier administrateur"
+          lien={lien}
+          validite="7 jours"
+          onFermer={terminer}
+        />
+      </div>
+    );
+  }
 
   return (
     <form
-      method="post"
       noValidate
       className="grid gap-5"
       onSubmit={formulaire.handleSubmit(async (v) => {
         setErreur(null);
-        const resultat = await appeler(() =>
-          creerNouvelleEglise({
+        let resultat: ResultatCreationEglise;
+        try {
+          resultat = await creerNouvelleEglise({
             nom: v.nom,
             slug: v.slug,
             fuseau: v.fuseau,
-            admin: { nom: v.adminNom, email: v.adminEmail, motDePasse: v.adminMotDePasse },
-          }),
-        );
+            admin: { nom: v.adminNom, email: v.adminEmail },
+          });
+        } catch {
+          resultat = { ok: false, erreur: RESEAU_INDISPONIBLE };
+        }
         if (!resultat.ok) {
           setErreur(resultat.erreur);
           return;
         }
-        router.replace("/plateforme");
-        router.refresh();
+        if (resultat.lien) setLien(resultat.lien);
+        else terminer();
       })}
     >
       {erreur ? <MessageErreur>{erreur}</MessageErreur> : null}
@@ -168,17 +195,9 @@ export function FormulaireNouvelleEglise({ fuseaux }: { fuseaux: readonly string
         libelle="E-mail"
         type="email"
         autoCapitalize="off"
-        aide="Si ce compte existe déjà dans une autre église, il est simplement rattaché à celle-ci."
+        aide="Un nouveau compte reçoit un lien d'activation (7 jours) pour choisir son mot de passe. Un compte qui existe déjà dans une autre église est simplement rattaché à celle-ci."
         erreur={errors.adminEmail?.message}
         {...formulaire.register("adminEmail")}
-      />
-      <Champ
-        id="adminMotDePasse"
-        libelle="Mot de passe provisoire"
-        type="password"
-        autoComplete="new-password"
-        erreur={errors.adminMotDePasse?.message}
-        {...formulaire.register("adminMotDePasse")}
       />
       <Button type="submit" variant="bleu" size="xl" disabled={!pret || isSubmitting}>
         Créer l&apos;église

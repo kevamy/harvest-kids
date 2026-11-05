@@ -21,6 +21,7 @@ const TABLES_PLATEFORME = [
   "Membre",
   "AccesSupport",
   "AuditPlateforme",
+  "JetonCompte",
   "AuthSession",
   "AuthAccount",
   "AuthVerification",

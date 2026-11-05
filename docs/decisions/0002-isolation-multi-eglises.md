@@ -13,7 +13,7 @@ Une seule base sert toutes les églises (cahier §3 bis, RG-13). Une requête ou
 
 **Row-Level Security sur les 17 tables d'église**, avec `ENABLE` et `FORCE` (la politique s'applique aussi au propriétaire). Une politique `tenant_isolation` par table : `USING` et `WITH CHECK ("egliseId" = hk_eglise_active())`. `hk_eglise_active()` lit `app.eglise_id`, positionné par transaction avec `set_config(..., true)` (l'équivalent paramétrable de `SET LOCAL`). Hors transaction, ou sans église active, aucune ligne n'est visible et aucune écriture n'est possible. Le réglage ne survit pas à la transaction, ce qui est compatible avec un pooler en mode transaction (Neon).
 
-**Tables de plateforme hors RLS** : `Eglise`, `User`, `Membre`, `AccesSupport`, `AuditPlateforme` et les tables `Auth*`. On n'y accède que depuis `src/server/plateforme/`, `src/lib/tenant.ts` et `src/lib/auth.ts`.
+**Tables de plateforme hors RLS** : `Eglise`, `User`, `Membre`, `AccesSupport`, `AuditPlateforme`, `JetonCompte` (liens d'activation et de réinitialisation, ADR 0014) et les tables `Auth*`. On n'y accède que depuis `src/server/plateforme/`, `src/lib/tenant.ts` et `src/lib/auth.ts`.
 
 **Clés étrangères composites.** Chaque table d'église porte `@@unique([id, egliseId])`, et ses relations vers d'autres tables d'église sont `(xId, egliseId) → (id, egliseId)`. Les contrôles de clé étrangère ignorent la RLS : sans clé composite, une ligne de l'église A pourrait pointer vers un enfant de l'église B. Avec elle, la base refuse (`23503`). Les relations optionnelles portent `onDelete: Restrict`, car le `SetNull` par défaut viderait aussi `egliseId`.
 

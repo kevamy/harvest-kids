@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { analyserCle } from "@/lib/fichiers";
-import { FORMAT_EMPREINTE } from "@/lib/jetons";
+import { FORMAT_EMPREINTE, empreinteJeton } from "@/lib/jetons";
 import { creerStockageLocal } from "@/lib/storage/local";
 import { clientEglise } from "@/lib/tenant";
 import { creerCompte, rattacherMembre } from "@/server/plateforme/comptes";
@@ -32,7 +32,7 @@ const nouvelle = (slug: string, email = `admin.${slug}@harvest-kids.test`): Nouv
   nom: `Église ${slug}`,
   slug,
   fuseau: "Africa/Porto-Novo",
-  admin: { nom: "Premier admin", email, motDePasse: "Provisoire-2026" },
+  admin: { nom: "Premier admin", email },
 });
 
 beforeAll(async () => {
@@ -72,9 +72,28 @@ describe("création d'une église depuis la plateforme", () => {
 
     const admin = await base.user.findUniqueOrThrow({
       where: { email: "admin.eglise-test@harvest-kids.test" },
-      select: { membres: { select: { egliseId: true, roles: true } } },
+      select: {
+        membres: { select: { egliseId: true, roles: true } },
+        comptes: { select: { password: true } },
+        jetonsCompte: { select: { type: true, tokenHash: true, egliseId: true, creePar: true } },
+      },
     });
     expect(admin.membres).toEqual([{ egliseId: resultat.egliseId, roles: ["ADMIN"] }]);
+    // No password chosen by the super-administrator: a 7-day activation link (ADR 0014).
+    expect(admin.comptes).toEqual([]);
+    expect(resultat.jeton).toMatch(/^HKC1\./);
+    expect(admin.jetonsCompte).toEqual([
+      {
+        type: "ACTIVATION",
+        tokenHash: empreinteJeton(resultat.jeton!),
+        egliseId: resultat.egliseId,
+        creePar: superAdminId,
+      },
+    ]);
+    const { rows } = await proprietaire.query<{ duree: string }>(
+      `SELECT ("expireLe" - "createdAt")::text AS duree FROM "JetonCompte"`,
+    );
+    expect(rows[0]!.duree).toMatch(/^7 days/);
 
     const audit = await base.auditPlateforme.findMany({ where: { egliseId: resultat.egliseId } });
     expect(audit).toMatchObject([{ action: "eglise.creer", userId: superAdminId }]);
@@ -103,9 +122,10 @@ describe("création d'une église depuis la plateforme", () => {
       nouvelle("deuxieme", "deja@harvest-kids.test"),
       superAdminId,
     );
-    expect(resultat.statut).toBe("creee");
+    expect(resultat).toMatchObject({ statut: "creee", jeton: null });
     expect(await base.user.count({ where: { email: "deja@harvest-kids.test" } })).toBe(1);
     expect(await base.membre.count({ where: { userId: existant } })).toBe(2);
+    expect(await base.jetonCompte.count()).toBe(0);
   });
 
   it("suspend et réactive une église, avec une trace dans le journal de plateforme", async () => {

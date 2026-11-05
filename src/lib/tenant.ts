@@ -277,6 +277,7 @@ type TablesPlateforme =
   | "membre"
   | "accesSupport"
   | "auditPlateforme"
+  | "jetonCompte"
   | "authSession"
   | "authAccount"
   | "authVerification"
@@ -329,6 +330,7 @@ const PROPRIETES_INTERDITES = new Set<string>([
   "membre",
   "accesSupport",
   "auditPlateforme",
+  "jetonCompte",
   "authSession",
   "authAccount",
   "authVerification",

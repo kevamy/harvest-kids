@@ -2,14 +2,14 @@
 
 Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque lot se termine par une démonstration sur l'environnement Vercel et une validation avant le suivant.
 
-| Lot                              | État                                                                            | Branche et pull request                   |
-| -------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
-| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2        |
-| 1. Familles et cartes            | **en cours** : étapes 1 à 6 fusionnées dans main le 2026-11-04                  | `lot-1`, PR n°4 ; suite sur `lot-1-suite` |
-| 2. Sessions, check-in, check-out | à faire                                                                         | —                                         |
-| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                         |
-| 4. Transition et pilotage        | à faire                                                                         | —                                         |
-| 5. Robustesse et borne           | à faire                                                                         | —                                         |
+| Lot                              | État                                                                            | Branche et pull request                 |
+| -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
+| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
+| 1. Familles et cartes            | **en cours** : étapes 1 à 7 fusionnées dans main le 2026-11-05                  | PR n°4, n°5 ; suite sur `lot-1-comptes` |
+| 2. Sessions, check-in, check-out | à faire                                                                         | —                                       |
+| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                       |
+| 4. Transition et pilotage        | à faire                                                                         | —                                       |
+| 5. Robustesse et borne           | à faire                                                                         | —                                       |
 
 ## Lot 0 — Fondations
 
@@ -51,19 +51,19 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 4. [x] Cartes PDF (cinq formats, CR80 et planche A4), aperçus, PDF d'essai, remise et vérification par scan (ADR 0009).
 5. [x] Mode de carte et réémission groupée ; textes de carte par église, contrôlés dans les cinq formats (ADR 0012).
 6. [x] Badges moniteurs (table `BadgeMoniteur` sous RLS, révocation au remplacement, à la désactivation ou à la perte du rôle MONITEUR, ADR 0008) ; tests e2e d'écriture sur des églises créées pour le test, garde des données de démonstration.
-7. [x] Import CSV (branche `lot-1-suite`, ADR 0013) : une ligne par enfant, regroupement par nom de famille et téléphone du tuteur 1 (ou prénom et nom du tuteur 1), prévisualisation, numéros à confirmer, doublons possibles, brouillons créés en une transaction ; droit `familles.importer` (ADMIN, RESPONSABLE).
-8. [ ] Comptes et rôles (branche `lot-1-suite`), ajoutée le 2026-11-04, cahier version 1.3 : création d'un compte par l'ADMIN, invitation d'un compte d'une autre église, changement de rôles, désactivation et réactivation. Activation et réinitialisation du mot de passe par un lien à usage unique valable 72 h, affiché une seule fois, que l'ADMIN transmet lui-même ; seule l'empreinte SHA-256 du jeton est stockée ; la réinitialisation invalide les sessions en cours.
-9. [ ] Finition, fusion et démonstration (branche `lot-1-suite`).
+7. [x] Import CSV (branche `lot-1-suite`, PR n°5, ADR 0013) : une ligne par enfant, regroupement par nom de famille et téléphone du tuteur 1 (ou prénom et nom du tuteur 1), prévisualisation, numéros à confirmer, doublons possibles, brouillons créés en une transaction ; droit `familles.importer` (ADMIN, RESPONSABLE).
+8. [x] Comptes et rôles (branche `lot-1-comptes`, ADR 0014), ajoutée le 2026-11-04, cahier version 1.3 : Paramètres › Comptes (ADMIN) ; création d'un compte avec un lien d'activation à usage unique (7 jours), rattachement direct d'un compte existant, changement de rôles, désactivation et réactivation de l'appartenance ; réinitialisation à effet immédiat (lien de 24 heures, sessions fermées) ; seule l'empreinte SHA-256 du jeton est stockée (table de plateforme `JetonCompte`) ; liens réservés au super-administrateur pour un compte de plusieurs églises ; au moins un ADMIN actif (sous verrou) et pas de désactivation de son propre compte ; premier ADMIN d'une nouvelle église par lien aussi.
+9. [ ] Finition, fusion et démonstration.
 
 **Recette des étapes 1 à 6** : la PR n°4 (`lot-1`) est fusionnée dans `main` avant l'import CSV, pour tester ces étapes sur https://harvest-kids.vercel.app. « Migrations Neon » applique les migrations du lot 1 à la base partagée après la CI verte sur `main` ; avant cela, les prévisualisations ne peuvent pas utiliser les fonctions du lot 1.
 
-**Suite du lot** : les étapes 7 à 9 se font sur la branche `lot-1-suite`, créée depuis `main` après la fusion, avec sa propre PR. Les corrections issues de la recette y passent aussi. La démonstration du lot 1 complet a lieu après la fusion de cette seconde PR.
+**Suite du lot** : l'étape 7 a été fusionnée par la PR n°5 (`lot-1-suite`) ; les étapes 8 et 9 se font sur la branche `lot-1-comptes`, créée depuis `main`, avec sa propre PR. La démonstration du lot 1 complet a lieu après sa fusion.
 
 Notes pour les lots suivants :
 
 - **Cartes** : l'inscription ne crée pas de carte ; la première impression (étape 4) crée la carte, directement active (ADR 0008), car le jeton en clair n'existe que dans le PDF.
 - **Lot 2** : le check-in et le check-out appellent `activerAuPremierScan` (cartes en attente, y compris celles d'une réémission) ; les heures des présences s'affichent dans le fuseau de l'église avec `@date-fns/tz` (`src/lib/fuseau.ts`, ADR 0012).
-- **Comptes et rôles** (étape 8, cahier §7.10) : tout changement de rôle ou désactivation d'un membre passe par `modifierMembre` (`src/server/plateforme/badges.ts`), qui révoque le badge d'un membre qui n'est plus moniteur actif. **Lot 2** : le check-in d'un moniteur par badge utilise `resoudreJeton` (statuts `badge_remplace` et `badge_refuse`).
+- **Comptes et rôles** (étape 8, cahier §7.10, ADR 0014) : tout changement de rôle ou désactivation d'un membre passe par `modifierMembre` (`src/server/plateforme/badges.ts`), qui révoque le badge d'un membre qui n'est plus moniteur actif et applique les garde-fous des ADMIN. **Lot 3** : le compte ECRAN de l'écran d'appel n'est pas attribuable depuis Paramètres › Comptes. **Lot 5** : écran du super-administrateur pour les comptes de plusieurs églises. **Lot 2** : le check-in d'un moniteur par badge utilise `resoudreJeton` (statuts `badge_remplace` et `badge_refuse`).
 - **Tests e2e** : un test qui écrit travaille dans une église créée pour lui (`tests/e2e/support/eglise-isolee.ts`) ; la garde `support/garde-demo.ts` fait échouer la suite si les données de démonstration changent.
 - **Téléphones** (ADR 0011) : enregistrés au format E.164 (`+2290197451233`), affichés formatés. L'import CSV (étape 7) applique la même normalisation ; `Tuteur.telephone` est facultatif, mais le contact principal d'une famille finalisée a toujours un numéro valide (**lot 3** : le bouton Urgence peut compter dessus) ; les autres tuteurs peuvent ne pas en avoir. **Lot 3** : les liens `tel:` et `https://wa.me/` utilisent ce format (sans le « + » pour wa.me).
 

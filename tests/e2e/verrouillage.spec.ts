@@ -1,5 +1,6 @@
 import {
   PIN,
+  alerte,
   attendreAccueil,
   reinitialiserLimites,
   seConnecter,
@@ -25,7 +26,7 @@ test("la tablette se verrouille après 15 minutes et se déverrouille avec le PI
 
   await page.getByLabel("Code PIN").fill("111222");
   await page.getByRole("button", { name: "Déverrouiller" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Il vous reste 4 essais" })).toBeVisible();
+  await expect(alerte(page, "Il vous reste 4 essais")).toBeVisible();
 
   await page.getByLabel("Code PIN").fill(PIN);
   await page.getByRole("button", { name: "Déverrouiller" }).click();

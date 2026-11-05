@@ -1,19 +1,11 @@
 import type { Metadata } from "next";
 import { Pastille } from "@/components/hk/status-pill";
 import { NotchCard } from "@/components/hk/notch-card";
+import { LIBELLES_ROLES } from "@/lib/roles";
 import { getSessionCourante } from "@/lib/session";
 import { getEgliseActive } from "@/lib/tenant";
 
 export const metadata: Metadata = { title: "Accueil — Harvest Kids" };
-
-const LIBELLES_ROLES = {
-  ADMIN: "Administrateur",
-  RESPONSABLE: "Responsable",
-  ACCUEIL: "Accueil",
-  MONITEUR: "Moniteur",
-  INFIRMERIE: "Infirmerie",
-  ECRAN: "Écran d'appel",
-} as const;
 
 /** Placeholder home: the live dashboard arrives in lot 2. */
 export default async function Accueil() {

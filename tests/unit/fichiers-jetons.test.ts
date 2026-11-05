@@ -5,8 +5,10 @@ import {
   empreinteJeton,
   estJetonBadge,
   estJetonCarte,
+  FORMAT_JETON_COMPTE,
   genererJetonBadge,
   genererJetonCarte,
+  genererJetonCompte,
   typeJeton,
 } from "@/lib/jetons";
 
@@ -74,6 +76,15 @@ describe("jeton de badge moniteur", () => {
     expect(typeJeton(genererJetonCarte())).toBe("carte");
     expect(typeJeton("HK-0427")).toBeNull();
     expect(typeJeton(" HKF1.AAAAAAAAAAAAAAAAAAAAAA")).toBeNull();
+  });
+});
+
+describe("jeton de lien de compte (ADR 0014)", () => {
+  it("a le format HKC1. + 43 caractères base62, n'est ni une carte ni un badge, et ne se répète pas", () => {
+    const jetons = Array.from({ length: 200 }, genererJetonCompte);
+    for (const jeton of jetons) expect(jeton).toMatch(FORMAT_JETON_COMPTE);
+    expect(new Set(jetons).size).toBe(200);
+    expect(typeJeton(jetons[0]!)).toBeNull();
   });
 });
 
