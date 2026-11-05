@@ -108,10 +108,17 @@ export default async function FicheFamille({ params }: PageProps<"/familles/[id]
             {fiche.tuteurs.map((t) => (
               <li key={t.id}>
                 <p className="m-0 font-bold">
-                  {t.prenom} {t.nom} ({t.lien}){t.principal ? " · contact principal" : ""}
+                  {t.prenom} {t.nom}
+                  {t.lien ? ` (${t.lien})` : ""}
+                  {t.principal ? " · contact principal" : ""}
                 </p>
                 <p className="m-0">
-                  <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
+                  {/* Only a draft can lack it (CSV import): finalisation asks for it. */}
+                  {t.telephone ? (
+                    <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
+                  ) : (
+                    <span className="text-texte-doux">Téléphone à compléter</span>
+                  )}
                   {t.telephone2 ? <> · {formaterTelephone(t.telephone2)}</> : null}
                 </p>
               </li>

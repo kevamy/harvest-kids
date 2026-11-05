@@ -387,3 +387,135 @@ describe("isolation A/B", () => {
     expect(nomB.rows).toEqual([{ prenom: "Prénom" }]);
   });
 });
+
+// Tuteur.telephone is optional for drafts only (ADR 0013): a registered or finalised family
+// always has a number to call for every guardian (urgency button, lot 3).
+describe("numéro des tuteurs d'une famille enregistrée", () => {
+  const avecTelephone = (telephone: string) =>
+    saisie({ tuteurs: [{ ...saisie().tuteurs[0]!, telephone }] });
+
+  /** Guardians' numbers of a family, read as the owner inside church A. */
+  const numeros = (familleId: string) =>
+    enEglise(proprietaire, a.egliseId, async () => {
+      const { rows } = await proprietaire.query<{ telephone: string | null }>(
+        `SELECT telephone FROM "Tuteur" WHERE "familleId" = $1 ORDER BY principal DESC`,
+        [familleId],
+      );
+      return rows.map((r) => r.telephone);
+    });
+
+  it("l'inscription exige un numéro valide pour chaque tuteur", async () => {
+    await expect(
+      enregistrerFamille(dbA, AUTEUR, avecTelephone(""), photos("photo-tuteur"), stockage),
+    ).rejects.toThrow("Saisissez le téléphone du tuteur.");
+    await expect(
+      enregistrerFamille(dbA, AUTEUR, avecTelephone("illisible"), photos("photo-tuteur"), stockage),
+    ).rejects.toThrow(FamilleRefusee);
+    await expect(
+      enregistrerFamille(dbA, AUTEUR, avecTelephone("97451233"), photos("photo-tuteur"), stockage),
+    ).rejects.toThrow("Voulez-vous dire 01 97 45 12 33 ?");
+    expect(await dbA.famille.count()).toBe(1); // the fixture family only
+  });
+
+  it("la finalisation refuse un brouillon dont un tuteur reste sans numéro, même absent de la demande", async () => {
+    const brouillon = await dbA.$tx((tx) =>
+      creerBrouillon(tx, AUTEUR, "229", {
+        nom: "Houngbo",
+        tuteurs: [
+          {
+            prenom: "Rita",
+            nom: "Houngbo",
+            lien: "Mère",
+            telephone: "0197451233",
+            principal: true,
+          },
+          { prenom: "Paul", nom: "Houngbo", lien: "Père", telephone: null, principal: false },
+        ],
+        enfants: [{ prenom: "Délali", nom: "Houngbo", dateNaissance: new Date("2020-02-02") }],
+      }),
+    );
+    const fiche = (await lireFamille(dbA, brouillon.id))!;
+    const [rita, paul] = fiche.tuteurs;
+    const finalisation = (tuteurs: unknown[]) =>
+      enregistrerFamille(
+        dbA,
+        AUTEUR,
+        saisie({
+          nom: "Houngbo",
+          tuteurs,
+          enfants: [{ ...enfant("Délali", "2020-02-02"), id: fiche.enfants[0]!.id }],
+        }),
+        photos("photo-tuteur"),
+        stockage,
+        brouillon.id,
+      );
+    const tuteurRita = { ...saisie().tuteurs[0]!, id: rita!.id, prenom: "Rita", nom: "Houngbo" };
+    const tuteurPaul = {
+      ...saisie().tuteurs[0]!,
+      id: paul!.id,
+      prenom: "Paul",
+      nom: "Houngbo",
+      lien: "Père",
+      principal: false,
+      autorise: false,
+      photo: null,
+    };
+
+    // Paul left out of the request (forged): his row still has no number.
+    await expect(finalisation([tuteurRita])).rejects.toThrow(
+      "Chaque tuteur doit avoir un numéro de téléphone valide.",
+    );
+    let apres = (await lireFamille(dbA, brouillon.id))!;
+    expect(apres.finaliseeLe).toBeNull();
+    expect(apres.enfants[0]!.matricule).toBeNull();
+    expect(await numeros(brouillon.id)).toEqual(["+2290197451233", null]);
+
+    await expect(finalisation([tuteurRita, { ...tuteurPaul, telephone: "" }])).rejects.toThrow(
+      "Saisissez le téléphone du tuteur.",
+    );
+
+    await finalisation([tuteurRita, { ...tuteurPaul, telephone: "01 66 77 88 99" }]);
+    apres = (await lireFamille(dbA, brouillon.id))!;
+    expect(apres.finaliseeLe).not.toBeNull();
+    expect(await numeros(brouillon.id)).toEqual(["+2290197451233", "+2290166778899"]);
+  });
+
+  it("la modification ne peut pas retirer ni rendre invalide le dernier numéro", async () => {
+    const { familleId } = await enregistrerFamille(
+      dbA,
+      AUTEUR,
+      saisie(),
+      photos("photo-tuteur"),
+      stockage,
+    );
+    const fiche = (await lireFamille(dbA, familleId))!;
+    const modification = (telephone: string) =>
+      enregistrerFamille(
+        dbA,
+        AUTEUR,
+        saisie({
+          tuteurs: [
+            {
+              ...saisie().tuteurs[0]!,
+              id: fiche.tuteurs[0]!.id,
+              telephone,
+              photo: { conserver: true },
+            },
+          ],
+          enfants: fiche.enfants.map((e) => ({
+            ...enfant(e.prenom, e.dateNaissance.toISOString().slice(0, 10)),
+            id: e.id,
+          })),
+        }),
+        photos(),
+        stockage,
+        familleId,
+      );
+    for (const telephone of ["", "   ", "illisible", "97451233"]) {
+      await expect(modification(telephone), telephone).rejects.toThrow();
+    }
+    expect(await numeros(familleId)).toEqual(["+2290197451233"]);
+    await modification("01 66 77 88 99");
+    expect(await numeros(familleId)).toEqual(["+2290166778899"]);
+  });
+});

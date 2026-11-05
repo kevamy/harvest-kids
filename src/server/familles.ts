@@ -430,6 +430,21 @@ export async function enregistrerFamille(
         }
       }
 
+      // A saved family is never left without a phone to call (urgency button, lot 3): every
+      // guardian of the family, including one the request did not send (a draft guardian
+      // imported without a number), has a valid number. Checked on the rows themselves.
+      const sansNumero = await tx.tuteur.count({
+        where: { familleId: famille.id, telephone: null },
+      });
+      const avecNumero = await tx.tuteur.count({
+        where: { familleId: famille.id, telephone: { not: null } },
+      });
+      if (sansNumero > 0 || avecNumero === 0) {
+        throw new FamilleRefusee(
+          "Chaque tuteur doit avoir un numéro de téléphone valide. Complétez le numéro manquant, puis enregistrez.",
+        );
+      }
+
       for (const cle of contexte.remplacees) await programmerSuppression(tx, cle);
 
       await journaliser(tx, auteur, {
@@ -458,8 +473,10 @@ export async function enregistrerFamille(
 }
 
 /**
- * Draft family (CSV import, step 7): guardians and children without matricule, photo or
+ * Draft family (CSV import, ADR 0013): guardians and children without matricule, photo or
  * card, until it is finalised at the reception desk. Check-in refuses a draft (lot 2).
+ * A guardian's phone may be missing (absent, unreadable or not confirmed in the file):
+ * finalisation requires it.
  */
 export async function creerBrouillon(
   tx: Pick<ClientDeBase, "famille" | "tuteur" | "enfant" | "auditLog">,
@@ -467,23 +484,37 @@ export async function creerBrouillon(
   indicatif: string,
   brouillon: {
     nom: string;
-    tuteurs: { prenom: string; nom: string; lien: string; telephone: string; principal: boolean }[];
-    enfants: { prenom: string; nom: string; dateNaissance: Date }[];
+    tuteurs: {
+      prenom: string;
+      nom: string;
+      lien: string;
+      telephone: string | null;
+      principal: boolean;
+    }[];
+    enfants: { prenom: string; nom: string; dateNaissance: Date; sexe?: "F" | "M" | null }[];
   },
 ) {
   const famille = await tx.famille.create({
     data: { nom: brouillon.nom } as Prisma.FamilleUncheckedCreateInput,
     select: { id: true },
   });
-  for (const [i, t] of brouillon.tuteurs.entries()) {
-    const telephone = telephoneNormalise(t.telephone, indicatif, `Tuteur ${i + 1}, téléphone`);
-    await tx.tuteur.create({
-      data: { ...t, telephone, familleId: famille.id } as Prisma.TuteurUncheckedCreateInput,
+  if (brouillon.tuteurs.length > 0) {
+    await tx.tuteur.createMany({
+      data: brouillon.tuteurs.map(
+        (t, i) =>
+          ({
+            ...t,
+            telephone: telephoneOuNull(t.telephone, indicatif, `Tuteur ${i + 1}, téléphone`),
+            familleId: famille.id,
+          }) as Prisma.TuteurCreateManyInput,
+      ),
     });
   }
-  for (const e of brouillon.enfants) {
-    await tx.enfant.create({
-      data: { ...e, familleId: famille.id } as Prisma.EnfantUncheckedCreateInput,
+  if (brouillon.enfants.length > 0) {
+    await tx.enfant.createMany({
+      data: brouillon.enfants.map(
+        (e) => ({ ...e, familleId: famille.id }) as Prisma.EnfantCreateManyInput,
+      ),
     });
   }
   await journaliser(tx, auteur, {

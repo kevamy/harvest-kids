@@ -273,7 +273,9 @@ model Tuteur {
   prenom     String
   nom        String
   lien       String
-  telephone  String
+  /// Null only in a draft (CSV import, number missing, unreadable or not confirmed);
+  /// finalisation requires it (enregistrerFamille).
+  telephone  String?
   telephone2 String?
   whatsapp   String?
   principal  Boolean @default(false)
