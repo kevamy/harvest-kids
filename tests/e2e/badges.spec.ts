@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { attendreAccueil, reinitialiserLimites, seConnecter } from "./support/base";
-import { expect, test, type EgliseIsolee } from "./support/eglise-isolee";
+import { expect, jetonDeTest, test, type EgliseIsolee } from "./support/eglise-isolee";
 
 const empreinte = (jeton: string) => createHash("sha256").update(jeton, "utf8").digest("hex");
-const jeton = (lettre: string) => `HKB1.${lettre.repeat(22)}`;
+const jeton = (eglise: EgliseIsolee, lettre: string) => jetonDeTest("HKB1", eglise, lettre);
 
 test.beforeEach(reinitialiserLimites);
 
@@ -20,7 +20,7 @@ const insererBadge = (eglise: EgliseIsolee, lettre: string, revoque = false) =>
         `${eglise.id}_badge_${lettre}`,
         eglise.id,
         membreMoniteur(eglise),
-        empreinte(jeton(lettre)),
+        empreinte(jeton(eglise, lettre)),
         revoque,
       ],
     ),
@@ -65,18 +65,18 @@ test("le scan d'un badge : valide, remplacé ou d'une autre église", async ({
   await attendreAccueil(page, eglise.nom);
   await page.goto("/cartes/verifier");
   const champ = page.getByLabel("Scannez la carte ou saisissez son code");
-  const verifier = async (lettre: string, message: string) => {
-    await champ.fill(jeton(lettre));
+  const verifier = async (valeur: string, message: string) => {
+    await champ.fill(valeur);
     await champ.press("Enter");
     await expect(page.getByRole("status")).toHaveText(message);
   };
-  await verifier("V", "Badge moniteur valide.");
+  await verifier(jeton(eglise, "V"), "Badge moniteur valide.");
   await expect(page.getByText("Moniteur : Moniteur test")).toBeVisible();
   await verifier(
-    "R",
+    jeton(eglise, "R"),
     "Ce badge a été remplacé. Utilisez votre nouveau badge ou sélectionnez-vous dans la liste.",
   );
-  await verifier("B", "Cette carte n'appartient pas à cette église.");
+  await verifier(jeton(autreEglise, "B"), "Cette carte n'appartient pas à cette église.");
 });
 
 test("le responsable n'a pas accès aux badges", async ({ page, eglise }) => {

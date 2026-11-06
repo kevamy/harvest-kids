@@ -22,7 +22,7 @@ import {
 } from "@/server/plateforme/eglises";
 import { EGLISES_DEMO, seed } from "../../prisma/seed";
 import { BROUILLONS } from "../../prisma/seed-familles";
-import { type Client, connecter, creerEglise, viderBase } from "./support/db";
+import { type Client, connecter, creerEglise, enEglise, viderBase } from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 let base: PrismaClient;
@@ -258,6 +258,36 @@ describe("seed de démonstration", () => {
     expect(parSlug["demo-porto-novo"]?.logoKey).toBeNull();
 
     const second = await seed(base, stockage);
-    expect(second).toMatchObject({ comptesCrees: 0, familles: 0 });
+    expect(second).toMatchObject({ comptesCrees: 0, familles: 0, telephonesRepares: 0 });
+
+    // A database seeded before the ten-digit numbers (Neon): the seed repairs them, once.
+    const numeros = async () => {
+      const tous: { telephone: string | null; whatsapp: string | null }[] = [];
+      for (const { id } of eglises) {
+        const { rows } = await enEglise(proprietaire, id, () =>
+          proprietaire.query<(typeof tous)[number]>(
+            `SELECT "telephone", "whatsapp" FROM "Tuteur" ORDER BY "id"`,
+          ),
+        );
+        tous.push(...rows);
+      }
+      return tous;
+    };
+    const avant = await numeros();
+    const anciens = avant.filter((t) => t.telephone?.startsWith("+22901960")).length;
+    expect(anciens).toBeGreaterThan(0);
+    for (const { id } of eglises) {
+      await enEglise(proprietaire, id, () =>
+        proprietaire.query(
+          `UPDATE "Tuteur" SET "telephone" = left("telephone", -1), "whatsapp" = left("whatsapp", -1)
+             WHERE "telephone" LIKE '+22901960%'`,
+        ),
+      );
+    }
+    // "+229" and 9 national digits.
+    expect((await numeros()).some((t) => t.telephone?.length === 13)).toBe(true);
+    expect((await seed(base, stockage)).telephonesRepares).toBe(anciens);
+    expect(await numeros()).toEqual(avant);
+    expect((await seed(base, stockage)).telephonesRepares).toBe(0);
   }, 240_000);
 });

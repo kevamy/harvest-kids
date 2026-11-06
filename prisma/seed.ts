@@ -10,7 +10,7 @@ import { creerEgliseAvecDefauts } from "../src/server/plateforme/eglises";
 import { logoEgliseFictif } from "../src/server/plateforme/images-demo";
 import { cleFichier } from "../src/lib/fichiers";
 import { stockage, type Stockage } from "../src/lib/storage";
-import { semerFamilles } from "./seed-familles";
+import { type DansEglise, reparerTelephonesDemo, semerFamilles } from "./seed-familles";
 import { autorisationSeed } from "./seed-garde";
 
 try {
@@ -122,17 +122,16 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
   }
 
   let familles = 0;
+  let telephonesRepares = 0;
   for (const [i, eglise] of EGLISES_DEMO.entries()) {
     const egliseId = ids[eglise.cle]!;
-    familles += await semerFamilles(
-      (fn) => withEglise(base, egliseId, fn),
-      egliseId,
-      1000 + i * 97,
-      stockage,
-    );
+    const dansEglise: DansEglise = (fn) => withEglise(base, egliseId, fn);
+    familles += await semerFamilles(dansEglise, egliseId, 1000 + i * 97, stockage);
+    // Demonstration churches only: data seeded before the ten-digit numbers.
+    telephonesRepares += await reparerTelephonesDemo(dansEglise);
   }
 
-  return { eglises: Object.keys(ids).length, comptesCrees, familles };
+  return { eglises: Object.keys(ids).length, comptesCrees, familles, telephonesRepares };
 }
 
 async function main() {
@@ -144,7 +143,7 @@ async function main() {
     const resultat = await seed(base, stockage());
     // Counts only: no personal data in logs.
     console.log(
-      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés.`,
+      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés, ${resultat.telephonesRepares} numéros de tuteur réparés.`,
     );
   } finally {
     await base.$disconnect();

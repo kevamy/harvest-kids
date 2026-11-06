@@ -113,8 +113,19 @@ test("l'accueil inscrit une famille de 3 enfants et la retrouve par la recherche
   const inscrite = page
     .getByRole("list", { name: "Familles inscrites" })
     .getByRole("link", { name: `Famille ${nom}` });
-  await expect(inscrite).toContainText("HK-0001");
-  await expect(inscrite).toContainText("Contact principal : Mireille Agbodjan");
+  await expect(inscrite).toContainText(
+    "Contact principal : Mireille Agbodjan · +229 01 97 45 12 33",
+  );
+  // A list-size matricule (the large style is for scans and records), on its first name's line.
+  const milieu = async (texte: string) => {
+    const boite = (await inscrite.getByText(texte, { exact: true }).boundingBox())!;
+    return boite.y + boite.height / 2;
+  };
+  for (const [i, [prenom]] of enfants.entries()) {
+    const matricule = `HK-000${i + 1}`;
+    await expect(inscrite.getByText(matricule, { exact: true })).toHaveCSS("font-size", "20px");
+    expect(Math.abs((await milieu(matricule)) - (await milieu(prenom)))).toBeLessThan(6);
+  }
   await expect(inscrite).toContainText("Sans carte");
   await inscrite.click();
   await expect(page.getByRole("heading", { name: `Famille ${nom}`, level: 1 })).toBeVisible();

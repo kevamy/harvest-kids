@@ -394,5 +394,7 @@ describe("limites par personne, pas par église", () => {
         statut: "deverrouille",
       });
     }
-  });
+    // About 90 deliberately slow hashes (15 passwords, 15 PINs, 60 PIN checks), in sequence:
+    // over 20 s on a loaded workstation. Fifteen monitors stay the point of the test.
+  }, 60_000);
 });

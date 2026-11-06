@@ -1,6 +1,8 @@
-# Loads the fictitious demonstration data into the Neon test database, once,
-# by hand only. Never production: the VPS image does not contain the seed, and the
-# seed itself refuses a remote database without HK_SEED_DEMO and a chosen password.
+# Loads the fictitious demonstration data into the Neon test database, by hand only.
+# Idempotent: on a filled database it creates nothing and repairs the demonstration
+# guardians' numbers seeded before the ten-digit plan (9 digits, ADR 0011).
+# Never production: the VPS image does not contain the seed, and the seed itself refuses
+# a remote database without HK_SEED_DEMO and a chosen password.
 name: Données de démonstration Neon
 
 on:

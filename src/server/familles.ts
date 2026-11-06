@@ -570,7 +570,8 @@ export function lireFamille(db: Pick<ClientDeBase, "famille">, familleId: string
         },
       },
       enfants: {
-        orderBy: [{ actif: "desc" }, { dateNaissance: "asc" }],
+        // Eldest first; twins by first name.
+        orderBy: [{ actif: "desc" }, { dateNaissance: "asc" }, { prenom: "asc" }],
         select: {
           id: true,
           prenom: true,
@@ -686,7 +687,7 @@ export async function listerFamillesInscrites(db: Pick<ClientDeBase, "famille">,
       nom: true,
       enfants: {
         where: { actif: true },
-        orderBy: { dateNaissance: "asc" },
+        orderBy: [{ dateNaissance: "asc" }, { prenom: "asc" }],
         select: { prenom: true, matricule: true },
       },
       tuteurs: {

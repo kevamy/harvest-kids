@@ -290,5 +290,23 @@ export async function semerFamilles(
   return nombre + BROUILLONS;
 }
 
+/**
+ * Repairs the guardians' numbers of a church seeded before the ten-digit plan (Neon test
+ * data, ADR 0011): "+22901960" and four digits gets the trailing 0 the seed now writes, for
+ * the phone and the WhatsApp number. Idempotent: a repaired number no longer matches.
+ * Returns the number of guardians repaired.
+ */
+export function reparerTelephonesDemo(dansEglise: DansEglise): Promise<number> {
+  return dansEglise(async (tx) => {
+    const repares = await tx.$executeRaw`
+      UPDATE "Tuteur" SET "telephone" = "telephone" || '0'
+        WHERE "telephone" ~ '^[+]22901960[0-9]{4}$'`;
+    await tx.$executeRaw`
+      UPDATE "Tuteur" SET "whatsapp" = "whatsapp" || '0'
+        WHERE "whatsapp" ~ '^[+]22901960[0-9]{4}$'`;
+    return repares;
+  });
+}
+
 /** Drafts per demonstration church, besides its 20 to 40 finalised families. */
 export const BROUILLONS = 3;

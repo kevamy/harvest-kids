@@ -269,6 +269,30 @@ describe("familles inscrites", () => {
     ]);
   });
 
+  it("ordonne les enfants du plus âgé au plus jeune, dans la liste et sur la fiche", async () => {
+    // Entered youngest first, with twins: the order comes from the birth dates.
+    const { familleId } = await enregistrerFamille(
+      dbA,
+      AUTEUR,
+      saisie({
+        enfants: [
+          enfant("Koffi", "2023-01-20"),
+          enfant("Sèna", "2021-08-02"),
+          enfant("Ayo", "2019-03-14"),
+          enfant("Afi", "2021-08-02"),
+        ],
+      }),
+      photos("photo-tuteur"),
+      stockage,
+    );
+    const attendu = ["Ayo", "Afi", "Sèna", "Koffi"];
+    const liste = await listerFamillesInscrites(dbA, 1);
+    expect(liste.familles.find((f) => f.id === familleId)!.enfants.map((e) => e.prenom)).toEqual(
+      attendu,
+    );
+    expect((await lireFamille(dbA, familleId))!.enfants.map((e) => e.prenom)).toEqual(attendu);
+  });
+
   it("pagine par 25 et ramène une page hors limites à la plus proche", async () => {
     await inscrire(Array.from({ length: 30 }, (_, i) => `Famille ${String(i).padStart(2, "0")}`));
     const premiere = await listerFamillesInscrites(dbA, 1);
