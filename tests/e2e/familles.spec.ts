@@ -75,8 +75,12 @@ test("l'accueil inscrit une famille de 3 enfants et la retrouve par la recherche
   await page.getByLabel(/J'accepte que les données de mes enfants/).check();
   await page.getByRole("button", { name: "Enregistrer l'inscription" }).click();
 
-  await expect(page).toHaveURL(/\/familles\/(?!nouvelle)[^/]+$/, { timeout: 15_000 });
+  // The record of the new family, with a confirmation repeating the button's verb.
+  await expect(page).toHaveURL(/\/familles\/(?!nouvelle)[^/?]+\?confirmation=inscription$/, {
+    timeout: 15_000,
+  });
   await expect(page.getByRole("heading", { name: `Famille ${nom}`, level: 1 })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Inscription enregistrée.");
   const sectionEnfants = page.locator("section", {
     has: page.getByRole("heading", { name: "Enfants", level: 2 }),
   });
@@ -102,6 +106,18 @@ test("l'accueil inscrit une famille de 3 enfants et la retrouve par la recherche
       terme,
     ).toBeVisible();
   }
+
+  // Without searching, the family is in the registered families list; a click opens it.
+  await page.goto("/familles");
+  await expect(page.getByRole("heading", { name: "Familles inscrites (1)" })).toBeVisible();
+  const inscrite = page
+    .getByRole("list", { name: "Familles inscrites" })
+    .getByRole("link", { name: `Famille ${nom}` });
+  await expect(inscrite).toContainText("HK-0001");
+  await expect(inscrite).toContainText("Contact principal : Mireille Agbodjan");
+  await expect(inscrite).toContainText("Sans carte");
+  await inscrite.click();
+  await expect(page.getByRole("heading", { name: `Famille ${nom}`, level: 1 })).toBeVisible();
 });
 
 test("le moniteur n'a pas accès aux familles", async ({ page }, testInfo) => {

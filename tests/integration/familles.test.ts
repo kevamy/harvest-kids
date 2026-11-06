@@ -14,11 +14,13 @@ import { creerStockageLocal } from "@/lib/storage/local";
 import type { Stockage } from "@/lib/storage";
 import { clientEglise, type ClientEglise } from "@/lib/tenant";
 import {
+  FAMILLES_PAR_PAGE,
   FamilleRefusee,
   MESSAGE_CONTACT_SANS_NUMERO,
   creerBrouillon,
   enregistrerFamille,
   lireFamille,
+  listerFamillesInscrites,
   rechercherFamilles,
   type FichierRecu,
 } from "@/server/familles";
@@ -119,13 +121,14 @@ async function fichiers() {
 
 describe("inscription", () => {
   it("inscrit une famille de 3 enfants : matricules par église, photos de l'adulte en WebP", async () => {
-    const { familleId } = await enregistrerFamille(
+    const { familleId, enregistrement } = await enregistrerFamille(
       dbA,
       AUTEUR,
       saisie(),
       photos("photo-tuteur", "photo-ayo"),
       stockage,
     );
+    expect(enregistrement).toBe("inscription");
     const fiche = (await lireFamille(dbA, familleId))!;
     expect(fiche.finaliseeLe).not.toBeNull();
     expect(fiche.enfants.map((e) => e.matricule).sort()).toEqual(["HK-0002", "HK-0003", "HK-0004"]);
@@ -205,6 +208,86 @@ describe("inscription", () => {
     await expect(
       enregistrerFamille(dbA, AUTEUR, deux, photos("photo-tuteur"), stockage),
     ).rejects.toThrow("Désignez un seul tuteur comme contact principal.");
+  });
+});
+
+describe("familles inscrites", () => {
+  /** Finalised families inserted directly in church A (as the owner, under its RLS). */
+  const inscrire = (noms: string[]) =>
+    enEglise(proprietaire, a.egliseId, async () => {
+      for (const nom of noms) {
+        await proprietaire.query(
+          `INSERT INTO "Famille" (id, "egliseId", nom, "finaliseeLe", "updatedAt")
+           VALUES ($1, $2, $3, now(), now())`,
+          [`famille_${nom}`, a.egliseId, nom],
+        );
+      }
+    });
+
+  it("liste les familles finalisées par nom, avec enfants, contact principal et état de la carte", async () => {
+    const { familleId } = await enregistrerFamille(
+      dbA,
+      AUTEUR,
+      saisie(),
+      photos("photo-tuteur"),
+      stockage,
+    );
+    await dbA.$tx((tx) =>
+      creerBrouillon(tx, AUTEUR, "229", {
+        nom: "Brouillon",
+        tuteurs: [],
+        enfants: [{ prenom: "Ayo", nom: "Brouillon", dateNaissance: new Date("2020-02-02") }],
+      }),
+    );
+    await inscrire(["Zinsou", "Bada"]);
+    await enEglise(proprietaire, a.egliseId, () =>
+      proprietaire.query(
+        `INSERT INTO "CarteFamille" (id, "egliseId", "familleId", "tokenHash", "activeLe") VALUES
+           ('carte_active', $1, $2, repeat('a', 64), now()),
+           ('carte_attente', $1, 'famille_Zinsou', repeat('b', 64), NULL)`,
+        [a.egliseId, familleId],
+      ),
+    );
+
+    const liste = await listerFamillesInscrites(dbA, 1);
+    // The draft is not listed; the fixture family ("Famille a") is.
+    expect(liste.total).toBe(4);
+    expect(liste.familles.map((f) => f.nom)).toEqual(["Adjovi", "Bada", "Famille a", "Zinsou"]);
+    const adjovi = liste.familles[0]!;
+    expect(adjovi.enfants.map((e) => e.prenom)).toEqual(["Ayo", "Sèna", "Koffi"]);
+    expect(adjovi.enfants.every((e) => /^HK-\d{4}$/.test(e.matricule!))).toBe(true);
+    expect(adjovi.contact).toEqual({
+      prenom: "Mireille",
+      nom: "Adjovi",
+      telephone: "+2290197451233",
+    });
+    expect(liste.familles.map((f) => f.carte)).toEqual([
+      "active",
+      "aucune",
+      "aucune",
+      "en_attente",
+    ]);
+  });
+
+  it("pagine par 25 et ramène une page hors limites à la plus proche", async () => {
+    await inscrire(Array.from({ length: 30 }, (_, i) => `Famille ${String(i).padStart(2, "0")}`));
+    const premiere = await listerFamillesInscrites(dbA, 1);
+    expect(premiere).toMatchObject({ total: 31, page: 1, pages: 2 });
+    expect(premiere.familles).toHaveLength(FAMILLES_PAR_PAGE);
+    const seconde = await listerFamillesInscrites(dbA, 2);
+    expect(seconde.familles).toHaveLength(6);
+    expect(new Set([...premiere.familles, ...seconde.familles].map((f) => f.id)).size).toBe(31);
+    expect((await listerFamillesInscrites(dbA, 99)).page).toBe(2);
+    expect((await listerFamillesInscrites(dbA, Number.NaN)).page).toBe(1);
+  });
+
+  it("isolation A/B : chaque église ne liste que ses familles", async () => {
+    await inscrire(["Hounkpè"]);
+    const nomsB = (await listerFamillesInscrites(dbB, 1)).familles.map((f) => f.nom);
+    expect(nomsB).toEqual(["Famille b"]);
+    const nomsA = (await listerFamillesInscrites(dbA, 1)).familles.map((f) => f.nom);
+    expect(nomsA).toEqual(["Famille a", "Hounkpè"]);
+    expect((await listerFamillesInscrites(dbB, 1)).total).toBe(1);
   });
 });
 
