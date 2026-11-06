@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { creerCompte, rattacherMembre } from "./comptes";
+import { creerCompte, emettreJetonCompte, rattacherMembre } from "./comptes";
 import type { TransactionPrisma } from "./db";
 
 /**
@@ -51,7 +51,6 @@ export const schemaNouvelleEglise = z.object({
   admin: z.object({
     nom: z.string().trim().min(2, "Saisissez le nom de l'administrateur."),
     email: z.email("Saisissez une adresse e-mail valide.").transform((e) => e.toLowerCase()),
-    motDePasse: z.string().min(10, "Le mot de passe provisoire compte au moins 10 caractères."),
   }),
 });
 export type NouvelleEglise = z.infer<typeof schemaNouvelleEglise>;
@@ -86,7 +85,12 @@ export async function creerEgliseAvecDefauts(
   });
 }
 
-export type ResultatCreation = { statut: "creee"; egliseId: string } | { statut: "slug_pris" };
+/**
+ * `jeton`: activation link of a new first administrator (ADR 0014), shown once to the
+ * super-administrator; null when an existing account was attached.
+ */
+export type ResultatCreation =
+  { statut: "creee"; egliseId: string; jeton: string | null } | { statut: "slug_pris" };
 
 /**
  * Creates a church, its defaults and its first administrator in one transaction
@@ -101,7 +105,7 @@ export async function creerEgliseAvecPremierAdmin(
   if (await base.eglise.findUnique({ where: { slug: donnees.slug }, select: { id: true } })) {
     return { statut: "slug_pris" };
   }
-  const egliseId = await base.$transaction(async (tx) => {
+  const { egliseId, jeton } = await base.$transaction(async (tx) => {
     const eglise = await tx.eglise.create({
       data: {
         nom: donnees.nom,
@@ -117,14 +121,19 @@ export async function creerEgliseAvecPremierAdmin(
       where: { email: donnees.admin.email },
       select: { id: true },
     });
+    // A new administrator chooses their password through a one-time link (ADR 0014).
     const userId =
       existant?.id ??
-      (await creerCompte(tx, {
-        nom: donnees.admin.nom,
-        email: donnees.admin.email,
-        motDePasse: donnees.admin.motDePasse,
-      }));
+      (await creerCompte(tx, { nom: donnees.admin.nom, email: donnees.admin.email }));
     await rattacherMembre(tx, { userId, egliseId: eglise.id, roles: ["ADMIN"] });
+    const jeton = existant
+      ? null
+      : await emettreJetonCompte(tx, {
+          userId,
+          egliseId: eglise.id,
+          type: "ACTIVATION",
+          creePar: superAdminId,
+        });
 
     // Platform audit: identifiers only, no personal data.
     await tx.auditPlateforme.create({
@@ -135,9 +144,9 @@ export async function creerEgliseAvecPremierAdmin(
         detail: { slug: donnees.slug, compteExistant: Boolean(existant) },
       },
     });
-    return eglise.id;
+    return { egliseId: eglise.id, jeton };
   });
-  return { statut: "creee", egliseId };
+  return { statut: "creee", egliseId, jeton };
 }
 
 export async function changerStatutEglise(

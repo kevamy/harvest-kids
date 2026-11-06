@@ -8,8 +8,9 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { analyserCle } from "@/lib/fichiers";
-import { FORMAT_EMPREINTE } from "@/lib/jetons";
+import { FORMAT_EMPREINTE, empreinteJeton } from "@/lib/jetons";
 import { creerStockageLocal } from "@/lib/storage/local";
+import { normaliserTelephone } from "@/lib/telephone";
 import { clientEglise } from "@/lib/tenant";
 import { creerCompte, rattacherMembre } from "@/server/plateforme/comptes";
 import { creerClientPlateforme } from "@/server/plateforme/db";
@@ -20,6 +21,7 @@ import {
   type NouvelleEglise,
 } from "@/server/plateforme/eglises";
 import { EGLISES_DEMO, seed } from "../../prisma/seed";
+import { BROUILLONS } from "../../prisma/seed-familles";
 import { type Client, connecter, creerEglise, viderBase } from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
@@ -32,7 +34,7 @@ const nouvelle = (slug: string, email = `admin.${slug}@harvest-kids.test`): Nouv
   nom: `Église ${slug}`,
   slug,
   fuseau: "Africa/Porto-Novo",
-  admin: { nom: "Premier admin", email, motDePasse: "Provisoire-2026" },
+  admin: { nom: "Premier admin", email },
 });
 
 beforeAll(async () => {
@@ -72,9 +74,28 @@ describe("création d'une église depuis la plateforme", () => {
 
     const admin = await base.user.findUniqueOrThrow({
       where: { email: "admin.eglise-test@harvest-kids.test" },
-      select: { membres: { select: { egliseId: true, roles: true } } },
+      select: {
+        membres: { select: { egliseId: true, roles: true } },
+        comptes: { select: { password: true } },
+        jetonsCompte: { select: { type: true, tokenHash: true, egliseId: true, creePar: true } },
+      },
     });
     expect(admin.membres).toEqual([{ egliseId: resultat.egliseId, roles: ["ADMIN"] }]);
+    // No password chosen by the super-administrator: a 7-day activation link (ADR 0014).
+    expect(admin.comptes).toEqual([]);
+    expect(resultat.jeton).toMatch(/^HKC1\./);
+    expect(admin.jetonsCompte).toEqual([
+      {
+        type: "ACTIVATION",
+        tokenHash: empreinteJeton(resultat.jeton!),
+        egliseId: resultat.egliseId,
+        creePar: superAdminId,
+      },
+    ]);
+    const { rows } = await proprietaire.query<{ duree: string }>(
+      `SELECT ("expireLe" - "createdAt")::text AS duree FROM "JetonCompte"`,
+    );
+    expect(rows[0]!.duree).toMatch(/^7 days/);
 
     const audit = await base.auditPlateforme.findMany({ where: { egliseId: resultat.egliseId } });
     expect(audit).toMatchObject([{ action: "eglise.creer", userId: superAdminId }]);
@@ -103,9 +124,10 @@ describe("création d'une église depuis la plateforme", () => {
       nouvelle("deuxieme", "deja@harvest-kids.test"),
       superAdminId,
     );
-    expect(resultat.statut).toBe("creee");
+    expect(resultat).toMatchObject({ statut: "creee", jeton: null });
     expect(await base.user.count({ where: { email: "deja@harvest-kids.test" } })).toBe(1);
     expect(await base.membre.count({ where: { userId: existant } })).toBe(2);
+    expect(await base.jetonCompte.count()).toBe(0);
   });
 
   it("suspend et réactive une église, avec une trace dans le journal de plateforme", async () => {
@@ -172,13 +194,41 @@ describe("seed de démonstration", () => {
     let total = 0;
     for (const eglise of eglises) {
       const db = clientEglise(base, eglise.id);
-      const familles = await db.famille.count();
+      const familles = await db.famille.count({ where: { finaliseeLe: { not: null } } });
       expect(familles).toBeGreaterThanOrEqual(20);
       expect(familles).toBeLessThanOrEqual(40);
-      total += familles;
+      // Drafts as left by a CSV import (ADR 0013): no matricule, no card.
+      const brouillons = await db.famille.findMany({
+        where: { finaliseeLe: null },
+        select: {
+          enfants: { select: { matricule: true } },
+          tuteurs: { select: { telephone: true } },
+        },
+      });
+      expect(brouillons).toHaveLength(BROUILLONS);
+      expect(brouillons.flatMap((f) => f.enfants).every((e) => e.matricule === null)).toBe(true);
+      expect(brouillons.flatMap((f) => f.tuteurs).some((t) => t.telephone === null)).toBe(true);
+      total += familles + brouillons.length;
+
+      // Every stored number is valid E.164 (ADR 0011).
+      const numeros = await db.tuteur.findMany({
+        where: { telephone: { not: null } },
+        select: { telephone: true },
+      });
+      for (const { telephone } of numeros) {
+        expect(normaliserTelephone(telephone!, "229"), telephone!).toEqual({
+          statut: "valide",
+          e164: telephone,
+        });
+      }
 
       // RG-01: HK-0001…HK-N without gaps, per church.
-      const matricules = (await db.enfant.findMany({ select: { matricule: true } }))
+      const matricules = (
+        await db.enfant.findMany({
+          where: { matricule: { not: null } },
+          select: { matricule: true },
+        })
+      )
         .map((e) => e.matricule)
         .sort();
       expect(matricules[0]).toBe("HK-0001");

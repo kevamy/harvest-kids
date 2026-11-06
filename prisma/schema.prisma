@@ -125,6 +125,7 @@ model User {
   membres         Membre[]
   sessions        AuthSession[]
   comptes         AuthAccount[]
+  jetonsCompte    JetonCompte[]
   accesSupport    AccesSupport[]
   forcagesClasses SessionClasse[] @relation("ForcageClasse")
 }
@@ -179,6 +180,31 @@ model AuditPlateforme {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+enum TypeJetonCompte {
+  ACTIVATION
+  REINITIALISATION
+}
+
+// Lien d'activation d'un compte ou de réinitialisation de son mot de passe (cahier §7.10,
+// ADR 0014). Hors RLS : la page d'activation est publique et ne connaît pas l'église. Seule
+// l'empreinte SHA-256 du jeton est stockée. L'échéance est posée en SQL selon le type
+// (now() + 7 jours ou 24 heures) et comparée à now() de PostgreSQL.
+model JetonCompte {
+  id         String          @id @default(cuid())
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  egliseId   String // église de l'administrateur qui l'a émis (pas de relation : audit)
+  type       TypeJetonCompte
+  tokenHash  String          @unique
+  expireLe   DateTime
+  consommeLe DateTime?
+  revoqueLe  DateTime? // remplacé par un nouveau lien
+  creePar    String // userId de l'administrateur (ou du super-administrateur)
+  createdAt  DateTime        @default(now())
+
+  @@index([userId, type])
 }
 
 // ---------- Tables Better Auth

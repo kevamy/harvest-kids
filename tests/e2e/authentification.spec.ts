@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   EGLISES,
   EMAIL_DEUX_EGLISES,
+  alerte,
   attendreAccueil,
   derniereActivite,
   egliseDuProjet,
@@ -48,9 +49,7 @@ test("un mauvais mot de passe affiche un message qui dit quoi faire", async ({
   page,
 }, testInfo) => {
   await seConnecter(page, email("accueil", egliseDuProjet(testInfo)), "pas-le-bon-mot-de-passe");
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Identifiant ou mot de passe incorrect" }),
-  ).toBeVisible();
+  await expect(alerte(page, "Identifiant ou mot de passe incorrect")).toBeVisible();
   await expect(page).toHaveURL(/\/connexion/);
 });
 

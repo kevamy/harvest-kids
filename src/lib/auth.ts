@@ -56,15 +56,18 @@ export function creerAuth(options: {
       autoSignIn: false,
     },
 
+    // Sign-in goes through the Server Action only, which counts attempts per identifier
+    // first (limitation.ts, ADR 0003). The raw HTTP endpoint would bypass that count, and
+    // its own limit is per IP address (a whole church). auth.api.signInEmail on the server
+    // is not affected by this list.
+    disabledPaths: ["/sign-in/email"],
+
     rateLimit: {
       enabled: true,
       storage: "database",
       modelName: "authRateLimit",
       window: 60,
       max: 100,
-      customRules: {
-        "/sign-in/email": { window: 15 * 60, max: 10 },
-      },
     },
 
     advanced: {

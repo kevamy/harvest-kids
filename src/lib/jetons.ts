@@ -31,6 +31,17 @@ export function genererJetonBadge(): string {
   return `HKB1.${aleatoireBase62(22)}`;
 }
 
+/**
+ * Account link (activation or password reset, ADR 0014): `HKC1.` and 43 base62 characters
+ * (~256 bits). Shown once to the administrator, sent by them (WhatsApp, SMS); only its
+ * SHA-256 fingerprint is stored.
+ */
+export const FORMAT_JETON_COMPTE = /^HKC1\.[0-9A-Za-z]{43}$/;
+
+export function genererJetonCompte(): string {
+  return `HKC1.${aleatoireBase62(43)}`;
+}
+
 export function estJetonCarte(valeur: string): boolean {
   return FORMAT_JETON_CARTE.test(valeur);
 }

@@ -33,6 +33,13 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
     action: "eglise.parametrer",
   },
   {
+    href: "/parametres/comptes",
+    titre: "Comptes et rôles",
+    description:
+      "Ajouter un compte, changer ses rôles, le désactiver, réinitialiser un mot de passe.",
+    action: "comptes.gerer",
+  },
+  {
     href: "/parametres/badges",
     titre: "Badges moniteurs",
     description: "Badges à scanner pour la présence des moniteurs, aux formats des cartes.",

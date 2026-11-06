@@ -6,10 +6,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { INTERVALLE_ENREGISTREMENT_MS } from "@/lib/activite";
 import { creerAuth, type Auth } from "@/lib/auth";
+import { analyserIdentifiant } from "@/lib/identifiant";
+import { empreinteJeton } from "@/lib/jetons";
 import { MAX_ECHECS_PIN } from "@/lib/pin";
 import { creerCompte, rattacherMembre } from "@/server/plateforme/comptes";
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { consommer, REGLES_CONNEXION } from "@/server/plateforme/limitation";
+import {
+  GARDE_IP,
+  REGLES_ACTIVATION,
+  REGLES_CONNEXION,
+  consommer,
+  consommerDans,
+  essaisActivation,
+  essaisConnexion,
+} from "@/server/plateforme/limitation";
 import { definirPin, deverrouillerAvecPin, reinitialiserEchecsPin } from "@/server/plateforme/pin";
 import {
   choisirEgliseActive,
@@ -264,5 +274,125 @@ describe("limitation des tentatives de connexion", () => {
       Array.from({ length: 20 }, () => consommer(base, "connexion:rafale", regle, t0)),
     );
     expect(resultats.filter((r) => r.autorise)).toHaveLength(regle.max);
+  });
+});
+
+describe("connexion", () => {
+  it("la route HTTP de connexion de Better Auth est fermée ; la connexion du serveur fonctionne", async () => {
+    const reponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+        body: JSON.stringify({ email: "accueil.a@harvest-kids.test", password: MOT_DE_PASSE }),
+      }),
+    );
+    expect(reponse.status).toBe(404);
+    await expect(connexion("accueil.a@harvest-kids.test")).resolves.toBeDefined();
+  });
+
+  it("un numéro béninois à 8 chiffres retrouve le compte enregistré au format 01", async () => {
+    const identifiant = analyserIdentifiant("97 00 00 01");
+    expect(identifiant).toEqual({ type: "telephone", valeur: "+2290197000001" });
+    const compte = await base.user.findUnique({
+      where: { telephone: identifiant!.valeur },
+      select: { id: true },
+    });
+    expect(compte?.id).toBe(comptes.accueilA);
+  });
+});
+
+// Every tablet of a church shares one public IP address (ADR 0003): attempts are counted
+// per person first, and the IP limit is only a guard, high enough for a whole church.
+describe("limites par personne, pas par église", () => {
+  const IP_EGLISE = "41.138.0.12";
+  const moniteurs = Array.from({ length: 15 }, (_, i) => `moniteur${i}@harvest-kids.test`);
+
+  it("connexion : 15 moniteurs différents depuis la même IP ne sont pas bloqués", async () => {
+    const t0 = new Date();
+    for (const identifiant of moniteurs) {
+      // Three wrong passwords each: 45 attempts from the church's address.
+      for (let i = 0; i < 3; i++) {
+        const essai = await consommerDans(base, essaisConnexion(identifiant, IP_EGLISE), t0);
+        expect(essai.autorise, identifiant).toBe(true);
+      }
+    }
+    // One identifier is still limited on its own (5 attempts).
+    for (let i = 0; i < 2; i++) {
+      await consommerDans(base, essaisConnexion(moniteurs[0]!, IP_EGLISE), t0);
+    }
+    expect(
+      (await consommerDans(base, essaisConnexion(moniteurs[0]!, IP_EGLISE), t0)).autorise,
+    ).toBe(false);
+    expect(
+      (await consommerDans(base, essaisConnexion(moniteurs[1]!, IP_EGLISE), t0)).autorise,
+    ).toBe(true);
+  });
+
+  it("connexion : la limite par IP reste un garde-fou, à 300 essais par 15 minutes", async () => {
+    expect(GARDE_IP).toEqual({ fenetreMs: 15 * 60 * 1000, max: 300 });
+    const t0 = new Date();
+    for (let i = 0; i < GARDE_IP.max; i++) {
+      await consommerDans(base, essaisConnexion(`personne${i}@harvest-kids.test`, IP_EGLISE), t0);
+    }
+    const refus = await consommerDans(
+      base,
+      essaisConnexion("nouveau@harvest-kids.test", IP_EGLISE),
+      t0,
+    );
+    expect(refus.autorise).toBe(false);
+    // Another church (another address) is not affected.
+    expect(
+      (await consommerDans(base, essaisConnexion("nouveau@harvest-kids.test", "41.138.9.9"), t0))
+        .autorise,
+    ).toBe(true);
+  });
+
+  it("activation : 15 liens différents depuis la même IP ne sont pas bloqués ; un lien l'est seul", async () => {
+    const t0 = new Date();
+    const liens = moniteurs.map((m) => empreinteJeton(`HKC1.${m}`));
+    for (const empreinte of liens) {
+      for (let i = 0; i < 3; i++) {
+        expect(
+          (await consommerDans(base, essaisActivation(empreinte, IP_EGLISE), t0)).autorise,
+        ).toBe(true);
+      }
+    }
+    for (let i = 3; i < REGLES_ACTIVATION.jeton.max; i++) {
+      await consommerDans(base, essaisActivation(liens[0]!, IP_EGLISE), t0);
+    }
+    expect((await consommerDans(base, essaisActivation(liens[0]!, IP_EGLISE), t0)).autorise).toBe(
+      false,
+    );
+    expect((await consommerDans(base, essaisActivation(liens[1]!, IP_EGLISE), t0)).autorise).toBe(
+      true,
+    );
+  });
+
+  it("PIN : 15 moniteurs qui se trompent chacun 4 fois ne sont pas bloqués", async () => {
+    const maintenant = new Date();
+    for (const [i, email] of moniteurs.entries()) {
+      const userId = await creerCompte(base, {
+        nom: `Moniteur ${i}`,
+        email,
+        motDePasse: MOT_DE_PASSE,
+      });
+      await rattacherMembre(base, {
+        userId,
+        egliseId: a.egliseId,
+        roles: ["MONITEUR"],
+        pin: "482913",
+      });
+      const cible = { sessionId: `session_${i}`, userId, egliseId: a.egliseId };
+      for (let essai = 1; essai < MAX_ECHECS_PIN; essai++) {
+        expect(await deverrouillerAvecPin(base, cible, "205871", maintenant)).toEqual({
+          statut: "incorrect",
+          essaisRestants: MAX_ECHECS_PIN - essai,
+        });
+      }
+      // The PIN is counted per member: the right PIN still unlocks.
+      expect(await deverrouillerAvecPin(base, cible, "482913", maintenant)).toEqual({
+        statut: "deverrouille",
+      });
+    }
   });
 });

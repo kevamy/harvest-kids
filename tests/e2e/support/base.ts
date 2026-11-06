@@ -42,7 +42,17 @@ export async function avecBase<T>(fn: (client: pg.Client) => Promise<T>): Promis
 
 /** Sign-in attempts are throttled; tests start from a clean slate. */
 export async function reinitialiserLimites() {
-  await avecBase((c) => c.query(`DELETE FROM "AuthRateLimit" WHERE key LIKE 'connexion:%'`));
+  await avecBase((c) =>
+    c.query(`DELETE FROM "AuthRateLimit" WHERE key LIKE 'connexion:%' OR key LIKE 'activation:%'`),
+  );
+}
+
+/**
+ * An alert of the page holding this text. Next.js adds its own empty route announcer
+ * (role="alert"): a bare getByRole("alert") would match two elements.
+ */
+export function alerte(page: Page, texte: string | RegExp) {
+  return page.getByRole("alert").filter({ hasText: texte });
 }
 
 export async function seConnecter(page: Page, identifiant: string, motDePasse = MOT_DE_PASSE) {

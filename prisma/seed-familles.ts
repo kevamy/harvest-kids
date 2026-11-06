@@ -183,7 +183,8 @@ export async function semerFamilles(
       });
 
       for (const [i, t] of tuteurs.entries()) {
-        const telephone = `+22901960${String(graine % 10)}${String(f).padStart(2, "0")}${i}`;
+        // Ten national digits (Benin since 2024, ADR 0011).
+        const telephone = `+22901960${String(graine % 10)}${String(f).padStart(2, "0")}${i}0`;
         const tuteur = await tx.tuteur.create({
           data: {
             egliseId,
@@ -251,5 +252,43 @@ export async function semerFamilles(
       });
     });
   }
-  return nombre;
+
+  // Drafts, as left by a CSV import (ADR 0013): no matricule, card, photo or consent, in the
+  // "À compléter" list. One main contact has no number yet (asked for at finalisation).
+  for (let b = 0; b < BROUILLONS; b++) {
+    const nomFamille = NOMS[(nombre + b + graine) % NOMS.length]!;
+    await dansEglise(async (tx) => {
+      const famille = await tx.famille.create({
+        data: { egliseId, nom: nomFamille },
+        select: { id: true },
+      });
+      await tx.tuteur.create({
+        data: {
+          egliseId,
+          familleId: famille.id,
+          prenom: hasard.choisir(PRENOMS),
+          nom: nomFamille,
+          lien: "Mère",
+          telephone:
+            b === 1 ? null : `+22901950${String(graine % 10)}${String(b).padStart(2, "0")}00`,
+          principal: true,
+        },
+      });
+      for (let e = 0; e < hasard.entre(1, 2); e++) {
+        await tx.enfant.create({
+          data: {
+            egliseId,
+            familleId: famille.id,
+            prenom: hasard.choisir(PRENOMS),
+            nom: nomFamille,
+            dateNaissance: dateAvantMois(hasard.entre(12, 120), hasard.entre(1, 28)),
+          },
+        });
+      }
+    });
+  }
+  return nombre + BROUILLONS;
 }
+
+/** Drafts per demonstration church, besides its 20 to 40 finalised families. */
+export const BROUILLONS = 3;

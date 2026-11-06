@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import {
   EGLISES,
+  alerte,
   attendreAccueil,
   egliseDuProjet,
   email,
@@ -43,9 +44,7 @@ test("l'accueil inscrit une famille de 3 enfants et la retrouve par la recherche
   // A Beninese number in the former 8-digit plan: the form proposes the new number.
   await page.getByLabel("Téléphone du tuteur 1", { exact: true }).fill("97 45 12 33");
   await page.getByLabel("Téléphone du tuteur 1", { exact: true }).blur();
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Voulez-vous dire 01 97 45 12 33 ?" }),
-  ).toBeVisible();
+  await expect(alerte(page, "Voulez-vous dire 01 97 45 12 33 ?")).toBeVisible();
   await page.getByRole("button", { name: "Oui, utiliser le 01 97 45 12 33" }).click();
   await expect(page.getByLabel("Téléphone du tuteur 1", { exact: true })).toHaveValue(
     "01 97 45 12 33",
@@ -71,7 +70,7 @@ test("l'accueil inscrit une famille de 3 enfants et la retrouve par la recherche
 
   // The data consent is compulsory: the server refuses, with a message saying what to do.
   await page.getByRole("button", { name: "Enregistrer l'inscription" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "consentement" })).toBeVisible();
+  await expect(alerte(page, "consentement")).toBeVisible();
 
   await page.getByLabel(/J'accepte que les données de mes enfants/).check();
   await page.getByRole("button", { name: "Enregistrer l'inscription" }).click();

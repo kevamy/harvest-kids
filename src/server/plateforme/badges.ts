@@ -14,6 +14,7 @@ import {
 import { corpsNomBadge } from "@/server/impression/mesure";
 import { TEXTES_BADGE, TYPO } from "@/server/impression/textes";
 import { lireParametres } from "@/server/parametres";
+import { CompteRefuse } from "./comptes";
 import { prismaPlateforme, withEglise, type TransactionPrisma } from "./db";
 
 /**
@@ -76,8 +77,10 @@ async function journaliser(
 
 /** Locks the member row: badge and role changes of one member are serialised. */
 async function verrouillerMembre(tx: TransactionPrisma, egliseId: string, membreId: string) {
-  const lignes = await tx.$queryRaw<{ roles: Role[]; actif: boolean; compteActif: boolean }[]>`
-    SELECT m.roles::text[] AS roles, m.actif, u.actif AS "compteActif"
+  const lignes = await tx.$queryRaw<
+    { userId: string; roles: Role[]; actif: boolean; compteActif: boolean }[]
+  >`
+    SELECT m."userId", m.roles::text[] AS roles, m.actif, u.actif AS "compteActif"
     FROM "Membre" m JOIN "User" u ON u.id = m."userId"
     WHERE m.id = ${membreId} AND m."egliseId" = ${egliseId}
     FOR UPDATE OF m`;
@@ -165,20 +168,57 @@ export const schemaModificationMembre = z
   .refine((m) => m.roles !== undefined || m.actif !== undefined, "Aucune modification.");
 
 /**
+ * Locks the church's active administrators, always in the same order and before any other
+ * member row (no deadlock between two changes): two administrators removing each other at
+ * the same time are serialised, and the second one sees the first change.
+ */
+async function verrouillerAdministrateurs(tx: TransactionPrisma, egliseId: string) {
+  return tx.$queryRaw<{ id: string }[]>`
+    SELECT m.id FROM "Membre" m JOIN "User" u ON u.id = m."userId"
+    WHERE m."egliseId" = ${egliseId} AND m.actif AND u.actif AND 'ADMIN' = ANY (m.roles)
+    ORDER BY m.id
+    FOR UPDATE OF m`;
+}
+
+export const DERNIER_ADMIN =
+  "L'église doit garder au moins un administrateur actif. Nommez d'abord un autre administrateur.";
+
+/**
  * Changes a member's roles or deactivates them. When the member is no longer an active
  * monitor, their badge is revoked in the same transaction, with an audit entry: a scan of it
  * is then refused. Returns null for a member of another church (same as a missing one).
+ * Refused: deactivating one's own membership, and leaving the church without an active
+ * administrator (checked under lock, in the same transaction as the change).
  */
 export async function modifierMembre(
   base: PrismaClient,
   auteur: Auteur,
   membreId: string,
   saisie: unknown,
+  /**
+   * Tests only: called inside the transaction right after the checks, before the change is
+   * written, to hold it there while another change starts (deterministic concurrency test).
+   */
+  options: { apresVerification?: () => Promise<void> } = {},
 ): Promise<{ badgesRevoques: string[] } | null> {
   const changement = schemaModificationMembre.parse(saisie);
   return withEglise(base, auteur.egliseId, async (tx) => {
+    const administrateurs = await verrouillerAdministrateurs(tx, auteur.egliseId);
     const avant = await verrouillerMembre(tx, auteur.egliseId, membreId);
     if (!avant) return null;
+    if (changement.actif === false && avant.userId === auteur.userId) {
+      throw new CompteRefuse("Vous ne pouvez pas désactiver votre propre compte.");
+    }
+    const resteAdministrateur =
+      (changement.actif ?? avant.actif) && (changement.roles ?? avant.roles).includes("ADMIN");
+    if (
+      !resteAdministrateur &&
+      administrateurs.some((a) => a.id === membreId) &&
+      administrateurs.length <= 1
+    ) {
+      throw new CompteRefuse(DERNIER_ADMIN);
+    }
+    await options.apresVerification?.();
     const apres = await tx.membre.update({
       where: { id: membreId },
       data: changement,

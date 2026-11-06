@@ -39,9 +39,14 @@ test("le super-administrateur crée une église et son premier administrateur", 
     await page.getByLabel("Adresse courte (écran d'appel)").fill(slug);
     await page.getByLabel("Nom", { exact: true }).fill("Administrateur de test");
     await page.getByLabel("E-mail").fill(adresseAdmin);
-    await page.getByLabel("Mot de passe provisoire").fill("Provisoire-2026");
     await page.getByRole("button", { name: "Créer l'église" }).click();
 
+    // No password typed by the super-administrator: a one-time activation link (ADR 0014).
+    await expect(page.getByText("Église créée.")).toBeVisible();
+    await expect(page.getByLabel("Lien à transmettre")).toHaveValue(
+      /\/activation#HKC1\.[0-9A-Za-z]{43}$/,
+    );
+    await page.getByRole("button", { name: "J'ai transmis le lien" }).click();
     await expect(page).toHaveURL(/\/plateforme$/);
     await expect(
       page.getByRole("article", { name: `Église de test ${testInfo.project.name}` }),

@@ -21,4 +21,4 @@ Les numéros des tuteurs, des personnes autorisées et de l'accueil de l'église
 
 - Les liens `tel:` et WhatsApp (lot 3) utilisent directement le numéro enregistré.
 - L'import CSV (étape 7) applique la même normalisation et signale les numéros à confirmer.
-- Les comptes utilisateurs (connexion par téléphone, lot 0) ont leur propre normalisation (`src/lib/identifiant.ts`). Elle est à rapprocher de celle-ci si l'on étend la connexion à d'autres pays.
+- La connexion par téléphone (`src/lib/identifiant.ts`) applique la même normalisation depuis le lot 1, étape 9 : un ancien numéro béninois à 8 chiffres y est essayé avec le préfixe 01 (ADR 0003).
