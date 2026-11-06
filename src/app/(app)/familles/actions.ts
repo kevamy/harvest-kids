@@ -1,10 +1,17 @@
 "use server";
 
 import { stockage } from "@/lib/storage";
-import { FamilleRefusee, enregistrerFamille, type FichierRecu } from "@/server/familles";
+import {
+  FamilleRefusee,
+  enregistrerFamille,
+  type EnregistrementFamille,
+  type FichierRecu,
+} from "@/server/familles";
 import { RefusMetier, executerAction } from "../executer-action";
 
-export type ResultatFamille = { ok: true; familleId: string } | { ok: false; erreur: string };
+export type ResultatFamille =
+  | { ok: true; familleId: string; enregistrement: EnregistrementFamille }
+  | { ok: false; erreur: string };
 
 /**
  * Registers a family, saves it, or finalises a draft (cahier §7.1). The form sends the
@@ -13,6 +20,7 @@ export type ResultatFamille = { ok: true; familleId: string } | { ok: false; err
  */
 export async function enregistrer(formulaire: FormData): Promise<ResultatFamille> {
   let familleId = "";
+  let enregistrement: EnregistrementFamille = "inscription";
   const resultat = await executerAction("familles.gerer", async ({ db, contexte }) => {
     let saisie: unknown;
     try {
@@ -31,7 +39,7 @@ export async function enregistrer(formulaire: FormData): Promise<ResultatFamille
     }
     const id = formulaire.get("familleId");
     try {
-      ({ familleId } = await enregistrerFamille(
+      ({ familleId, enregistrement } = await enregistrerFamille(
         db,
         contexte,
         saisie,
@@ -44,5 +52,5 @@ export async function enregistrer(formulaire: FormData): Promise<ResultatFamille
       throw erreur;
     }
   });
-  return resultat.ok ? { ok: true, familleId } : resultat;
+  return resultat.ok ? { ok: true, familleId, enregistrement } : resultat;
 }

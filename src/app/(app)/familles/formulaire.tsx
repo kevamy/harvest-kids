@@ -207,7 +207,8 @@ export function FormulaireFamille({
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
-      router.push(`/familles/${resultat.familleId}`);
+      // The record confirms what was saved (only after the server saved it).
+      router.push(`/familles/${resultat.familleId}?confirmation=${resultat.enregistrement}`);
       router.refresh();
     });
 

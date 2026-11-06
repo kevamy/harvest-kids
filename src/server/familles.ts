@@ -215,6 +215,9 @@ async function resoudrePhoto(
 
 type Auteur = { userId: string; appareil: string | null };
 
+/** What a save did, for the confirmation shown on the family's record. */
+export type EnregistrementFamille = "inscription" | "finalisation" | "modification";
+
 /**
  * Registers a new family, or saves an existing one (edition, or finalisation of a draft).
  * The family is finalised: every active child without a matricule gets one (RG-01).
@@ -227,7 +230,7 @@ export async function enregistrerFamille(
   photos: Map<string, FichierRecu>,
   stockage: Stockage,
   familleId?: string,
-): Promise<{ familleId: string }> {
+): Promise<{ familleId: string; enregistrement: EnregistrementFamille }> {
   const saisie = schemaFamille.parse(saisieBrute);
   const maintenant = new Date();
   const indicatif = (await lireParametres(db))["telephone.indicatifParDefaut"];
@@ -468,7 +471,14 @@ export async function enregistrerFamille(
       });
       return famille.id;
     });
-    return { familleId: id };
+    return {
+      familleId: id,
+      enregistrement: !existante
+        ? "inscription"
+        : existante.finaliseeLe
+          ? "modification"
+          : "finalisation",
+    };
   } catch (erreur) {
     // Nothing points to the new files: remove them.
     for (const cle of contexte.nouvelles) await stockage.delete(cle).catch(() => undefined);
@@ -649,6 +659,57 @@ export async function rechercherFamilles(
     take: 20,
     select: RESUME,
   });
+}
+
+export const FAMILLES_PAR_PAGE = 25;
+
+export type EtatCarteFamille = "active" | "en_attente" | "aucune";
+
+/**
+ * Registered (finalised) families of the active church, by family name, one page at a time
+ * (Familles page): active children with their matricule, main contact, card state (a card
+ * in use, one waiting to be handed over, or none). Read-only; the scoped client limits it to
+ * the active church. An out-of-range page gives the nearest one.
+ */
+export async function listerFamillesInscrites(db: Pick<ClientDeBase, "famille">, page: number) {
+  const where = { finaliseeLe: { not: null } } satisfies Prisma.FamilleWhereInput;
+  const total = await db.famille.count({ where });
+  const pages = Math.max(1, Math.ceil(total / FAMILLES_PAR_PAGE));
+  const courante = Math.min(Math.max(1, Math.floor(page) || 1), pages);
+  const familles = await db.famille.findMany({
+    where,
+    orderBy: [{ nom: "asc" }, { id: "asc" }],
+    skip: (courante - 1) * FAMILLES_PAR_PAGE,
+    take: FAMILLES_PAR_PAGE,
+    select: {
+      id: true,
+      nom: true,
+      enfants: {
+        where: { actif: true },
+        orderBy: { dateNaissance: "asc" },
+        select: { prenom: true, matricule: true },
+      },
+      tuteurs: {
+        where: { principal: true },
+        take: 1,
+        select: { prenom: true, nom: true, telephone: true },
+      },
+      cartes: { where: { revoqueeLe: null }, select: { activeLe: true } },
+    },
+  });
+  return {
+    total,
+    page: courante,
+    pages,
+    familles: familles.map((f) => {
+      const carte: EtatCarteFamille = f.cartes.some((c) => c.activeLe !== null)
+        ? "active"
+        : f.cartes.length > 0
+          ? "en_attente"
+          : "aucune";
+      return { id: f.id, nom: f.nom, enfants: f.enfants, contact: f.tuteurs[0] ?? null, carte };
+    }),
+  };
 }
 
 export function listerBrouillons(db: Pick<ClientDeBase, "famille">) {

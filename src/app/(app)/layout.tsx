@@ -61,7 +61,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
           <nav className="flex items-center gap-3" aria-label="Compte">
             <span className="hidden text-label text-nuit-doux sm:inline">{session.nom}</span>
-            {peut(contexte.roles, "familles.gerer") ? (
+            {peut(contexte.roles, "familles.gerer") || peut(contexte.roles, "checkin") ? (
               <Button
                 asChild
                 variant="sombre"
