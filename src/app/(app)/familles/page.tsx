@@ -65,11 +65,12 @@ function FamilleInscrite({ famille }: { famille: Inscrite }) {
     >
       <span className="grid gap-1">
         <span className="font-display text-h3 font-semibold">Famille {famille.nom}</span>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {/* Eldest first; a first name and its matricule never split across lines. */}
+        <span className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
           {famille.enfants.map((e, i) => (
-            <span key={i} className="flex items-center gap-2">
-              {e.prenom}
-              {e.matricule ? <MatriculeBadge matricule={e.matricule} /> : null}
+            <span key={i} className="inline-flex items-baseline gap-2 whitespace-nowrap">
+              <span className="text-body-lg font-bold">{e.prenom}</span>
+              {e.matricule ? <MatriculeBadge matricule={e.matricule} taille="sm" /> : null}
             </span>
           ))}
         </span>

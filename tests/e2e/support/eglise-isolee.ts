@@ -38,6 +38,20 @@ export type EgliseIsolee = {
   creerFamille(nom: string, prenoms: string[]): Promise<{ familleId: string; enfantIds: string[] }>;
 };
 
+/**
+ * A clear card or badge token known to the test, unique to the church: the two viewports
+ * run in parallel and never insert the same token. `lettre` names the token within the test.
+ */
+export function jetonDeTest(
+  prefixe: "HKF1" | "HKB1",
+  eglise: Pick<EgliseIsolee, "id">,
+  lettre: string,
+): string {
+  // The prefix, its dot and 22 base62 characters (FORMAT_JETON_CARTE, FORMAT_JETON_BADGE).
+  const suffixe = eglise.id.replace(/^e2e_/, "");
+  return `${prefixe}.${lettre}${suffixe}`.padEnd(prefixe.length + 23, lettre);
+}
+
 async function dansEglise<T>(egliseId: string, fn: (c: pg.Client) => Promise<T>): Promise<T> {
   return avecBase(async (c) => {
     await c.query("BEGIN");

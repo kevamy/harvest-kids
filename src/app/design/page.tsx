@@ -144,7 +144,13 @@ export default function DesignPage() {
         </Section>
 
         <Section titre="Matricule">
-          <MatriculeBadge matricule="HK-0427" />
+          <div className="flex flex-wrap items-baseline gap-6">
+            <MatriculeBadge matricule="HK-0427" />
+            <span className="inline-flex items-baseline gap-2">
+              <span className="text-body-lg font-bold">Ayo</span>
+              <MatriculeBadge matricule="HK-0427" taille="sm" />
+            </span>
+          </div>
         </Section>
 
         <Section titre="Fiches enfant">

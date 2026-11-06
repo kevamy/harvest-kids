@@ -5,6 +5,10 @@ name: harvest-kids-dev
 services:
   db:
     image: postgres:16-alpine
+    # Development and tests only, never production (docker-compose.yml): no write durability,
+    # for disposable data. The integration suite spent minutes waiting on disk syncs.
+    command:
+      ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_dev

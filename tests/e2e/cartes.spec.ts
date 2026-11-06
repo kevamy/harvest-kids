@@ -8,10 +8,10 @@ import {
   reinitialiserLimites,
   seConnecter,
 } from "./support/base";
-import { expect, test, type EgliseIsolee } from "./support/eglise-isolee";
+import { expect, jetonDeTest, test, type EgliseIsolee } from "./support/eglise-isolee";
 
 const empreinte = (jeton: string) => createHash("sha256").update(jeton, "utf8").digest("hex");
-const jeton = (lettre: string) => `HKF1.${lettre.repeat(22)}`;
+const jeton = (eglise: EgliseIsolee, lettre: string) => jetonDeTest("HKF1", eglise, lettre);
 
 test.beforeEach(reinitialiserLimites);
 
@@ -38,7 +38,7 @@ const insererCarte = (
         `${familleId}_carte_${lettre}`,
         eglise.id,
         familleId,
-        empreinte(jeton(lettre)),
+        empreinte(jeton(eglise, lettre)),
         !!etat.revoquee,
       ],
     ),
@@ -225,9 +225,9 @@ test("la vérification d'une carte refuse une carte remplacée, d'une autre égl
     await expect(page.getByRole("status")).toHaveText(message);
   };
   await verifier(
-    jeton("R"),
+    jeton(eglise, "R"),
     "Cette carte a été remplacée. Demandez la nouvelle carte au parent ou recherchez la famille.",
   );
-  await verifier(jeton("B"), "Cette carte n'appartient pas à cette église.");
-  await verifier(jeton("Z"), "Carte inconnue. Vérifiez la carte ou recherchez la famille.");
+  await verifier(jeton(autreEglise, "B"), "Cette carte n'appartient pas à cette église.");
+  await verifier(jeton(eglise, "Z"), "Carte inconnue. Vérifiez la carte ou recherchez la famille.");
 });

@@ -5,7 +5,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | Lot                              | État                                                                            | Branche et pull request                 |
 | -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
-| 1. Familles et cartes            | **en cours** : étapes 1 à 7 fusionnées dans main le 2026-11-05                  | PR n°4, n°5 ; suite sur `lot-1-comptes` |
+| 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                   | PR n°4 à n°7 ; `lot-1-matricules-liste` |
 | 2. Sessions, check-in, check-out | à faire                                                                         | —                                       |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                       |
 | 4. Transition et pilotage        | à faire                                                                         | —                                       |
@@ -39,7 +39,7 @@ Décisions : ADR 0001 à 0007 dans `docs/decisions/`. Exploitation : `docs/explo
 
 Hors lot 0, reporté : Sentry ; écran d'appel et son appareil dédié (lot 3) ; déploiement sur le VPS (lot 5).
 
-## Lot 1 — Familles et cartes (en cours)
+## Lot 1 — Familles et cartes
 
 Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de carte par église (RG-16), classes et tranches d'âge par église (RG-17), impression des cartes par chaque église dans cinq formats (section 7.10). Points 1, 2 et 5 de la section 17 tranchés. Version 1.3 : la gestion des comptes, indispensable avant un pilote, rejoint le lot 1 (étape 8).
 
@@ -55,7 +55,11 @@ Décisions des leaders intégrées au cahier des charges (version 1.2) : mode de
 8. [x] Comptes et rôles (branche `lot-1-comptes`, ADR 0014), ajoutée le 2026-11-04, cahier version 1.3 : Paramètres › Comptes (ADMIN) ; création d'un compte avec un lien d'activation à usage unique (7 jours), rattachement direct d'un compte existant, changement de rôles, désactivation et réactivation de l'appartenance ; réinitialisation à effet immédiat (lien de 24 heures, sessions fermées) ; seule l'empreinte SHA-256 du jeton est stockée (table de plateforme `JetonCompte`) ; liens réservés au super-administrateur pour un compte de plusieurs églises ; au moins un ADMIN actif (sous verrou) et pas de désactivation de son propre compte ; premier ADMIN d'une nouvelle église par lien aussi.
 9. [x] Finition et fusion (PR n°6) : test de concurrence du dernier ADMIN rendu déterministe (point d'arrêt injectable ; sans le verrou, 5 échecs sur 5) ; limites comptées par personne d'abord, garde-fou de 300 essais par 15 minutes et par IP, route HTTP de connexion de Better Auth fermée (ADR 0003) ; connexion par téléphone avec la même normalisation (ancien numéro à 8 chiffres essayé avec 01) ; seed avec trois brouillons par église et des numéros de démonstration à 10 chiffres. Démonstration sur https://harvest-kids.vercel.app après la fusion.
 
-Retour de démonstration (2026-11-06) : liste « Familles inscrites » sur `/familles` (par nom, 25 par page, enfants et matricules, contact principal, état de la carte, total en titre), lisible avec `familles.gerer` ou `checkin` ; message de confirmation sur la fiche après une inscription, une finalisation ou une modification (branche `lot-1-familles-inscrites`).
+Retour de démonstration (2026-11-06) : liste « Familles inscrites » sur `/familles` (par nom, 25 par page, enfants et matricules, contact principal, état de la carte, total en titre), lisible avec `familles.gerer` ou `checkin` ; message de confirmation sur la fiche après une inscription, une finalisation ou une modification (branche `lot-1-familles-inscrites`, PR n°7).
+
+Clôture (branche `lot-1-matricules-liste`) : dans cette liste, matricule en taille de liste (`MatriculeBadge taille="sm"`, Fredoka 20 px, sur la ligne de son prénom) ; le grand style reste au scan, sur la fiche, sur la carte et à l'écran d'appel. Enfants du plus âgé au plus jeune dans la liste et sur la fiche (test d'intégration). Réparation idempotente des numéros de démonstration de Neon par le seed (voir plus bas). PostgreSQL du poste sans synchronisation du disque (`docs/exploitation.md`).
+
+**Lot 1 terminé** : liste des familles vérifiée sur https://harvest-kids.vercel.app le 2026-11-06.
 
 Critères d'acceptation (section 15) et où ils sont vérifiés :
 
@@ -72,9 +76,9 @@ Critères d'acceptation (section 15) et où ils sont vérifiés :
 
 **Recette des étapes 1 à 6** : la PR n°4 (`lot-1`) est fusionnée dans `main` avant l'import CSV, pour tester ces étapes sur https://harvest-kids.vercel.app. « Migrations Neon » applique les migrations du lot 1 à la base partagée après la CI verte sur `main` ; avant cela, les prévisualisations ne peuvent pas utiliser les fonctions du lot 1.
 
-**Suite du lot** : l'étape 7 a été fusionnée par la PR n°5 (`lot-1-suite`) ; les étapes 8 et 9 par la PR n°6 (`lot-1-comptes`). La démonstration du lot 1 complet a lieu sur https://harvest-kids.vercel.app après cette fusion ; le lot est terminé une fois la démonstration validée.
+**Suite du lot** : l'étape 7 a été fusionnée par la PR n°5 (`lot-1-suite`) ; les étapes 8 et 9 par la PR n°6 (`lot-1-comptes`) ; le retour de démonstration par la PR n°7. La démonstration du lot 1 complet a été validée le 2026-11-06.
 
-**Données de démonstration sur Neon** : la base de recette a été remplie avant la correction des numéros. Ses tuteurs de démonstration ont des numéros à 9 chiffres : en modifiant une de ces familles, le formulaire demande un numéro valide. Le seed n'est pas rejoué sur une base déjà remplie.
+**Données de démonstration sur Neon** : la base de recette a été remplie avant la correction des numéros ; ses tuteurs de démonstration avaient des numéros à 9 chiffres. Le seed les répare désormais (ajout du 0 final, idempotent, églises de démonstration seulement) : lancer le workflow « Données de démonstration Neon » depuis `main` (`docs/exploitation.md`). Il ne recrée aucune famille sur une base déjà remplie.
 
 Notes pour les lots suivants :
 
