@@ -268,17 +268,56 @@ describe("garde-fous des administrateurs", () => {
     ).rejects.toThrow(DERNIER_ADMIN);
   });
 
-  it("deux administrateurs qui se retirent mutuellement en même temps : un seul y parvient", async () => {
+  it("deux administrateurs qui se retirent mutuellement : le second attend le premier et est refusé", async () => {
     const second = await membre(a.egliseId, "admin2.a@harvest-kids.test", ["ADMIN"], MOT_DE_PASSE);
     const auteur2 = { egliseId: a.egliseId, userId: second.userId, appareil: null };
-    const resultats = await Promise.allSettled([
-      modifierMembre(base, auteurA, second.membreId, { roles: ["MONITEUR"] }),
-      modifierMembre(base, auteur2, adminA.membreId, { actif: false }),
+
+    // The first change is held inside its transaction, right after its check.
+    let signalerPause!: () => void;
+    const enPause = new Promise<void>((r) => (signalerPause = r));
+    let reprendre!: () => void;
+    const reprise = new Promise<void>((r) => (reprendre = r));
+    const premier = Promise.allSettled([
+      modifierMembre(
+        base,
+        auteurA,
+        second.membreId,
+        { roles: ["MONITEUR"] },
+        {
+          apresVerification: async () => {
+            signalerPause();
+            await reprise;
+          },
+        },
+      ),
     ]);
-    expect(resultats.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const refus = resultats.find((r) => r.status === "rejected") as PromiseRejectedResult;
-    expect(refus.reason).toBeInstanceOf(CompteRefuse);
-    expect((refus.reason as Error).message).toBe(DERNIER_ADMIN);
+    await enPause;
+
+    // The second starts on another connection while the first is held: the overlap is
+    // certain. It either waits for the first one's lock, or (without the lock) ends alone.
+    let secondTermine = false;
+    const secondChangement = Promise.allSettled([
+      modifierMembre(base, auteur2, adminA.membreId, { actif: false }).finally(() => {
+        secondTermine = true;
+      }),
+    ]);
+    const verrousEnAttente = async () =>
+      (
+        await proprietaire.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted`,
+        )
+      ).rows[0]!.n;
+    await expect
+      .poll(async () => secondTermine || (await verrousEnAttente()) > 0, { timeout: 5_000 })
+      .toBe(true);
+    reprendre();
+
+    const [[r1], [r2]] = await Promise.all([premier, secondChangement]);
+    expect(r1!.status).toBe("fulfilled");
+    expect(r2!.status).toBe("rejected");
+    const refus = (r2 as PromiseRejectedResult).reason as Error;
+    expect(refus).toBeInstanceOf(CompteRefuse);
+    expect(refus.message).toBe(DERNIER_ADMIN);
     const { rows } = await proprietaire.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM "Membre"
        WHERE "egliseId" = $1 AND actif AND 'ADMIN' = ANY (roles)`,

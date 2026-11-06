@@ -15,7 +15,7 @@ import {
   emettreJetonCompte,
 } from "./comptes";
 import { prismaPlateforme, withEglise, type TransactionPrisma } from "./db";
-import { consommer } from "./limitation";
+import { consommerDans, essaisActivation } from "./limitation";
 
 /**
  * Accounts of a church (cahier §7.10, ADR 0014), managed by its ADMIN: creation with a
@@ -421,13 +421,15 @@ export function reinitialisationEglise(contexte: ContexteEglise, membreId: strin
   return reinitialiserMotDePasse(prismaPlateforme(), contexte, membreId);
 }
 
-/** Attempts on the public activation page, per IP address (shared tablets share an IP). */
-export const REGLE_ACTIVATION = { fenetreMs: 15 * 60 * 1000, max: 20 };
-
-/** Public activation page: no session, no church; attempts are limited per IP address. */
+/**
+ * Public activation page: no session, no church. Attempts are counted per link (token
+ * fingerprint, never the token), then against the IP guard shared by a whole church.
+ */
 export async function activerMonCompte(saisie: unknown, ip: string) {
   const base = prismaPlateforme();
-  const essai = await consommer(base, `activation:ip:${ip}`, REGLE_ACTIVATION, new Date());
+  const jeton = (saisie as { jeton?: unknown } | null)?.jeton;
+  const empreinte = empreinteJeton(typeof jeton === "string" ? jeton : "");
+  const essai = await consommerDans(base, essaisActivation(empreinte, ip), new Date());
   if (!essai.autorise) {
     const minutes = Math.max(1, Math.ceil(essai.reessayerDansMs / 60_000));
     throw new CompteRefuse(`Trop de tentatives. Réessayez dans ${minutes} minutes.`);

@@ -1,18 +1,14 @@
+import { INDICATIF_PAR_DEFAUT, normaliserTelephone } from "@/lib/telephone";
+
 /**
  * Sign-in identifier: an e-mail address or a phone number (cahier §10).
- * Phone numbers are normalised to E.164; a local Beninese number (8 or 10 digits)
- * gets the +229 prefix.
+ * Phone numbers follow the same normalisation as everywhere else (E.164, ADR 0011), with
+ * the Beninese country code by default: accounts are stored that way. A Beninese number
+ * in the former 8-digit plan is tried with the "01" prefix (the account cannot hold the
+ * 8-digit form). If that fails too, the sign-in answers with the same generic message: it
+ * never reveals whether an account exists.
  */
 export type Identifiant = { type: "email"; valeur: string } | { type: "telephone"; valeur: string };
-
-export function normaliserTelephone(saisie: string): string | null {
-  const compact = saisie.replace(/[\s.\-()]/g, "");
-  if (/^\+\d{8,15}$/.test(compact)) return compact;
-  if (/^00\d{8,15}$/.test(compact)) return `+${compact.slice(2)}`;
-  // Benin: 10-digit numbers since 2024 (01 XX XX XX XX), 8 digits before.
-  if (/^\d{8}$/.test(compact) || /^01\d{8}$/.test(compact)) return `+229${compact}`;
-  return null;
-}
 
 export function analyserIdentifiant(saisie: string): Identifiant | null {
   const texte = saisie.trim();
@@ -20,6 +16,7 @@ export function analyserIdentifiant(saisie: string): Identifiant | null {
     const email = texte.toLowerCase();
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { type: "email", valeur: email } : null;
   }
-  const telephone = normaliserTelephone(texte);
-  return telephone ? { type: "telephone", valeur: telephone } : null;
+  const telephone = normaliserTelephone(texte, INDICATIF_PAR_DEFAUT);
+  // "a_confirmer": the former 8-digit plan, tried with its "01" prefix.
+  return telephone.statut === "invalide" ? null : { type: "telephone", valeur: telephone.e164 };
 }

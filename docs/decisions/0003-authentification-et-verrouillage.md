@@ -18,12 +18,15 @@ Les comptes sont rattachés à une ou plusieurs églises, avec des rôles par é
 
 Sinon, l'écran « Choisissez votre église » appelle `choisirEgliseActive`, qui vérifie l'appartenance avant d'écrire. `getTenantDb()` revérifie l'appartenance à chaque accès.
 
-**Connexion par e-mail ou téléphone.** La Server Action normalise l'identifiant (E.164, préfixe +229 pour un numéro béninois). Un téléphone est traduit en e-mail côté serveur. Un numéro inconnu passe par la même connexion vouée à l'échec, si bien que la réponse ne révèle jamais l'existence d'un compte. Un compte « téléphone seul » reçoit un e-mail technique non routable.
+**Connexion par e-mail ou téléphone.** La Server Action normalise l'identifiant comme partout ailleurs (`src/lib/telephone.ts`, ADR 0011) : E.164, indicatif +229 par défaut. Un numéro béninois à l'ancien format à 8 chiffres est essayé avec le préfixe 01, puisque les comptes sont enregistrés à 10 chiffres. Un téléphone est traduit en e-mail côté serveur. Un numéro inconnu passe par la même connexion vouée à l'échec, si bien que la réponse ne révèle jamais l'existence d'un compte. Un compte « téléphone seul » reçoit un e-mail technique non routable.
 
-**Limitation des tentatives.**
+**Limitation des tentatives : par personne d'abord** (révisé au lot 1, étape 9). Toutes les tablettes d'une église partagent la même adresse IP publique : une limite par IP bloquerait l'église entière un dimanche matin. Chaque limite compte donc d'abord par personne, puis par IP, à titre de garde-fou seulement (300 essais par 15 minutes, `GARDE_IP`). Les compteurs sont en base (`AuthRateLimit`, partagés entre instances), atomiques (`INSERT … ON CONFLICT … RETURNING`) ; `src/server/plateforme/limitation.ts` regroupe les règles.
 
-- Better Auth limite ses propres routes HTTP (stockage en base, partagé entre instances Vercel).
-- La Server Action de connexion a son propre compteur en base (`AuthRateLimit`), atomique (`INSERT … ON CONFLICT … RETURNING`) : 5 tentatives par identifiant et 30 par adresse IP sur 15 minutes. Une connexion réussie remet à zéro le compteur de l'identifiant.
+- **Connexion** : 5 tentatives par identifiant (e-mail ou téléphone normalisé) sur 15 minutes, puis le garde-fou IP. Une connexion réussie remet à zéro le compteur de l'identifiant.
+- **PIN** : 5 erreurs par membre bloquent son PIN 15 minutes (voir plus bas), sans aucune limite par IP.
+- **Activation d'un compte** (ADR 0014) : 10 essais par lien (empreinte du jeton, jamais le jeton) sur 15 minutes, puis le garde-fou IP.
+- **Route HTTP de Better Auth** : `/sign-in/email` est fermée (`disabledPaths`). Elle aurait contourné le compte par identifiant, et sa propre limite compte par IP. La connexion passe uniquement par la Server Action, qui appelle `auth.api.signInEmail` côté serveur ; cet appel n'est concerné ni par `disabledPaths` ni par la limitation HTTP de Better Auth.
+- Tests : 15 moniteurs différents (connexion, PIN, activation) depuis la même IP ne sont pas bloqués ; un identifiant ou un lien reste limité seul ; le garde-fou IP refuse le 301ᵉ essai.
 
 **Verrouillage par inactivité.**
 

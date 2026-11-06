@@ -195,6 +195,11 @@ export async function modifierMembre(
   auteur: Auteur,
   membreId: string,
   saisie: unknown,
+  /**
+   * Tests only: called inside the transaction right after the checks, before the change is
+   * written, to hold it there while another change starts (deterministic concurrency test).
+   */
+  options: { apresVerification?: () => Promise<void> } = {},
 ): Promise<{ badgesRevoques: string[] } | null> {
   const changement = schemaModificationMembre.parse(saisie);
   return withEglise(base, auteur.egliseId, async (tx) => {
@@ -213,6 +218,7 @@ export async function modifierMembre(
     ) {
       throw new CompteRefuse(DERNIER_ADMIN);
     }
+    await options.apresVerification?.();
     const apres = await tx.membre.update({
       where: { id: membreId },
       data: changement,

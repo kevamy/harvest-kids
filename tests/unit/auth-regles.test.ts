@@ -5,7 +5,7 @@ import {
   doitEnregistrerActivite,
   estVerrouillee,
 } from "@/lib/activite";
-import { analyserIdentifiant, normaliserTelephone } from "@/lib/identifiant";
+import { analyserIdentifiant } from "@/lib/identifiant";
 import {
   DUREE_BLOCAGE_PIN_MS,
   ETAT_PIN_INITIAL,
@@ -23,18 +23,16 @@ describe("identifiant de connexion", () => {
     ["Kofi.Agbo@Exemple.org ", { type: "email", valeur: "kofi.agbo@exemple.org" }],
     ["+229 01 97 00 00 00", { type: "telephone", valeur: "+2290197000000" }],
     ["01 97 00 00 00", { type: "telephone", valeur: "+2290197000000" }],
-    ["97 00 00 00", { type: "telephone", valeur: "+22997000000" }],
+    // Former 8-digit plan: tried with the "01" prefix, as stored (ADR 0011).
+    ["97 00 00 00", { type: "telephone", valeur: "+2290197000000" }],
     ["00229 0197000000", { type: "telephone", valeur: "+2290197000000" }],
+    ["+33 6 12 34 56 78", { type: "telephone", valeur: "+33612345678" }],
   ])("reconnaît %s", (saisie, attendu) => {
     expect(analyserIdentifiant(saisie)).toEqual(attendu);
   });
 
-  it.each(["", "kofi@", "abc", "12345"])("refuse %s", (saisie) => {
+  it.each(["", "kofi@", "abc", "12345", "+229 97 00 00"])("refuse %s", (saisie) => {
     expect(analyserIdentifiant(saisie)).toBeNull();
-  });
-
-  it("ne transforme pas un numéro international déjà normalisé", () => {
-    expect(normaliserTelephone("+33612345678")).toBe("+33612345678");
   });
 });
 

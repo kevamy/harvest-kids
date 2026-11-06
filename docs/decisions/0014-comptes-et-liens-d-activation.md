@@ -1,7 +1,7 @@
 # 0014 — Comptes et liens d'activation
 
 - Statut : accepté (lot 1, étape 8)
-- Date : 2026-11-06
+- Date : 2026-11-05
 
 ## Contexte
 
@@ -10,7 +10,7 @@ Avant un pilote, chaque église doit gérer elle-même ses comptes : ajouter un 
 ## Décision
 
 - **Lien à usage unique** pour activer un compte (7 jours) et pour réinitialiser un mot de passe (24 heures). La table de plateforme `JetonCompte` (hors RLS : la page d'activation est publique) ne garde que l'empreinte SHA-256 du jeton (`HKC1.` et 43 caractères base62, environ 256 bits). L'échéance est posée et comparée par PostgreSQL (`now() + interval`, `expireLe > now()`). Émettre un lien révoque les liens encore ouverts du compte ; consommer un lien enregistre le mot de passe, révoque les autres liens et ferme les sessions, dans une seule transaction.
-- **Le jeton est dans le fragment** : `https://…/activation#HKC1.…`. Le navigateur n'envoie jamais le fragment au serveur : le jeton ne figure ni dans les journaux du serveur ni dans ceux de l'hébergeur. La page le lit, l'efface aussitôt de la barre d'adresse et de l'historique, et l'envoie seulement dans le POST du formulaire. La page `/activation` est publique, `noindex` (balise et en-tête `X-Robots-Tag`), avec `Referrer-Policy: no-referrer`, sans script tiers ; les tentatives sont limitées par adresse IP.
+- **Le jeton est dans le fragment** : `https://…/activation#HKC1.…`. Le navigateur n'envoie jamais le fragment au serveur : le jeton ne figure ni dans les journaux du serveur ni dans ceux de l'hébergeur. La page le lit, l'efface aussitôt de la barre d'adresse et de l'historique, et l'envoie seulement dans le POST du formulaire. La page `/activation` est publique, `noindex` (balise et en-tête `X-Robots-Tag`), avec `Referrer-Policy: no-referrer`, sans script tiers. Les tentatives sont limitées d'abord par lien (empreinte du jeton, 10 par 15 minutes), puis par le garde-fou IP commun à une église (300 par 15 minutes, ADR 0003). Un lien recollé dans le même onglet ne change que le fragment : la page réagit à `hashchange` et repart de zéro.
 - **Un nouveau compte n'a pas de mot de passe** : pas de compte « credential » Better Auth tant que le lien n'a pas servi, donc aucune connexion possible avant. Le premier ADMIN d'une nouvelle église (console `/plateforme`) passe aussi par un lien : le super-administrateur ne choisit plus de mot de passe provisoire.
 - **Rattachement direct** d'un compte existant (même e-mail ou même téléphone) avec les rôles choisis, audité, avec une réponse neutre (« Compte rattaché ») qui ne révèle pas ses autres églises.
 - **Comptes de plusieurs églises** : l'ADMIN d'une église ne génère pour eux ni lien d'activation ni réinitialisation (il verrait le lien et pourrait s'en servir) ; ils restent au super-administrateur. Même règle pour un compte super-administrateur.
@@ -24,5 +24,5 @@ Avant un pilote, chaque église doit gérer elle-même ses comptes : ajouter un 
 
 - Un lien perdu ou expiré se remplace en un geste (« Générer un nouveau lien ») ; l'ancien ne sert plus.
 - Le super-administrateur n'a pas encore d'écran pour les comptes de plusieurs églises : il passe par la base en attendant (à prévoir avec l'exploitation, lot 5).
-- La connexion par téléphone accepte encore un ancien numéro béninois à 8 chiffres sans le convertir (`src/lib/identifiant.ts`), alors que les comptes sont créés au format E.164 à 10 chiffres : à rapprocher de l'ADR 0011.
-- Le test de concurrence des deux ADMIN dépend du minutage : sans le verrou, il a échoué une fois sur trois exécutions (contre-épreuve) ; avec le verrou, il passe à chaque exécution.
+- La connexion par téléphone applique la même normalisation que les comptes (révisé à l'étape 9, ADR 0003) : un ancien numéro béninois à 8 chiffres est essayé avec le préfixe 01.
+- Le test de concurrence des deux ADMIN est déterministe : `modifierMembre` accepte, pour les tests seulement, un point d'arrêt appelé juste après les vérifications. La première modification y est retenue ; la seconde démarre sur une autre connexion ; le test attend qu'elle soit bloquée sur un verrou (`pg_locks` non accordé) ou terminée, puis relâche la première. Contre-épreuve sans le `FOR UPDATE` : 5 échecs sur 5 ; avec le verrou : 5 succès sur 5.
