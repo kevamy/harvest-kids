@@ -13,7 +13,7 @@ Les numéros des tuteurs, des personnes autorisées et de l'accueil de l'église
 - **Indicatif par défaut de l'église** (paramètre `telephone.indicatifParDefaut`, +229 par défaut, Paramètres › Église), appliqué à un numéro saisi sans indicatif.
 - **Règles par pays** dans une table (`REGLES_TELEPHONE`) : longueur nationale, préfixe interurbain à retirer, ancien plan de numérotation. Un pays de plus, c'est une ligne de plus. Un indicatif inconnu est accepté s'il respecte E.164 (8 à 15 chiffres).
 - **Ancien format béninois** : un numéro à 8 chiffres n'est jamais enregistré tel quel. Le formulaire propose « Voulez-vous dire 01 … ? » avec un bouton de confirmation, et le serveur refuse le numéro tant qu'il n'est pas corrigé.
-- **Recherche** : la saisie est normalisée de la même façon. Un numéro partiel est trouvé sur la fin des numéros enregistrés (`telephone LIKE '%' || chiffres`), par une requête SQL sous RLS via le client scopé. Les index `(egliseId, telephone)` de `Tuteur` et `PersonneAutorisee` limitent la recherche aux numéros de l'église active.
+- **Recherche** : la saisie est normalisée de la même façon. Un numéro partiel est trouvé sur la fin des numéros enregistrés (`telephone LIKE '%' || chiffres`), par une requête SQL sous RLS via le client scopé. Les index `(egliseId, telephone)` de `Tuteur` et `PersonneAutorisee` limitent la recherche aux numéros de l'église active. Le test vérifie la propriété, pas le nom d'un index : avec des volumes réalistes (2000 numéros dans une autre église) et des statistiques fraîches (`ANALYZE`), le plan utilise un index dont la condition porte sur `egliseId` et ne parcourt jamais toute la table. Sur des tables presque vides, le choix de l'index dépendait du dernier `ANALYZE` automatique.
 
 ## Conséquences
 
