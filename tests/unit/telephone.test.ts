@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   chiffresRecherche,
   formaterTelephone,
+  lienTelephone,
+  lienWhatsApp,
   normaliserTelephone,
   type ResultatTelephone,
 } from "@/lib/telephone";
@@ -68,6 +70,22 @@ describe("affichage et recherche", () => {
     expect(formaterTelephone("+33612345678")).toBe("+33 6 12 34 56 78");
     expect(formaterTelephone("+14155550123")).toBe("+14155550123");
     expect(formaterTelephone("pas un numéro")).toBe("pas un numéro");
+  });
+
+  it("les liens d'appel et WhatsApp partent du numéro E.164, jamais d'un numéro deviné", () => {
+    expect(lienTelephone("+2290197451233")).toBe("tel:+2290197451233");
+    expect(lienWhatsApp("+2290197451233")).toBe("https://wa.me/2290197451233");
+    expect(lienWhatsApp("+33612345678")).toBe("https://wa.me/33612345678");
+    for (const numero of [
+      "0197451233",
+      "01 97 45 12 33",
+      "+229 01 97 45 12 33",
+      "+0123456789",
+      "",
+    ]) {
+      expect(lienTelephone(numero), numero).toBeNull();
+      expect(lienWhatsApp(numero), numero).toBeNull();
+    }
   });
 
   it("la saisie de recherche est normalisée de la même façon", () => {

@@ -160,8 +160,82 @@ test("l'accueil n'a pas accès aux paramètres", async ({ page }, testInfo) => {
   await attendreAccueil(page, EGLISES[eglise]);
 
   await expect(page.getByRole("link", { name: "Paramètres" })).toHaveCount(0);
-  const reponse = await page.goto("/parametres");
-  expect(reponse?.status()).toBe(404);
+  for (const chemin of ["/parametres", "/parametres/cultes"]) {
+    const reponse = await page.goto(chemin);
+    expect(reponse?.status(), chemin).toBe(404);
+  }
+});
+
+test("le responsable règle cultes, délais et lieux ; seul l'administrateur règle le lieu du retrait", async ({
+  page,
+  eglise,
+}) => {
+  await seConnecter(page, eglise.email("RESPONSABLE"));
+  await attendreAccueil(page, eglise.nom);
+  await page.getByRole("link", { name: "Paramètres" }).click();
+  await page.getByRole("link", { name: /^Cultes et accueil/ }).click();
+  await expect(page).toHaveURL(/\/parametres\/cultes$/);
+  // The church's default services (cahier §17, point 4, until the leaders settle it).
+  await expect(
+    page.getByRole("heading", { name: "Culte 1 · Dimanche 08 h 00 – 10 h 00" }),
+  ).toBeVisible();
+
+  const ajout = page.getByRole("region", { name: "Ajouter un culte" });
+  await ajout.getByLabel("Nom du culte").fill("Culte du soir");
+  await ajout.getByLabel("Heure de début").fill("17:00");
+  await ajout.getByLabel("Heure de fin").fill("16:00");
+  await ajout.getByRole("button", { name: "Ajouter le culte" }).click();
+  await expect(ajout.getByText("L'heure de fin doit venir après l'heure de début.")).toBeVisible();
+  await ajout.getByLabel("Heure de fin").fill("19:00");
+  await ajout.getByRole("button", { name: "Ajouter le culte" }).click();
+  await expect(ajout.getByRole("status")).toHaveText("Culte ajouté.");
+  await expect(
+    page.getByRole("heading", { name: "Culte du soir · Dimanche 17 h 00 – 19 h 00" }),
+  ).toBeVisible();
+
+  const delais = page.getByRole("region", { name: "Délais d'alerte" });
+  await expect(delais.getByLabel(/non récupéré/)).toHaveValue("10");
+  await delais.getByLabel(/non récupéré/).fill("15");
+  await delais.getByRole("button", { name: "Enregistrer les délais" }).click();
+  await expect(delais.getByRole("status")).toHaveText("Délais enregistrés.");
+
+  const lieux = page.getByRole("region", { name: "Lieux de rendez-vous des parents" });
+  // exact: the "Retirer le lieu 1" button is labelled too.
+  await expect(lieux.getByLabel("Lieu 1", { exact: true })).toHaveValue("Accueil enfants");
+  await lieux.getByRole("button", { name: "Ajouter un lieu" }).click();
+  await lieux.getByLabel("Lieu 3", { exact: true }).fill("Hall d'entrée");
+  await lieux.getByRole("button", { name: "Enregistrer les lieux" }).click();
+  await expect(lieux.getByRole("status")).toHaveText("Lieux de rendez-vous enregistrés.");
+
+  // Read-only for a RESPONSABLE (its action requires eglise.parametrer, ADMIN only).
+  const retrait = page.getByRole("region", { name: "Lieu du retrait" });
+  await expect(retrait.getByTestId("lieu-retrait")).toContainText("à l'accueil seulement");
+  await expect(retrait.getByRole("radio")).toHaveCount(0);
+
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Délais d'alerte" }).getByLabel(/non récupéré/),
+  ).toHaveValue("15");
+  await expect(
+    page
+      .getByRole("region", { name: "Lieux de rendez-vous des parents" })
+      .getByLabel("Lieu 3", { exact: true }),
+  ).toHaveValue("Hall d'entrée");
+
+  await page.context().clearCookies();
+  await seConnecter(page, eglise.email("ADMIN"));
+  await attendreAccueil(page, eglise.nom);
+  await page.goto("/parametres/cultes");
+  const retraitAdmin = page.getByRole("region", { name: "Lieu du retrait" });
+  await retraitAdmin.getByRole("radio", { name: /à la porte des classes/ }).check();
+  await retraitAdmin.getByRole("button", { name: "Enregistrer le lieu du retrait" }).click();
+  await expect(retraitAdmin.getByRole("status")).toHaveText("Lieu du retrait enregistré.");
+  await page.reload();
+  await expect(
+    page
+      .getByRole("region", { name: "Lieu du retrait" })
+      .getByRole("radio", { name: /à la porte des classes/ }),
+  ).toBeChecked();
 });
 
 // A valid 4 × 4 PNG made by sharp (red pixels), small enough to inline.

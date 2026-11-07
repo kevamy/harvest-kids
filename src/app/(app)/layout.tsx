@@ -73,7 +73,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                 </Link>
               </Button>
             ) : null}
-            {peut(contexte.roles, "eglise.parametrer") || peut(contexte.roles, "classes.gerer") ? (
+            {peut(contexte.roles, "eglise.parametrer") ||
+            peut(contexte.roles, "classes.gerer") ||
+            peut(contexte.roles, "sessions.gerer") ? (
               <Button
                 asChild
                 variant="sombre"

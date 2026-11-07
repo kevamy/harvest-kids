@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { creerClasse, modifierClasse } from "@/server/classes";
+import { creerCulte, modifierCulte } from "@/server/cultes";
 import { formatParId } from "@/server/impression/formats";
 import { verifierTextesCarte } from "@/server/impression/mesure";
 import { SCHEMAS_PARAMETRES, ecrireParametre } from "@/server/parametres";
@@ -119,6 +120,60 @@ export async function enregistrerDelaiPurge(jours: unknown): Promise<ResultatAct
     );
   });
   if (resultat.ok) revalidatePath("/parametres/familles");
+  return resultat;
+}
+
+export async function ajouterCulte(saisie: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("sessions.gerer", async ({ db, contexte }) => {
+    await db.$tx((tx) => creerCulte(tx, contexte, saisie));
+  });
+  if (resultat.ok) revalidatePath("/parametres/cultes");
+  return resultat;
+}
+
+export async function mettreAJourCulte(culteId: unknown, saisie: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("sessions.gerer", async ({ db, contexte }) => {
+    if (typeof culteId !== "string") throw new RefusMetier("Culte introuvable.");
+    const trouve = await db.$tx((tx) => modifierCulte(tx, contexte, culteId, saisie));
+    // Same answer for a service of another church and a missing one.
+    if (!trouve) throw new RefusMetier("Culte introuvable. Rechargez la page.");
+  });
+  if (resultat.ok) revalidatePath("/parametres/cultes");
+  return resultat;
+}
+
+/** Alert delays (cahier §7.4, §7.7), both written in one transaction. */
+export async function enregistrerDelaisAlerte(saisie: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("sessions.gerer", async ({ db, contexte }) => {
+    const { nonRecupere, nonArriveEnSalle } = (saisie ?? {}) as Record<string, unknown>;
+    await db.$tx(async (tx) => {
+      await ecrireParametre(tx, contexte, "sessions.delaiAlerteNonRecupereMinutes", nonRecupere);
+      await ecrireParametre(
+        tx,
+        contexte,
+        "presences.delaiNonArriveEnSalleMinutes",
+        nonArriveEnSalle,
+      );
+    });
+  });
+  if (resultat.ok) revalidatePath("/parametres/cultes");
+  return resultat;
+}
+
+export async function enregistrerLieuxRendezVous(lieux: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("sessions.gerer", async ({ db, contexte }) => {
+    await db.$tx((tx) => ecrireParametre(tx, contexte, "appels.lieux", lieux));
+  });
+  if (resultat.ok) revalidatePath("/parametres/cultes");
+  return resultat;
+}
+
+/** Where children are collected: a security rule, for an ADMIN only (cahier §17, point 3). */
+export async function enregistrerLieuRetrait(lieu: unknown): Promise<ResultatAction> {
+  const resultat = await executerAction("eglise.parametrer", async ({ db, contexte }) => {
+    await db.$tx((tx) => ecrireParametre(tx, contexte, "checkout.lieu", lieu));
+  });
+  if (resultat.ok) revalidatePath("/parametres/cultes");
   return resultat;
 }
 
