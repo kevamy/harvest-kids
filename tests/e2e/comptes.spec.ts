@@ -14,7 +14,10 @@ test.beforeEach(reinitialiserLimites);
 const NOUVEAU_MOT_DE_PASSE = "Nouveau-secret-2026";
 
 async function lienAffiche(page: Page) {
-  const lien = await page.getByLabel("Lien à transmettre").inputValue();
+  const lien = await page
+    .getByRole("region", { name: /^Lien d/ })
+    .getByRole("textbox", { name: "Lien à transmettre" })
+    .inputValue();
   expect(lien).toMatch(/\/activation#HKC1\.[0-9A-Za-z]{43}$/);
   return lien;
 }
@@ -69,10 +72,13 @@ test("l'administrateur crée un moniteur, qui active son compte puis perd l'acc�
   await page.getByLabel("E-mail ou téléphone").fill(adresse);
   await page.locator("#nouveau-MONITEUR").check();
   await page.getByRole("button", { name: "Ajouter le compte" }).click();
-  await expect(page.getByText("Compte de Koffi Nouveau ajouté.")).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Compte de Koffi Nouveau ajouté." }),
+  ).toBeVisible();
   const lien = await lienAffiche(page);
-  await page.getByRole("button", { name: "Copier le lien" }).click();
-  await expect(page.getByText("Lien copié.")).toBeVisible();
+  const boiteLien = page.getByRole("region", { name: "Lien d'activation de Koffi Nouveau" });
+  await boiteLien.getByRole("button", { name: "Copier le lien" }).click();
+  await expect(boiteLien.getByRole("status")).toHaveText("Lien copié.");
   const koffi = comptes.getByRole("listitem", { name: "Koffi Nouveau" });
   await expect(koffi).toContainText("En attente d'activation");
 
@@ -100,7 +106,9 @@ test("l'administrateur crée un moniteur, qui active son compte puis perd l'acc�
     await koffi.getByRole("button", { name: "Désactiver le compte" }).click();
     const modale = page.getByRole("dialog", { name: "Désactiver le compte de Koffi Nouveau ?" });
     await modale.getByRole("button", { name: "Désactiver le compte" }).click();
-    await expect(page.getByText("Compte de Koffi Nouveau désactivé.")).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Compte de Koffi Nouveau désactivé." }),
+    ).toBeVisible();
     await expect(koffi).toContainText("Désactivé");
 
     await personne.page.goto("/accueil");
@@ -135,8 +143,11 @@ test("la réinitialisation, confirmée dans une modale, efface le mot de passe t
   await expect(modale).toBeHidden();
   await accueil.getByRole("button", { name: "Réinitialiser le mot de passe" }).click();
   await modale.getByRole("button", { name: "Réinitialiser le mot de passe" }).click();
-  await expect(page.getByText(/réinitialisé\.$/)).toBeVisible();
-  await expect(page.getByText(/valable 24 heures/)).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /réinitialisé\.$/ })).toBeVisible();
+  // The confirmation dialog also says "24 heures": the link box itself is checked.
+  await expect(page.getByRole("region", { name: /^Lien de réinitialisation de / })).toContainText(
+    "valable 24 heures",
+  );
   const lien = await lienAffiche(page);
   await expect(accueil).toContainText("Mot de passe à redéfinir");
 

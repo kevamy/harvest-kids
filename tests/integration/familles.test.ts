@@ -434,17 +434,42 @@ describe("téléphones", () => {
 
   it("la recherche par téléphone est limitée par index aux numéros de l'église active", async () => {
     // Under Row-Level Security the end of a number cannot be an index condition (ADR 0011):
-    // the (egliseId, telephone) indexes restrict the scan to the active church.
+    // an index on egliseId restricts the scan to the active church. Realistic volumes and
+    // fresh statistics, so that the plan does not depend on earlier runs: church B has 2000
+    // guardians and authorised persons, church A a few.
+    for (const [jeu, nombre] of [
+      [b, 2000],
+      [a, 5],
+    ] as const) {
+      await enEglise(proprietaire, jeu.egliseId, async () => {
+        await proprietaire.query(
+          `INSERT INTO "Tuteur" (id, "egliseId", "familleId", prenom, nom, lien, telephone)
+           SELECT 'tuteur_' || $1 || '_' || n, $1, $2, 'Prénom', 'Nom', 'Parent',
+                  '+22901' || lpad(n::text, 8, '0')
+           FROM generate_series(1, $3) n`,
+          [jeu.egliseId, jeu.familleId, nombre],
+        );
+        await proprietaire.query(
+          `INSERT INTO "PersonneAutorisee" (id, "egliseId", "familleId", prenom, nom, lien, telephone, "photoKey")
+           SELECT 'autorise_' || $1 || '_' || n, $1, $2, 'Prénom', 'Nom', 'Grand-mère',
+                  '+22901' || lpad(n::text, 8, '0'), 'eglises/' || $1 || '/photos/p.webp'
+           FROM generate_series(1, $3) n`,
+          [jeu.egliseId, jeu.familleId, nombre],
+        );
+      });
+    }
+    await proprietaire.query(`ANALYZE "Tuteur", "PersonneAutorisee"`);
+
     for (const table of ["Tuteur", "PersonneAutorisee"]) {
       const plan = await enEglise(proprietaire, a.egliseId, async () => {
-        await proprietaire.query("SET LOCAL enable_seqscan = off");
         const { rows } = await proprietaire.query(
           `EXPLAIN SELECT "familleId" FROM "${table}" WHERE "telephone" LIKE '%' || '97451233'`,
         );
         return rows.map((r) => r["QUERY PLAN"]).join(" ");
       });
-      expect(plan, table).toContain(`${table}_egliseId_telephone_idx`);
-      expect(plan, table).toMatch(/Index Cond: \("egliseId" = /);
+      // The property, whatever the index's name: an index condition on egliseId, no full scan.
+      expect(plan, table).toMatch(/Index Cond: \(.*"egliseId" = /);
+      expect(plan, table).not.toMatch(/Seq Scan/);
     }
   });
 });

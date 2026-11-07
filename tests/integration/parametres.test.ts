@@ -12,6 +12,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { creerStockageLocal } from "@/lib/storage/local";
 import { RequeteHorsEglise, clientEglise, type ClientEglise } from "@/lib/tenant";
 import { creerClasse, listerClasses, modifierClasse } from "@/server/classes";
+import { creerCulte, listerCultes, modifierCulte } from "@/server/cultes";
 import { PARAMETRES_PAR_DEFAUT, ecrireParametre, lireParametres } from "@/server/parametres";
 import { creerClientPlateforme } from "@/server/plateforme/db";
 import {
@@ -242,6 +243,107 @@ describe("classes et tranches d'âge (RG-17)", () => {
     );
     expect(rows).toEqual([{ nom: "3–5 ans" }]);
     expect(await audit(a)).toEqual([]);
+  });
+});
+
+describe("cultes et réglages d'accueil (cahier §17, points 3, 4 et 6)", () => {
+  const culte = {
+    nom: "Culte du soir",
+    jour: 0,
+    heureDebut: "17:00",
+    heureFin: "19:00",
+    actif: true,
+  };
+
+  it("crée et modifie un culte, avec l'audit", async () => {
+    const { id } = await dbA.$tx((tx) => creerCulte(tx, auteur(a), culte));
+    expect(
+      await dbA.$tx((tx) =>
+        modifierCulte(tx, auteur(a), id, { ...culte, heureDebut: "17:30", actif: false }),
+      ),
+    ).toBe(true);
+
+    expect(await listerCultes(dbA)).toEqual([
+      { id, nom: "Culte du soir", jour: 0, heureDebut: "17:30", heureFin: "19:00", actif: false },
+    ]);
+    const entrees = await audit(a);
+    expect(entrees.map((e) => e.action)).toEqual(["culte.cree", "culte.modifie"]);
+    expect(entrees[1]).toMatchObject({
+      avant: { heureDebut: "17:00", actif: true },
+      apres: { heureDebut: "17:30", actif: false },
+    });
+  });
+
+  it("refuse une fin avant le début, une heure mal écrite ou un jour inconnu, sans rien écrire", async () => {
+    for (const saisie of [
+      { ...culte, heureFin: "16:00" },
+      { ...culte, heureFin: "17:00" },
+      { ...culte, heureDebut: "8h" },
+      { ...culte, heureDebut: "24:00" },
+      { ...culte, jour: 7 },
+      { ...culte, nom: " " },
+    ]) {
+      await expect(dbA.$tx((tx) => creerCulte(tx, auteur(a), saisie))).rejects.toThrow(ZodError);
+    }
+    expect(await listerCultes(dbA)).toEqual([]);
+    expect(await audit(a)).toEqual([]);
+  });
+
+  it("isolation A/B : A ne voit pas et ne modifie pas un culte de B", async () => {
+    const { id } = await dbB.$tx((tx) => creerCulte(tx, auteur(b), culte));
+    expect(await listerCultes(dbA)).toEqual([]);
+    expect(await dbA.$tx((tx) => modifierCulte(tx, auteur(a), id, { ...culte, nom: "Pris" }))).toBe(
+      false,
+    );
+    expect((await listerCultes(dbB)).map((c) => c.nom)).toEqual(["Culte du soir"]);
+    expect(await audit(a)).toEqual([]);
+  });
+
+  it("délais, lieux de rendez-vous et lieu du retrait : défauts, bornes, propres à chaque église", async () => {
+    expect(await lireParametres(dbA)).toMatchObject({
+      "sessions.delaiAlerteNonRecupereMinutes": 10,
+      "presences.delaiNonArriveEnSalleMinutes": 10,
+      "checkout.lieu": "ACCUEIL",
+      "appels.lieux": ["Accueil enfants", "Infirmerie"],
+    });
+
+    await dbA.$tx(async (tx) => {
+      await ecrireParametre(tx, auteur(a), "sessions.delaiAlerteNonRecupereMinutes", 0);
+      await ecrireParametre(tx, auteur(a), "presences.delaiNonArriveEnSalleMinutes", 15);
+      await ecrireParametre(tx, auteur(a), "checkout.lieu", "ACCUEIL_ET_CLASSES");
+      await ecrireParametre(tx, auteur(a), "appels.lieux", [" Accueil ", "Hall"]);
+    });
+    expect(await lireParametres(dbA)).toMatchObject({
+      "sessions.delaiAlerteNonRecupereMinutes": 0,
+      "presences.delaiNonArriveEnSalleMinutes": 15,
+      "checkout.lieu": "ACCUEIL_ET_CLASSES",
+      "appels.lieux": ["Accueil", "Hall"],
+    });
+    expect((await audit(a)).map((e) => e.entiteId)).toEqual([
+      "sessions.delaiAlerteNonRecupereMinutes",
+      "presences.delaiNonArriveEnSalleMinutes",
+      "checkout.lieu",
+      "appels.lieux",
+    ]);
+
+    for (const [cle, valeur] of [
+      ["sessions.delaiAlerteNonRecupereMinutes", 121],
+      ["presences.delaiNonArriveEnSalleMinutes", 0],
+      ["checkout.lieu", "PORTE"],
+      ["appels.lieux", []],
+      ["appels.lieux", ["Hall", "hall"]],
+      ["appels.lieux", ["A", "B", "C", "D", "E", "F"]],
+      ["appels.lieux", ["x".repeat(41)]],
+    ] as const) {
+      await expect(
+        dbA.$tx((tx) => ecrireParametre(tx, auteur(a), cle, valeur)),
+        `${cle} ${JSON.stringify(valeur)}`,
+      ).rejects.toThrow(ZodError);
+    }
+
+    // Church B keeps its defaults.
+    expect(await lireParametres(dbB)).toEqual(PARAMETRES_PAR_DEFAUT);
+    expect(await audit(b)).toEqual([]);
   });
 });
 

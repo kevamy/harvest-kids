@@ -27,6 +27,13 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
     action: "classes.gerer",
   },
   {
+    href: "/parametres/cultes",
+    titre: "Cultes et accueil",
+    description:
+      "Horaires des cultes, délais d'alerte, lieux de rendez-vous des parents, lieu du retrait.",
+    action: "sessions.gerer",
+  },
+  {
     href: "/parametres/impression",
     titre: "Impression des cartes",
     description: "Format par défaut, recto seul ou recto-verso.",
@@ -54,7 +61,12 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
 ];
 
 export default async function Parametres() {
-  const acces = await contextePage("eglise.parametrer", "classes.gerer", "comptes.gerer");
+  const acces = await contextePage(
+    "eglise.parametrer",
+    "classes.gerer",
+    "sessions.gerer",
+    "comptes.gerer",
+  );
   if (!acces) return null;
   const sections = SECTIONS.filter((s) => peut(acces.contexte.roles, s.action));
 

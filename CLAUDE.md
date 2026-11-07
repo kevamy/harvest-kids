@@ -6,8 +6,11 @@ Application web (tablette) d'accueil, de suivi et de retrait sécurisé des enfa
 
 - Travaille **lot par lot** (section 15 du cahier des charges). Au début d'un lot, propose un plan court (fichiers, migrations, tests) et attends la validation avant de coder.
 - Toute modification du schéma Prisma est présentée et expliquée avant de générer la migration. Jamais de `prisma db push` sur un environnement partagé : uniquement `prisma migrate`.
+- Prisma 7 : `prisma migrate dev` ne régénère plus le client. Applique une migration avec `pnpm db:migrate`, qui enchaîne `prisma migrate dev` et `prisma generate` ; sans cela, le client ignore les nouveaux modèles et champs.
 - N'ajoute pas de dépendance absente de la section 10 sans expliquer pourquoi et sans accord.
-- Termine chaque tâche par : `pnpm lint`, `pnpm typecheck`, `pnpm test` (et `pnpm test:e2e` quand un parcours est touché). Ne déclare pas une tâche finie si l'une de ces commandes échoue.
+- Termine chaque tâche par : `pnpm lint`, `pnpm typecheck`, `pnpm test` et `pnpm test:integration` (la suite complète), en local, une suite à la fois. Ne déclare pas une tâche finie si l'une de ces commandes échoue.
+- Tests e2e : cible chaque élément par son rôle et son nom accessible (`getByRole`) à l'intérieur d'une zone précise (liste, région ou boîte de dialogue nommée, message `status`), jamais par un simple `getByText` ou `getByLabel` sur toute une carte ou toute la page : une option de liste, un bouton « Retirer le lieu 1 » ou un texte d'aide répètent souvent le même texte. Un état affiché se vérifie par la description accessible de sa zone (`aria-describedby`, `toHaveAccessibleDescription`).
+- L'e2e complet passe par la CI de la pull request : la protection de `main` empêche toute fusion tant qu'elle n'est pas verte. En local, ne lance l'e2e (`pnpm build`, puis `CI=1 pnpm test:e2e --workers=1 --retries=0`) que si l'utilisateur dit avoir fermé ses navigateurs : la mémoire du poste ne suffit pas sinon.
 - Tiens `docs/decisions/` à jour : un court fichier ADR par choix technique non trivial.
 - Si une exigence du cahier des charges est ambiguë, pose la question au lieu de supposer.
 - Modifie les fichiers uniquement avec l'outil d'édition de fichiers, jamais par des scripts shell (`sed`, `python`, `node -e`, here-documents) : ils altèrent les antislashs, les guillemets et les accents (au lot 1, l'expression régulière du matricule a été cassée ainsi).
@@ -63,7 +66,7 @@ Le design system Harvest Kids fait foi (`design/charte.md`, `design/tokens.css`,
 ```
 pnpm dev              # serveur de développement
 pnpm db:up            # PostgreSQL local (docker-compose.dev.yml)
-pnpm db:migrate       # prisma migrate dev
+pnpm db:migrate       # prisma migrate dev, puis prisma generate (Prisma 7)
 pnpm db:seed          # données de démonstration
 pnpm lint | typecheck | test | test:e2e
 pnpm build            # build standalone

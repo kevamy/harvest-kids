@@ -6,7 +6,7 @@ import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
 import { peut } from "@/lib/rbac";
-import { formaterTelephone } from "@/lib/telephone";
+import { formaterTelephone, lienTelephone } from "@/lib/telephone";
 import { listerCartesFamille } from "@/server/cartes/lecture";
 import { ALERTES_RAPIDES, lireFamille } from "@/server/familles";
 import { CartesFamille } from "./cartes";
@@ -132,7 +132,9 @@ export default async function FicheFamille({ params, searchParams }: PageProps<"
                 <p className="m-0">
                   {/* The main contact of a saved family always has one; a draft's may not. */}
                   {t.telephone ? (
-                    <a href={`tel:${t.telephone}`}>{formaterTelephone(t.telephone)}</a>
+                    <a href={lienTelephone(t.telephone) ?? undefined}>
+                      {formaterTelephone(t.telephone)}
+                    </a>
                   ) : (
                     <span className="text-texte-doux">
                       {brouillon && t.principal ? "Téléphone à compléter" : "Sans numéro"}

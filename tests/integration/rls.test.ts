@@ -196,6 +196,9 @@ describe("journaux non modifiables (RG-09)", () => {
       `UPDATE "EvenementPresence" SET type = 'efface'`,
       `DELETE FROM "EvenementPresence"`,
       `DELETE FROM "AuditPlateforme"`,
+      // An exceptional pickup authorisation is kept as it was given (lot 2).
+      `UPDATE "RetraitExceptionnel" SET motif = 'efface'`,
+      `DELETE FROM "RetraitExceptionnel"`,
     ]) {
       expect(await codeErreur(enEglise(app, a.egliseId, () => app.query(sql))), sql).toBe("42501");
     }
@@ -216,10 +219,12 @@ describe("index partiels", () => {
     const { rows } = await proprietaire.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef FROM pg_indexes
        WHERE indexname IN ('Presence_une_ouverte_par_enfant', 'CarteFamille_famille_active',
-         'CarteFamille_enfant_active', 'CarteFamille_famille_en_attente', 'CarteFamille_enfant_en_attente')
+         'CarteFamille_enfant_active', 'CarteFamille_famille_en_attente', 'CarteFamille_enfant_en_attente',
+         'AffectationMoniteur_une_active_par_membre')
        ORDER BY indexname`,
     );
     expect(rows.map((r) => r.indexname)).toEqual([
+      "AffectationMoniteur_une_active_par_membre",
       "CarteFamille_enfant_active",
       "CarteFamille_enfant_en_attente",
       "CarteFamille_famille_active",
@@ -233,11 +238,133 @@ describe("index partiels", () => {
     await ouvrirPresence("p_1");
     expect(await codeErreur(ouvrirPresence("p_2"))).toBe("23505");
 
-    // Once the child has been picked up, a new presence is accepted.
-    await enEglise(app, a.egliseId, () =>
-      app.query(`UPDATE "Presence" SET statut = 'RECUPERE' WHERE id = 'p_1'`),
-    );
+    // Once the child has been picked up (by an authorised person, as the base requires since
+    // lot 2), a new presence is accepted.
+    await enEglise(app, a.egliseId, async () => {
+      await app.query(
+        `INSERT INTO "PersonneAutorisee" (id, "egliseId", "familleId", prenom, nom, lien, "photoKey")
+         VALUES ('pa_1', $1, $2, 'Mireille', 'Adjovi', 'Mère', 'eglises/a/photos/pa.webp')`,
+        [a.egliseId, a.familleId],
+      );
+      await app.query(
+        `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1' WHERE id = 'p_1'`,
+      );
+    });
     expect(await codeErreur(ouvrirPresence("p_3"))).toBeUndefined();
+  });
+
+  describe("lot 2 : qui récupère l'enfant, retrait exceptionnel, affectations des moniteurs", () => {
+    /** Runs one statement as the application in church A; returns its error code. */
+    const executer = (sql: string, valeurs: unknown[] = []) =>
+      codeErreur(enEglise(app, a.egliseId, () => app.query(sql, valeurs)));
+    const retrait = (id: string, incidentId: string, telephone: string | null) =>
+      executer(
+        `INSERT INTO "RetraitExceptionnel" (id, "egliseId", "sessionId", "familleId", nom, telephone,
+           "photoKey", motif, "autorisePar", "remisPar", "incidentId")
+         VALUES ($1, $2, $3, $4, 'Paul Adjovi', $5, 'eglises/a/photos/r.webp',
+           'Parents retenus, contact principal joint', 'user_resp', 'user_accueil', $6)`,
+        [id, a.egliseId, a.sessionId, a.familleId, telephone, incidentId],
+      );
+    const affecter = (id: string, sessionClasseId: string) =>
+      executer(
+        `INSERT INTO "AffectationMoniteur" (id, "egliseId", "sessionClasseId", "membreId")
+         VALUES ($1, $2, $3, 'membre_moniteur')`,
+        [id, a.egliseId, sessionClasseId],
+      );
+
+    beforeEach(async () => {
+      // Accounts and member (platform tables), then church A's rows, as the owner.
+      await proprietaire.query(
+        `INSERT INTO "User" (id, name, email, "updatedAt") VALUES
+           ('user_resp', 'Responsable', 'resp@harvest-kids.test', now()),
+           ('user_accueil', 'Accueil', 'accueil@harvest-kids.test', now()),
+           ('user_moniteur', 'Moniteur', 'moniteur@harvest-kids.test', now())`,
+      );
+      await proprietaire.query(
+        `INSERT INTO "Membre" (id, "egliseId", "userId", roles, "updatedAt")
+         VALUES ('membre_moniteur', $1, 'user_moniteur', '{MONITEUR}', now())`,
+        [a.egliseId],
+      );
+      await enEglise(proprietaire, a.egliseId, async () => {
+        await proprietaire.query(
+          `INSERT INTO "PersonneAutorisee" (id, "egliseId", "familleId", prenom, nom, lien, "photoKey")
+           VALUES ('pa_1', $1, $2, 'Mireille', 'Adjovi', 'Mère', 'eglises/a/photos/pa.webp')`,
+          [a.egliseId, a.familleId],
+        );
+        await proprietaire.query(
+          `INSERT INTO "Incident" (id, "egliseId", "sessionId", type, description, "declarePar") VALUES
+             ('incident_1', $1, $2, 'RETRAIT_NON_AUTORISE', 'Adulte non reconnu', 'user_resp'),
+             ('incident_2', $1, $2, 'RETRAIT_NON_AUTORISE', 'Adulte non reconnu', 'user_resp')`,
+          [a.egliseId, a.sessionId],
+        );
+        await proprietaire.query(
+          `INSERT INTO "Classe" (id, "egliseId", nom, "ageMinMois", "ageMaxMois")
+           VALUES ('classe_a2', $1, '6–8 ans', 72, 107)`,
+          [a.egliseId],
+        );
+        await proprietaire.query(
+          `INSERT INTO "SessionClasse" (id, "egliseId", "sessionId", "classeId") VALUES
+             ('sc_1', $1, $2, $3), ('sc_2', $1, $2, 'classe_a2')`,
+          [a.egliseId, a.sessionId, a.classeId],
+        );
+      });
+      await ouvrirPresence("p_1");
+    });
+
+    it("un enfant ne passe à RECUPERE qu'avec une personne autorisée ou un retrait exceptionnel, jamais les deux", async () => {
+      expect(await retrait("retrait_1", "incident_1", "+2290197451233")).toBeUndefined();
+      // Neither: refused (check_violation).
+      expect(await executer(`UPDATE "Presence" SET statut = 'RECUPERE' WHERE id = 'p_1'`)).toBe(
+        "23514",
+      );
+      // Both: refused.
+      expect(
+        await executer(
+          `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1',
+             "retraitExceptionnelId" = 'retrait_1' WHERE id = 'p_1'`,
+        ),
+      ).toBe("23514");
+      // Exactly one: accepted, either way.
+      expect(
+        await executer(
+          `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1' WHERE id = 'p_1'`,
+        ),
+      ).toBeUndefined();
+      await ouvrirPresence("p_2");
+      expect(
+        await executer(
+          `UPDATE "Presence" SET statut = 'RECUPERE', "retraitExceptionnelId" = 'retrait_1'
+             WHERE id = 'p_2'`,
+        ),
+      ).toBeUndefined();
+    });
+
+    it("le téléphone d'un retrait exceptionnel est facultatif, au format E.164", async () => {
+      for (const telephone of ["0197451233", "+229 01 97 45 12 33", "+0197451233"]) {
+        expect(await retrait("retrait_x", "incident_1", telephone), telephone).toBe("23514");
+      }
+      expect(await retrait("retrait_1", "incident_1", null)).toBeUndefined();
+      // One pickup per incident.
+      expect(await retrait("retrait_2", "incident_1", "+2290197451233")).toBe("23505");
+      expect(await retrait("retrait_2", "incident_2", "+2290197451233")).toBeUndefined();
+    });
+
+    it("isolation A/B : un retrait exceptionnel de A est invisible depuis B", async () => {
+      await retrait("retrait_1", "incident_1", null);
+      const { rows } = await enEglise(app, b.egliseId, () =>
+        app.query(`SELECT id FROM "RetraitExceptionnel"`),
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it("un moniteur n'a qu'une affectation active à la fois", async () => {
+      expect(await affecter("aff_1", "sc_1")).toBeUndefined();
+      expect(await affecter("aff_2", "sc_2")).toBe("23505");
+      expect(
+        await executer(`UPDATE "AffectationMoniteur" SET depart = now() WHERE id = 'aff_1'`),
+      ).toBeUndefined();
+      expect(await affecter("aff_2", "sc_2")).toBeUndefined();
+    });
   });
 
   describe("cartes (RG-16) : une active et une en attente au plus par couverture", () => {
