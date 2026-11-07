@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, CameraOff, ScanLine } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -12,18 +12,25 @@ import { cn } from "@/lib/utils";
  */
 export function Scanner({
   onScan,
+  onValiderVide,
+  champRef,
   libelle = "Scannez la carte famille ou saisissez le code",
   avecCamera = false,
   className,
 }: {
   onScan: (valeur: string) => void;
+  /** Enter on the empty field (a scanner-only workflow, without touching the screen). */
+  onValiderVide?: () => void;
+  /** Lets the screen give the focus back to the field (after a confirmation). */
+  champRef?: RefObject<HTMLInputElement | null>;
   libelle?: string;
   /** Offers to read the QR code with the tablet's camera. */
   avecCamera?: boolean;
   className?: string;
 }) {
   const id = useId();
-  const champ = useRef<HTMLInputElement>(null);
+  const champInterne = useRef<HTMLInputElement>(null);
+  const champ = champRef ?? champInterne;
   const video = useRef<HTMLVideoElement>(null);
   const [valeur, setValeur] = useState("");
   const [camera, setCamera] = useState(false);
@@ -74,6 +81,7 @@ export function Scanner({
           event.preventDefault();
           const lu = valeur.trim();
           if (lu) onScan(lu);
+          else onValiderVide?.();
           setValeur("");
           champ.current?.focus();
         }}
