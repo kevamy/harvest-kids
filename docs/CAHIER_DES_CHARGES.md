@@ -1,6 +1,6 @@
 # Harvest Kids — Cahier des charges
 
-Version 1.3, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
+Version 1.4, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
 
 ---
 
@@ -148,8 +148,8 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 1. Les sessions du jour sont créées automatiquement à partir des cultes récurrents (ou manuellement).
 2. Le responsable **ouvre la session** ; les classes sont listées avec leur nombre de moniteurs présents.
 3. Chaque moniteur fait son propre check-in en scannant son badge moniteur (QR) ou en se sélectionnant, puis choisit sa classe.
-4. **Une classe n'est ouverte que lorsque 2 moniteurs y sont affectés** (paramètre `minMoniteurs`). Tant qu'elle n'est pas ouverte, le check-in vers cette classe est bloqué. Le responsable peut forcer l'ouverture en saisissant un motif ; la classe apparaît alors en alerte sur tous les tableaux de bord.
-5. Si un moniteur quitte sa classe en cours de session et que le nombre tombe sous le minimum, une alerte rouge s'affiche sur le tableau de bord de l'accueil et du responsable.
+4. **Une classe n'est ouverte que lorsque 2 moniteurs y sont affectés** (paramètre `minMoniteurs`). Tant qu'elle n'est pas ouverte, le check-in vers cette classe est bloqué. Le responsable peut forcer l'ouverture en saisissant un motif, **à condition qu'au moins un moniteur soit présent dans la classe** : à 0 moniteur, l'ouverture forcée est refusée (« Affectez au moins un moniteur avant de forcer l'ouverture »). La classe forcée apparaît alors en alerte sur tous les tableaux de bord, et son motif s'affiche sur le tableau du responsable.
+5. Si un moniteur quitte sa classe en cours de session et que le nombre tombe sous le minimum, une alerte rouge s'affiche sur le tableau de bord de l'accueil et du responsable. Si une classe ouverte (forcée ou non) n'a plus aucun moniteur, l'alerte est maximale sur ces tableaux : « Aucun moniteur dans Pouponnière ».
 6. Un moniteur des autres départements peut être ajouté comme renfort (rôle MONITEUR temporaire pour la session).
 
 ### 7.3 Check-in (ACCUEIL)
@@ -253,7 +253,7 @@ Chaque église imprime elle-même ses cartes. Cinq formats sont proposés, en tr
 | RG-02 | **Le QR code ne contient jamais le matricule ni un nom.** Il contient un jeton aléatoire opaque (`HKF1.` + 22 caractères base62) associé côté serveur à la famille. Le matricule étant affiché publiquement sur l'écran d'appel, un QR basé sur le matricule pourrait être falsifié. |
 | RG-03 | Un jeton de carte révoqué est refusé avec le message « Cette carte a été remplacée. Demandez la nouvelle carte au parent ou recherchez la famille. » |
 | RG-04 | Le code de retrait de session est valable uniquement pour la session où il a été généré. |
-| RG-05 | Check-in impossible vers une classe non ouverte (moins de `minMoniteurs`), sauf ouverture forcée motivée par un RESPONSABLE. |
+| RG-05 | Check-in impossible vers une classe non ouverte (moins de `minMoniteurs`), sauf ouverture forcée motivée par un RESPONSABLE, jamais sans au moins un moniteur présent dans la classe. Une classe ouverte qui n'a plus aucun moniteur déclenche l'alerte maximale sur les tableaux de l'accueil et du responsable. |
 | RG-06 | Check-out uniquement par une personne autorisée de la famille, identifiée visuellement sur sa photo ; toute exception crée un incident. |
 | RG-07 | Un enfant `INFIRMERIE` est signalé en tête de tout écran qui l'affiche. |
 | RG-08 | Un même enfant ne peut avoir qu'une seule présence non clôturée à la fois. |

@@ -113,15 +113,48 @@ test("le responsable ouvre la session ; une classe s'ouvre au deuxième moniteur
       .filter({ hasText: "Moniteur test" }),
   ).toHaveCount(1);
   await expect(petits).toHaveAccessibleDescription("Sous le minimum : 0/2 moniteurs");
+  // An open class left without any monitor: the highest alert, at the top of the board.
+  const alertes = page.getByRole("region", { name: "Alertes des classes" });
+  await expect(
+    alertes.getByRole("listitem").filter({ hasText: "Aucun moniteur dans 3–5 ans" }),
+  ).toHaveCount(1);
 
-  // Forced opening, with a reason.
+  // Forced opening: never without a monitor in the class (RG-05).
   const pouponniere = session.getByRole("region", { name: "Classe Pouponnière" });
-  await pouponniere.getByRole("button", { name: "Forcer l'ouverture" }).click();
+  const forcer = async () => {
+    await pouponniere.getByRole("button", { name: "Forcer l'ouverture" }).click();
+    await pouponniere
+      .getByRole("textbox", { name: "Motif de l'ouverture forcée" })
+      .fill("Un seul moniteur, la responsable reste à côté");
+    await pouponniere.getByRole("button", { name: "Confirmer l'ouverture forcée" }).click();
+  };
+  await forcer();
+  await expect(session.getByRole("alert").filter({ hasText: "Affectez au moins" })).toHaveText(
+    "Affectez au moins un moniteur avant de forcer l'ouverture.",
+  );
+  await expect(pouponniere).toHaveAccessibleDescription("Fermée : 0/2 moniteurs");
+
   await pouponniere
-    .getByRole("textbox", { name: "Motif de l'ouverture forcée" })
-    .fill("Deux mamans de garde ce matin");
-  await pouponniere.getByRole("button", { name: "Confirmer l'ouverture forcée" }).click();
-  await expect(pouponniere).toHaveAccessibleDescription("Ouverte (forcée)");
+    .getByRole("combobox", { name: "Ajouter un moniteur" })
+    .selectOption({ label: "Accueil test (renfort)" });
+  await pouponniere.getByRole("button", { name: "Ajouter", exact: true }).click();
+  await expect(pouponniere).toHaveAccessibleDescription("Fermée : 1/2 moniteurs");
+  await forcer();
+  await expect(pouponniere).toHaveAccessibleDescription("Ouverture forcée : 1/2 moniteurs");
+  await expect(pouponniere).toContainText(
+    "Motif du forçage : Un seul moniteur, la responsable reste à côté",
+  );
+
+  // The forced class loses its only monitor: the highest alert.
+  await pouponniere
+    .getByRole("list", { name: "Moniteurs de Pouponnière" })
+    .getByRole("listitem")
+    .filter({ hasText: "Accueil test" })
+    .getByRole("button", { name: "Faire sortir" })
+    .click();
+  await expect(
+    alertes.getByRole("listitem").filter({ hasText: "Aucun moniteur dans Pouponnière" }),
+  ).toHaveCount(1);
 
   // No child present: the session closes.
   await session.getByRole("button", { name: "Clôturer la session" }).click();

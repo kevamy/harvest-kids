@@ -156,7 +156,10 @@ export async function quitterClasse(tx: Tx, auteur: Auteur, membreId: string): P
   return true;
 }
 
-/** A RESPONSABLE opens a class below its minimum, with a reason (RG-05). */
+/**
+ * A RESPONSABLE opens a class below its minimum, with a reason (RG-05), never without any
+ * monitor: at least one must be present in the class.
+ */
 export async function forcerOuverture(
   tx: Tx,
   auteur: Auteur,
@@ -166,6 +169,12 @@ export async function forcerOuverture(
   await sessionOuverte(tx, saisie.sessionId);
   const classe = await verrouillerClasse(tx, saisie.sessionId, saisie.classeId);
   if (classe.ouverteLe) throw new AffectationRefusee("Cette classe est déjà ouverte.");
+  const [ligne] = await tx.$queryRaw<{ presents: number }[]>`
+    SELECT count(*)::int AS presents FROM "AffectationMoniteur"
+    WHERE "sessionClasseId" = ${classe.id} AND depart IS NULL`;
+  if ((ligne?.presents ?? 0) === 0) {
+    throw new AffectationRefusee("Affectez au moins un moniteur avant de forcer l'ouverture.");
+  }
   await tx.$executeRaw`
     UPDATE "SessionClasse"
     SET "ouverteLe" = now(), "forcageMotif" = ${motif}, "forcePar" = ${auteur.userId}
@@ -185,9 +194,13 @@ export type EtatClasse = {
   minMoniteurs: number;
   ouverte: boolean;
   forcee: boolean;
+  /** Reason given by the RESPONSABLE who forced the opening (RG-05). */
+  motifForcage: string | null;
   moniteurs: { membreId: string; renfort: boolean }[];
   /** Open, but fewer monitors than its minimum now (cahier §7.2.5): red alert. */
   sousMinimum: boolean;
+  /** Open with no monitor left at all: the highest alert, on every dashboard. */
+  sansMoniteur: boolean;
 };
 
 /** Classes of a session in display order, with their monitors present and their state. */
@@ -227,10 +240,46 @@ export async function etatClasses(
       minMoniteurs: k.minMoniteurs,
       ouverte,
       forcee: Boolean(sc?.forcageMotif),
+      motifForcage: sc?.forcageMotif ?? null,
       moniteurs,
       sousMinimum: ouverte && moniteurs.length < k.minMoniteurs,
+      sansMoniteur: ouverte && moniteurs.length === 0,
     };
   });
+}
+
+export type AlerteClasse = {
+  sessionId: string;
+  culte: string | null;
+  classe: string;
+  moniteurs: number;
+  minMoniteurs: number;
+  /** "sans_moniteur": the highest alert; "sous_minimum": red alert (cahier §7.2.5). */
+  niveau: "sans_moniteur" | "sous_minimum";
+};
+
+/**
+ * Open classes of open sessions with fewer monitors than their minimum, the empty ones first:
+ * the alerts of the reception and RESPONSABLE dashboards.
+ */
+export async function alertesClasses(db: Pick<ClientDeBase, "$queryRaw">): Promise<AlerteClasse[]> {
+  const lignes = await db.$queryRaw<Omit<AlerteClasse, "niveau">[]>`
+    SELECT sc."sessionId", c.nom AS culte, k.nom AS classe, k."minMoniteurs",
+           (SELECT count(*)::int FROM "AffectationMoniteur" a
+             WHERE a."sessionClasseId" = sc.id AND a.depart IS NULL) AS moniteurs
+    FROM "SessionClasse" sc
+    JOIN "Session" s ON s.id = sc."sessionId"
+    JOIN "Classe" k ON k.id = sc."classeId"
+    LEFT JOIN "Culte" c ON c.id = s."culteId"
+    WHERE s.statut = 'OUVERTE' AND sc."ouverteLe" IS NOT NULL
+    ORDER BY s.debut, k.ordre, k.nom`;
+  return lignes
+    .filter((l) => l.moniteurs < l.minMoniteurs)
+    .map((l) => ({
+      ...l,
+      niveau: l.moniteurs === 0 ? ("sans_moniteur" as const) : ("sous_minimum" as const),
+    }))
+    .sort((x, y) => Number(y.niveau === "sans_moniteur") - Number(x.niveau === "sans_moniteur"));
 }
 
 /** The class the member is in now, in an open session, if any. */

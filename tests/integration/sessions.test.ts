@@ -8,6 +8,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { clientEglise, type ClientEglise } from "@/lib/tenant";
 import {
   AffectationRefusee,
+  alertesClasses,
   etatClasses,
   forcerOuverture,
   quitterClasse,
@@ -277,11 +278,19 @@ describe("moniteurs et ouverture des classes (RG-05)", () => {
         forcerOuverture(tx, auteur(a), { sessionId: a.sessionId, classeId: a.classeId, motif }),
       );
     await expect(forcer(" ")).rejects.toThrow("Saisissez le motif de l'ouverture forcée.");
+    // Never without any monitor in the class (RG-05).
+    await expect(forcer("Personne n'est arrivé")).rejects.toThrow(
+      "Affectez au moins un moniteur avant de forcer l'ouverture.",
+    );
+    const m1 = await membre(a, "m1", ["MONITEUR"]);
+    await rejoindre(m1);
     await forcer("Un seul moniteur ce matin, le responsable reste avec lui");
     expect((await etatClasses(dbA, a.sessionId))[0]).toMatchObject({
       ouverte: true,
       forcee: true,
+      motifForcage: "Un seul moniteur ce matin, le responsable reste avec lui",
       sousMinimum: true,
+      sansMoniteur: false,
     });
     await expect(forcer("Encore")).rejects.toThrow("Cette classe est déjà ouverte.");
     const { rows } = await enEglise(proprietaire, a.egliseId, () =>
@@ -293,6 +302,47 @@ describe("moniteurs et ouverture des classes (RG-05)", () => {
         forcageMotif: "Un seul moniteur ce matin, le responsable reste avec lui",
       },
     ]);
+  });
+});
+
+describe("alertes des tableaux de bord (cahier §7.2.5)", () => {
+  it("une classe ouverte sous le minimum est en alerte, l'alerte maximale à 0 moniteur", async () => {
+    const lire = lectureMembre(base, { egliseId: a.egliseId });
+    const rejoindre = (membreId: string) =>
+      dbA.$tx((tx) =>
+        rejoindreClasse(tx, auteur(a), lire, {
+          sessionId: a.sessionId,
+          classeId: a.classeId,
+          membreId,
+          renfort: false,
+        }),
+      );
+    const m1 = await membre(a, "m1", ["MONITEUR"]);
+    const m2 = await membre(a, "m2", ["MONITEUR"]);
+    await dbA.$tx((tx) => ouvrirSession(tx, auteur(a), a.sessionId));
+    await rejoindre(m1);
+    // A closed class is not an alert: check-in is blocked there anyway (RG-05).
+    expect(await alertesClasses(dbA)).toEqual([]);
+    await rejoindre(m2);
+    expect(await alertesClasses(dbA)).toEqual([]);
+
+    await dbA.$tx((tx) => quitterClasse(tx, auteur(a), m2));
+    expect(await alertesClasses(dbA)).toEqual([
+      {
+        sessionId: a.sessionId,
+        culte: null,
+        classe: "3–5 ans",
+        moniteurs: 1,
+        minMoniteurs: 2,
+        niveau: "sous_minimum",
+      },
+    ]);
+    await dbA.$tx((tx) => quitterClasse(tx, auteur(a), m1));
+    expect(await alertesClasses(dbA)).toMatchObject([{ moniteurs: 0, niveau: "sans_moniteur" }]);
+    expect((await etatClasses(dbA, a.sessionId))[0]).toMatchObject({ sansMoniteur: true });
+
+    // Church B sees none of A's alerts.
+    expect(await alertesClasses(clientEglise(base, b.egliseId))).toEqual([]);
   });
 });
 

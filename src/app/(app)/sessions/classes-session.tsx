@@ -27,8 +27,12 @@ type Classe = EtatSessionDirect["classes"][number];
 /** State of a class; its id describes the class card (aria-describedby). */
 function Etat({ classe, id }: { classe: Classe; id: string }) {
   const effectif = `${classe.moniteurs.length}/${classe.minMoniteurs} moniteurs`;
+  // A forced class under its minimum is an alert that says why it is open.
   const [texte, couleur] = classe.sousMinimum
-    ? [`Sous le minimum : ${effectif}`, "text-alerte"]
+    ? [
+        classe.forcee ? `Ouverture forcée : ${effectif}` : `Sous le minimum : ${effectif}`,
+        "text-alerte",
+      ]
     : classe.ouverte
       ? [classe.forcee ? "Ouverte (forcée)" : "Ouverte", "text-succes"]
       : [`Fermée : ${effectif}`, "text-texte-doux"];
@@ -152,7 +156,17 @@ export function ClassesSession({
                     {classe.salle ? (
                       <p className="m-0 text-texte-doux">Salle {classe.salle}</p>
                     ) : null}
-                    {classe.sousMinimum ? (
+                    {responsable && classe.motifForcage ? (
+                      <p className="m-0 text-label text-texte-doux">
+                        Motif du forçage : {classe.motifForcage}
+                      </p>
+                    ) : null}
+                    {classe.sansMoniteur ? (
+                      <p className="m-0 flex gap-2 font-bold text-alerte">
+                        <TriangleAlert aria-hidden className="size-5 shrink-0" />
+                        Aucun moniteur : envoyez quelqu&apos;un dans cette classe tout de suite.
+                      </p>
+                    ) : classe.sousMinimum ? (
                       <p className="m-0 flex gap-2 font-bold text-alerte">
                         <TriangleAlert aria-hidden className="size-5 shrink-0" />
                         Il manque un moniteur : prévenez le responsable.

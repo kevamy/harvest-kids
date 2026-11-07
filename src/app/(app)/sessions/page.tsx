@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AlertesClasses } from "@/components/hk/alertes-classes";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Pastille } from "@/components/hk/status-pill";
 import { peut } from "@/lib/rbac";
@@ -37,6 +38,7 @@ export default async function Sessions() {
   return (
     <div className="grid gap-6">
       <h1 className="m-0 font-display text-h1 font-semibold">Sessions du jour</h1>
+      <AlertesClasses />
       {sessions.length === 0 ? (
         <NotchCard couleur="blanc">
           <p className="m-0">
