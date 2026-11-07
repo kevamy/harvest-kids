@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Repeat, Settings, Users } from "lucide-react";
+import { CalendarDays, LogOut, Repeat, School, Settings, Users } from "lucide-react";
 import { Providers } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { seDeconnecter } from "@/app/actions/session";
@@ -70,6 +70,30 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                 <Link href="/familles">
                   <Users aria-hidden />
                   Familles
+                </Link>
+              </Button>
+            ) : null}
+            {peut(contexte.roles, "sessions.gerer") ? (
+              <Button
+                asChild
+                variant="sombre"
+                className="shadow-[inset_0_0_0_2px_var(--color-nuit-doux)]"
+              >
+                <Link href="/sessions">
+                  <CalendarDays aria-hidden />
+                  Sessions
+                </Link>
+              </Button>
+            ) : null}
+            {peut(contexte.roles, "classe.voir") ? (
+              <Button
+                asChild
+                variant="sombre"
+                className="shadow-[inset_0_0_0_2px_var(--color-nuit-doux)]"
+              >
+                <Link href="/classe">
+                  <School aria-hidden />
+                  Classes
                 </Link>
               </Button>
             ) : null}
