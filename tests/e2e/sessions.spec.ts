@@ -53,8 +53,9 @@ test("le responsable ouvre la session ; une classe s'ouvre au deuxième moniteur
     session.getByRole("heading", { name: "Culte du jour · 08 h 00 – 10 h 00" }),
   ).toBeVisible();
   await session.getByRole("button", { name: "Ouvrir la session" }).click();
+  // A class card is described by its state (aria-describedby).
   const petits = session.getByRole("region", { name: "Classe 3–5 ans" });
-  await expect(petits.getByText("Fermée : 0/2 moniteurs")).toBeVisible();
+  await expect(petits).toHaveAccessibleDescription("Fermée : 0/2 moniteurs");
 
   // The monitor joins from their own tablet: one monitor is not enough (RG-05).
   // A second tablet: its own cookies, same server and locale as the project.
@@ -66,42 +67,65 @@ test("le responsable ouvre la session ; une classe s'ouvre au deuxième moniteur
   await moniteur.getByRole("link", { name: "Classes" }).click();
   const salle = moniteur.getByRole("region", { name: "Classe 3–5 ans" });
   await salle.getByRole("button", { name: "Rejoindre la classe" }).click();
-  await expect(moniteur.getByRole("status")).toHaveText("Vous avez rejoint 3–5 ans.");
-  await expect(salle.getByText("Fermée : 1/2 moniteurs")).toBeVisible();
+  await expect(
+    moniteur.getByRole("region", { name: "Session Culte du jour" }).getByRole("status"),
+  ).toHaveText("Vous avez rejoint 3–5 ans.");
+  await expect(salle).toHaveAccessibleDescription("Fermée : 1/2 moniteurs");
   // The responsable's screen follows live.
-  await expect(petits.getByText("Fermée : 1/2 moniteurs")).toBeVisible();
+  await expect(petits).toHaveAccessibleDescription("Fermée : 1/2 moniteurs");
+
+  // The add list never offers someone already in the class, and says where the others are.
+  const ajoutPetits = petits.getByRole("combobox", { name: "Ajouter un moniteur" });
+  const grands = session.getByRole("region", { name: "Classe 6–8 ans" });
+  const ajoutGrands = grands.getByRole("combobox", { name: "Ajouter un moniteur" });
+  await expect(ajoutPetits.getByRole("option", { name: /^Moniteur test/ })).toHaveCount(0);
+  await expect(
+    ajoutGrands.getByRole("option", { name: "Moniteur test, dans 3–5 ans", exact: true }),
+  ).toHaveCount(1);
 
   // A second person, as a reinforcement: the class opens.
-  await petits
-    .getByLabel("Ajouter un moniteur")
-    .selectOption({ label: "Infirmerie test (renfort)" });
-  await petits.getByRole("button", { name: "Ajouter" }).click();
-  await expect(petits.getByText("Ouverte", { exact: true })).toBeVisible();
-  await expect(salle.getByText("Ouverte", { exact: true })).toBeVisible();
+  await ajoutPetits.selectOption({ label: "Infirmerie test (renfort)" });
+  await petits.getByRole("button", { name: "Ajouter", exact: true }).click();
+  await expect(petits).toHaveAccessibleDescription("Ouverte");
+  await expect(salle).toHaveAccessibleDescription("Ouverte");
 
   // One leaves: the class stays open, in red.
-  await petits.getByRole("button", { name: "Faire sortir" }).last().click();
-  await expect(petits.getByText("Sous le minimum : 1/2 moniteurs")).toBeVisible();
+  const moniteursPetits = petits.getByRole("list", { name: "Moniteurs de 3–5 ans" });
+  await moniteursPetits
+    .getByRole("listitem")
+    .filter({ hasText: "Infirmerie test" })
+    .getByRole("button", { name: "Faire sortir" })
+    .click();
+  await expect(petits).toHaveAccessibleDescription("Sous le minimum : 1/2 moniteurs");
 
   // The monitor's badge, scanned on the responsable's tablet, moves them to another class.
-  await session.getByLabel("Scannez un badge moniteur").fill(jeton);
-  await session.getByLabel("Scannez un badge moniteur").press("Enter");
-  await expect(session.getByText("Badge de Moniteur test : choisissez sa classe.")).toBeVisible();
-  const grands = session.getByRole("region", { name: "Classe 6–8 ans" });
+  const scan = session.getByRole("textbox", { name: "Scannez un badge moniteur" });
+  await scan.fill(jeton);
+  await scan.press("Enter");
+  await expect(
+    session.getByRole("status").filter({ hasText: "Badge de Moniteur test" }),
+  ).toContainText("Badge de Moniteur test : choisissez sa classe.");
   await grands.getByRole("button", { name: "Affecter Moniteur test" }).click();
-  await expect(grands.getByText("Moniteur test")).toBeVisible();
-  await expect(petits.getByText("Sous le minimum : 0/2 moniteurs")).toBeVisible();
+  await expect(
+    grands
+      .getByRole("list", { name: "Moniteurs de 6–8 ans" })
+      .getByRole("listitem")
+      .filter({ hasText: "Moniteur test" }),
+  ).toHaveCount(1);
+  await expect(petits).toHaveAccessibleDescription("Sous le minimum : 0/2 moniteurs");
 
   // Forced opening, with a reason.
   const pouponniere = session.getByRole("region", { name: "Classe Pouponnière" });
   await pouponniere.getByRole("button", { name: "Forcer l'ouverture" }).click();
-  await pouponniere.getByLabel("Motif de l'ouverture forcée").fill("Deux mamans de garde ce matin");
+  await pouponniere
+    .getByRole("textbox", { name: "Motif de l'ouverture forcée" })
+    .fill("Deux mamans de garde ce matin");
   await pouponniere.getByRole("button", { name: "Confirmer l'ouverture forcée" }).click();
-  await expect(pouponniere.getByText("Ouverte (forcée)")).toBeVisible();
+  await expect(pouponniere).toHaveAccessibleDescription("Ouverte (forcée)");
 
   // No child present: the session closes.
   await session.getByRole("button", { name: "Clôturer la session" }).click();
-  await expect(session.getByText("Clôturée", { exact: true })).toBeVisible();
+  await expect(session).toHaveAccessibleDescription("Clôturée");
   await tablette.close();
 });
 

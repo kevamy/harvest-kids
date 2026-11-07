@@ -49,12 +49,19 @@ export default async function Sessions() {
           const nom = session.culte ?? "Session";
           const statut = STATUTS[session.statut];
           return (
-            <section key={session.id} aria-label={`Session ${nom}`} className="grid gap-4">
+            <section
+              key={session.id}
+              aria-label={`Session ${nom}`}
+              aria-describedby={`statut-${session.id}`}
+              className="grid gap-4"
+            >
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="m-0 font-display text-h2 font-semibold">
                   {nom} · {heure(session.heureDebut)} – {heure(session.heureFin)}
                 </h2>
-                <Pastille className={statut.classes}>{statut.libelle}</Pastille>
+                <span id={`statut-${session.id}`}>
+                  <Pastille className={statut.classes}>{statut.libelle}</Pastille>
+                </span>
               </div>
               {session.statut === "PLANIFIEE" ? (
                 <BoutonSession sessionId={session.id} action="ouvrir" />

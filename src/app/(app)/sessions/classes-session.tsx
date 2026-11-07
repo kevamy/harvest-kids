@@ -20,26 +20,22 @@ import {
   rejoindreUneClasse,
   type Arrivee,
 } from "./actions";
+import { optionsAjout } from "./options-ajout";
 
 type Classe = EtatSessionDirect["classes"][number];
 
-function Etat({ classe }: { classe: Classe }) {
-  if (classe.sousMinimum) {
-    return (
-      <Pastille className="text-alerte">
-        Sous le minimum : {classe.moniteurs.length}/{classe.minMoniteurs} moniteurs
-      </Pastille>
-    );
-  }
-  if (classe.ouverte) {
-    return (
-      <Pastille className="text-succes">{classe.forcee ? "Ouverte (forcée)" : "Ouverte"}</Pastille>
-    );
-  }
+/** State of a class; its id describes the class card (aria-describedby). */
+function Etat({ classe, id }: { classe: Classe; id: string }) {
+  const effectif = `${classe.moniteurs.length}/${classe.minMoniteurs} moniteurs`;
+  const [texte, couleur] = classe.sousMinimum
+    ? [`Sous le minimum : ${effectif}`, "text-alerte"]
+    : classe.ouverte
+      ? [classe.forcee ? "Ouverte (forcée)" : "Ouverte", "text-succes"]
+      : [`Fermée : ${effectif}`, "text-texte-doux"];
   return (
-    <Pastille className="text-texte-doux">
-      Fermée : {classe.moniteurs.length}/{classe.minMoniteurs} moniteurs
-    </Pastille>
+    <span id={id}>
+      <Pastille className={couleur}>{texte}</Pastille>
+    </span>
   );
 }
 
@@ -145,12 +141,13 @@ export function ClassesSession({
                 <NotchCard
                   couleur="blanc"
                   aria-label={`Classe ${classe.nom}`}
+                  aria-describedby={`etat-${sessionId}-${classe.classeId}`}
                   className={classe.sousMinimum ? "ring-3 ring-alerte" : undefined}
                 >
                   <div className="grid gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="m-0 font-display text-h3 font-semibold">{classe.nom}</h3>
-                      <Etat classe={classe} />
+                      <Etat classe={classe} id={`etat-${sessionId}-${classe.classeId}`} />
                     </div>
                     {classe.salle ? (
                       <p className="m-0 text-texte-doux">Salle {classe.salle}</p>
@@ -290,9 +287,9 @@ export function ClassesSession({
                             className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
                           >
                             <option value="">Choisissez une personne</option>
-                            {membres.map((m) => (
-                              <option key={m.membreId} value={m.membreId}>
-                                {m.moniteur ? m.nom : `${m.nom} (renfort)`}
+                            {optionsAjout(membres, classes, classe.classeId).map((o) => (
+                              <option key={o.membreId} value={o.membreId}>
+                                {o.libelle}
                               </option>
                             ))}
                           </select>
@@ -306,6 +303,7 @@ export function ClassesSession({
                               (m) => m.membreId === choixMembre[classe.classeId],
                             );
                             if (!choisi) return;
+                            setChoixMembre({ ...choixMembre, [classe.classeId]: "" });
                             rejoindre(
                               classe,
                               { membreId: choisi.membreId, renfort: !choisi.moniteur },

@@ -185,7 +185,10 @@ test("le responsable règle cultes, délais et lieux ; seul l'administrateur rè
   await ajout.getByLabel("Heure de début").fill("17:00");
   await ajout.getByLabel("Heure de fin").fill("16:00");
   await ajout.getByRole("button", { name: "Ajouter le culte" }).click();
-  await expect(ajout.getByText("L'heure de fin doit venir après l'heure de début.")).toBeVisible();
+  // The error is read out with its field (aria-describedby).
+  await expect(ajout.getByLabel("Heure de fin")).toHaveAccessibleDescription(
+    "L'heure de fin doit venir après l'heure de début.",
+  );
   await ajout.getByLabel("Heure de fin").fill("19:00");
   await ajout.getByRole("button", { name: "Ajouter le culte" }).click();
   await expect(ajout.getByRole("status")).toHaveText("Culte ajouté.");
