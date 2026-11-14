@@ -30,10 +30,11 @@ const AUTEUR = { userId: "user_test", appareil: null };
 
 /**
  * The task compares dates with PostgreSQL's `now()` (one clock): time passes here by
- * moving the stored dates back, on the database's clock as well.
+ * moving the stored dates back, on the database's clock as well. `sql` filters on
+ * `"egliseId" = $1`, church A.
  */
 const dansEgliseA = (sql: string) =>
-  enEglise(proprietaire, a.egliseId, () => proprietaire.query(sql));
+  enEglise(proprietaire, a.egliseId, () => proprietaire.query(sql, [a.egliseId]));
 
 beforeAll(async () => {
   base = creerClientPlateforme(urlsDeTest().app);
@@ -57,7 +58,9 @@ beforeEach(async () => {
 const audit = (jeu: Jeu) =>
   enEglise(proprietaire, jeu.egliseId, async () => {
     const { rows } = await proprietaire.query(
-      `SELECT action, "userId", appareil FROM "AuditLog" ORDER BY "createdAt", id`,
+      `SELECT action, "userId", appareil FROM "AuditLog"
+       WHERE "egliseId" = $1 ORDER BY "createdAt", id`,
+      [jeu.egliseId],
     );
     return rows;
   });
@@ -77,8 +80,9 @@ const brouillon = (db: ClientEglise, nom: string) =>
 const vieillir = (jeu: Jeu, familleId: string, jours: number) =>
   enEglise(proprietaire, jeu.egliseId, () =>
     proprietaire.query(
-      `UPDATE "Famille" SET "createdAt" = now() - $2::int * interval '1 day' WHERE id = $1`,
-      [familleId, jours],
+      `UPDATE "Famille" SET "createdAt" = now() - $2::int * interval '1 day'
+       WHERE id = $1 AND "egliseId" = $3`,
+      [familleId, jours, jeu.egliseId],
     ),
   );
 
@@ -151,7 +155,8 @@ describe("révocation à date limite (RG-16)", () => {
     expect((await executerTachesQuotidiennes(base, stockage)).cartesRevoquees).toBe(0);
     // Four days later: the deadline has passed.
     await dansEgliseA(
-      `UPDATE "ReemissionCartes" SET "dateLimite" = "dateLimite" - interval '4 days'`,
+      `UPDATE "ReemissionCartes" SET "dateLimite" = "dateLimite" - interval '4 days'
+       WHERE "egliseId" = $1`,
     );
     const bilan = await executerTachesQuotidiennes(base, stockage);
     expect(bilan.cartesRevoquees).toBe(1);
@@ -185,7 +190,10 @@ describe("suppression différée des fichiers remplacés", () => {
     expect(await stockage.get(cleB)).not.toBeNull();
 
     // 24 hours later: the replaced file is due.
-    await dansEgliseA(`UPDATE "FichierASupprimer" SET "apresLe" = "apresLe" - interval '24 hours'`);
+    await dansEgliseA(
+      `UPDATE "FichierASupprimer" SET "apresLe" = "apresLe" - interval '24 hours'
+       WHERE "egliseId" = $1`,
+    );
     expect((await executerTachesQuotidiennes(base, stockage)).fichiersSupprimes).toBe(1);
     expect(await stockage.get(cle)).toBeNull();
     expect(await dbA.fichierASupprimer.count()).toBe(0);

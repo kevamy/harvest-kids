@@ -6,6 +6,7 @@ import {
   type Client,
   type Jeu,
   codeErreur,
+  compterToutesEglises,
   connecter,
   creerEglise,
   enEglise,
@@ -99,8 +100,8 @@ describe("catalogue PostgreSQL", () => {
 
 describe("Row-Level Security avec le rôle applicatif", () => {
   it("sans église active, aucune ligne n'est visible et aucune écriture n'est possible", async () => {
-    const { rows } = await app.query(`SELECT count(*)::int AS n FROM "Enfant"`);
-    expect(rows[0].n).toBe(0);
+    // Isolation proof: through the app role with no active church, RLS hides every row.
+    expect(await compterToutesEglises(app, "Enfant")).toBe(0);
     expect(
       await codeErreur(
         app.query(
@@ -113,12 +114,13 @@ describe("Row-Level Security avec le rôle applicatif", () => {
 
   it("le paramètre ne survit pas à la transaction (connexions partagées)", async () => {
     await enEglise(app, a.egliseId, () => app.query("SELECT 1"));
-    const { rows } = await app.query(`SELECT count(*)::int AS n FROM "Famille"`);
-    expect(rows[0].n).toBe(0);
+    // Isolation proof: through the app role once the transaction is over, RLS hides every row.
+    expect(await compterToutesEglises(app, "Famille")).toBe(0);
   });
 
   it("dans l'église A, seules les données de A sont visibles", async () => {
     const lignes = await enEglise(app, a.egliseId, async () => {
+      // Isolation proof: unfiltered reads through the app role return church A's rows only.
       const familles = await app.query(`SELECT "egliseId" FROM "Famille"`);
       const enfants = await app.query(`SELECT "egliseId" FROM "Enfant"`);
       // Forced query: explicit filter on church B.
@@ -143,6 +145,7 @@ describe("Row-Level Security avec le rôle applicatif", () => {
   });
 
   it("dans l'église A, une ligne de B ne peut être ni modifiée, ni supprimée, ni déplacée", async () => {
+    // Isolation proof: writes aimed at B's rows from church A, unfiltered on purpose.
     const resultats = await enEglise(app, a.egliseId, async () => ({
       modif: await app.query(`UPDATE "Enfant" SET prenom = 'Piraté' WHERE id = $1`, [b.enfantId]),
       suppr: await app.query(`DELETE FROM "Classe" WHERE id = $1`, [b.classeId]),
@@ -159,10 +162,18 @@ describe("Row-Level Security avec le rôle applicatif", () => {
     expect(deplacement).toBe("42501");
 
     const intacts = await enEglise(proprietaire, b.egliseId, async () => ({
-      enfant: (await proprietaire.query(`SELECT prenom FROM "Enfant" WHERE id = $1`, [b.enfantId]))
-        .rows,
-      classe: (await proprietaire.query(`SELECT id FROM "Classe" WHERE id = $1`, [b.classeId]))
-        .rows,
+      enfant: (
+        await proprietaire.query(`SELECT prenom FROM "Enfant" WHERE id = $1 AND "egliseId" = $2`, [
+          b.enfantId,
+          b.egliseId,
+        ])
+      ).rows,
+      classe: (
+        await proprietaire.query(`SELECT id FROM "Classe" WHERE id = $1 AND "egliseId" = $2`, [
+          b.classeId,
+          b.egliseId,
+        ])
+      ).rows,
     }));
     expect(intacts.enfant).toEqual([{ prenom: "Prénom" }]);
     expect(intacts.classe).toEqual([{ id: b.classeId }]);
@@ -190,6 +201,7 @@ describe("journaux non modifiables (RG-09)", () => {
         [a.egliseId, a.enfantId],
       ),
     );
+    // Isolation proof: unfiltered on purpose, no row may be changed or deleted.
     for (const sql of [
       `UPDATE "AuditLog" SET action = 'efface'`,
       `DELETE FROM "AuditLog"`,
@@ -247,7 +259,9 @@ describe("index partiels", () => {
         [a.egliseId, a.familleId],
       );
       await app.query(
-        `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1' WHERE id = 'p_1'`,
+        `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1'
+         WHERE id = 'p_1' AND "egliseId" = $1`,
+        [a.egliseId],
       );
     });
     expect(await codeErreur(ouvrirPresence("p_3"))).toBeUndefined();
@@ -314,27 +328,34 @@ describe("index partiels", () => {
     it("un enfant ne passe à RECUPERE qu'avec une personne autorisée ou un retrait exceptionnel, jamais les deux", async () => {
       expect(await retrait("retrait_1", "incident_1", "+2290197451233")).toBeUndefined();
       // Neither: refused (check_violation).
-      expect(await executer(`UPDATE "Presence" SET statut = 'RECUPERE' WHERE id = 'p_1'`)).toBe(
-        "23514",
-      );
+      expect(
+        await executer(
+          `UPDATE "Presence" SET statut = 'RECUPERE' WHERE id = 'p_1' AND "egliseId" = $1`,
+          [a.egliseId],
+        ),
+      ).toBe("23514");
       // Both: refused.
       expect(
         await executer(
           `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1',
-             "retraitExceptionnelId" = 'retrait_1' WHERE id = 'p_1'`,
+             "retraitExceptionnelId" = 'retrait_1' WHERE id = 'p_1' AND "egliseId" = $1`,
+          [a.egliseId],
         ),
       ).toBe("23514");
       // Exactly one: accepted, either way.
       expect(
         await executer(
-          `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1' WHERE id = 'p_1'`,
+          `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1'
+             WHERE id = 'p_1' AND "egliseId" = $1`,
+          [a.egliseId],
         ),
       ).toBeUndefined();
       await ouvrirPresence("p_2");
       expect(
         await executer(
           `UPDATE "Presence" SET statut = 'RECUPERE', "retraitExceptionnelId" = 'retrait_1'
-             WHERE id = 'p_2'`,
+             WHERE id = 'p_2' AND "egliseId" = $1`,
+          [a.egliseId],
         ),
       ).toBeUndefined();
     });
@@ -351,6 +372,7 @@ describe("index partiels", () => {
 
     it("isolation A/B : un retrait exceptionnel de A est invisible depuis B", async () => {
       await retrait("retrait_1", "incident_1", null);
+      // Isolation proof: an unfiltered read through the app role in B sees none of A's rows.
       const { rows } = await enEglise(app, b.egliseId, () =>
         app.query(`SELECT id FROM "RetraitExceptionnel"`),
       );
@@ -361,7 +383,10 @@ describe("index partiels", () => {
       expect(await affecter("aff_1", "sc_1")).toBeUndefined();
       expect(await affecter("aff_2", "sc_2")).toBe("23505");
       expect(
-        await executer(`UPDATE "AffectationMoniteur" SET depart = now() WHERE id = 'aff_1'`),
+        await executer(
+          `UPDATE "AffectationMoniteur" SET depart = now() WHERE id = 'aff_1' AND "egliseId" = $1`,
+          [a.egliseId],
+        ),
       ).toBeUndefined();
       expect(await affecter("aff_2", "sc_2")).toBeUndefined();
     });
@@ -378,7 +403,10 @@ describe("index partiels", () => {
       );
     const revoquer = (id: string) =>
       enEglise(app, a.egliseId, () =>
-        app.query(`UPDATE "CarteFamille" SET "revoqueeLe" = now() WHERE id = $1`, [id]),
+        app.query(
+          `UPDATE "CarteFamille" SET "revoqueeLe" = now() WHERE id = $1 AND "egliseId" = $2`,
+          [id, a.egliseId],
+        ),
       );
 
     it("carte famille : une seconde active ou une seconde en attente est refusée", async () => {

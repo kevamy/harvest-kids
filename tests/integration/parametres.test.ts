@@ -69,7 +69,9 @@ beforeEach(async () => {
 const audit = (jeu: Jeu) =>
   enEglise(proprietaire, jeu.egliseId, async () => {
     const { rows } = await proprietaire.query(
-      `SELECT action, entite, "entiteId", avant, apres FROM "AuditLog" ORDER BY "createdAt", id`,
+      `SELECT action, entite, "entiteId", avant, apres FROM "AuditLog"
+       WHERE "egliseId" = $1 ORDER BY "createdAt", id`,
+      [jeu.egliseId],
     );
     return rows;
   });
@@ -223,7 +225,9 @@ describe("classes et tranches d'âge (RG-17)", () => {
       modifierClasse(tx, auteur(a), a.classeId, { ...saisie, ageMinMois: 0, ageMaxMois: 11 }),
     );
     const { rows } = await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`SELECT "classeId" FROM "Presence" WHERE id = 'p_1'`),
+      proprietaire.query(`SELECT "classeId" FROM "Presence" WHERE id = 'p_1' AND "egliseId" = $1`, [
+        a.egliseId,
+      ]),
     );
     expect(rows).toEqual([{ classeId: a.classeId }]);
   });
@@ -239,7 +243,10 @@ describe("classes et tranches d'âge (RG-17)", () => {
     expect((await listerClasses(dbA)).map((c) => c.id)).toEqual([a.classeId]);
     expect(await dbA.$tx((tx) => modifierClasse(tx, auteur(a), b.classeId, saisie))).toBe(false);
     const { rows } = await enEglise(proprietaire, b.egliseId, () =>
-      proprietaire.query(`SELECT nom FROM "Classe" WHERE id = $1`, [b.classeId]),
+      proprietaire.query(`SELECT nom FROM "Classe" WHERE id = $1 AND "egliseId" = $2`, [
+        b.classeId,
+        b.egliseId,
+      ]),
     );
     expect(rows).toEqual([{ nom: "3–5 ans" }]);
     expect(await audit(a)).toEqual([]);
@@ -430,7 +437,8 @@ describe("logos", () => {
     expect(await stockage.get(cle1)).not.toBeNull();
     // Due in 24 hours, measured on the database's clock (the one that set the date).
     const programmes = await dbA.$queryRaw<{ cle: string; dans24h: boolean }[]>`
-      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"`;
+      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"
+      WHERE "egliseId" = ${a.egliseId}`;
     expect(programmes).toEqual([{ cle: cle1, dans24h: true }]);
     expect(await stockage.get(cle2)).not.toBeNull();
 

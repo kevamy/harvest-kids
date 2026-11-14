@@ -89,14 +89,19 @@ const carte = (
   );
 
 const ouvrirClasse = (jeu: Jeu) =>
-  sql(jeu, `UPDATE "SessionClasse" SET "ouverteLe" = now() WHERE "classeId" = $1`, [jeu.classeId]);
+  sql(
+    jeu,
+    `UPDATE "SessionClasse" SET "ouverteLe" = now() WHERE "classeId" = $1 AND "egliseId" = $2`,
+    [jeu.classeId, jeu.egliseId],
+  );
 
 const valider = (saisie: Record<string, unknown>) =>
   dbA.$tx((tx) =>
     validerCheckin(tx, auteur(a), aucunMoniteur, { sessionId: a.sessionId, ...saisie }),
   );
 
-const lignes = async (requete: string) => (await sql(a, requete)).rows;
+/** Rows of church A; `requete` filters on `"egliseId" = $1`. */
+const lignes = async (requete: string) => (await sql(a, requete, [a.egliseId])).rows;
 
 beforeAll(async () => {
   base = creerClientPlateforme(urlsDeTest().app);
@@ -137,8 +142,14 @@ describe("préparation (lecture seule)", () => {
       [enfants[0], 65, true, a.classeId],
       [enfants[1], 49, true, a.classeId],
     ]);
-    expect(await lignes(`SELECT "activeLe" FROM "CarteFamille"`)).toEqual([{ activeLe: null }]);
-    expect(await lignes(`SELECT id FROM "AuditLog" WHERE action <> 'session.ouverte'`)).toEqual([]);
+    expect(await lignes(`SELECT "activeLe" FROM "CarteFamille" WHERE "egliseId" = $1`)).toEqual([
+      { activeLe: null },
+    ]);
+    expect(
+      await lignes(
+        `SELECT id FROM "AuditLog" WHERE "egliseId" = $1 AND action <> 'session.ouverte'`,
+      ),
+    ).toEqual([]);
   });
 
   it("une carte enfant ne coche que son enfant (RG-16)", async () => {
@@ -164,7 +175,7 @@ describe("préparation (lecture seule)", () => {
       preparerCheckin(dbA, aucunMoniteur, { sessionId: a.sessionId, jeton: jeton("R") }),
     ).rejects.toThrow("Cette carte a été remplacée.");
 
-    await sql(a, `UPDATE "Session" SET statut = 'PLANIFIEE'`);
+    await sql(a, `UPDATE "Session" SET statut = 'PLANIFIEE' WHERE "egliseId" = $1`, [a.egliseId]);
     await expect(
       preparerCheckin(dbA, aucunMoniteur, {
         sessionId: a.sessionId,
@@ -205,22 +216,27 @@ describe("validation", () => {
       ["Sèna", "HK-f11", "3–5 ans"],
     ]);
 
-    expect(await lignes(`SELECT "activeLe" IS NOT NULL AS active FROM "CarteFamille"`)).toEqual([
-      { active: true },
-    ]);
+    expect(
+      await lignes(
+        `SELECT "activeLe" IS NOT NULL AS active FROM "CarteFamille" WHERE "egliseId" = $1`,
+      ),
+    ).toEqual([{ active: true }]);
     const presences = await lignes(
-      `SELECT statut, "codeRetrait", "checkinPar" FROM "Presence" ORDER BY "enfantId"`,
+      `SELECT statut, "codeRetrait", "checkinPar" FROM "Presence"
+       WHERE "egliseId" = $1 ORDER BY "enfantId"`,
     );
     expect(presences).toEqual([
       { statut: "PRESENT", codeRetrait: resultat.codeRetrait, checkinPar: "user_test" },
       { statut: "PRESENT", codeRetrait: resultat.codeRetrait, checkinPar: "user_test" },
     ]);
-    expect(await lignes(`SELECT type FROM "EvenementPresence"`)).toEqual([
+    expect(await lignes(`SELECT type FROM "EvenementPresence" WHERE "egliseId" = $1`)).toEqual([
       { type: "checkin" },
       { type: "checkin" },
     ]);
     expect(
-      (await lignes(`SELECT action FROM "AuditLog" ORDER BY "createdAt", id`)).map((l) => l.action),
+      (
+        await lignes(`SELECT action FROM "AuditLog" WHERE "egliseId" = $1 ORDER BY "createdAt", id`)
+      ).map((l) => l.action),
     ).toEqual(["session.ouverte", "carte.activee", "presence.checkin", "presence.checkin"]);
   });
 
@@ -238,7 +254,7 @@ describe("validation", () => {
         enfants: [{ enfantId: brouillon.enfants[0], classeId: a.classeId }],
       }),
     ).rejects.toMatchObject({ name: "CheckinRefuse", brouillonId: brouillon.familleId });
-    expect(await lignes(`SELECT id FROM "Presence"`)).toEqual([]);
+    expect(await lignes(`SELECT id FROM "Presence" WHERE "egliseId" = $1`)).toEqual([]);
   });
 
   it("un code par famille et par session (RG-04), un enfant une seule fois (RG-08)", async () => {
@@ -319,6 +335,6 @@ describe("validation", () => {
         enfants: [{ enfantId: f2.enfants[0], classeId: a.classeId }],
       }),
     ).rejects.toThrow(CheckinRefuse);
-    expect(await lignes(`SELECT id FROM "Presence"`)).toEqual([]);
+    expect(await lignes(`SELECT id FROM "Presence" WHERE "egliseId" = $1`)).toEqual([]);
   });
 });

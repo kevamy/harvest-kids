@@ -40,6 +40,7 @@ import { creerClientPlateforme } from "@/server/plateforme/db";
 import {
   type Client,
   type Jeu,
+  compterDansEglise,
   connecter,
   contexteVerifie,
   creerEglise,
@@ -131,13 +132,17 @@ const resoudre = (jeton: string) =>
 /** Invariant: for each child, at most one active card covers it (family or child card). */
 async function expectUneCarteActiveAuPlus() {
   const { rows } = await enEglise(proprietaire, a.egliseId, () =>
-    proprietaire.query<{ enfant: string; n: number }>(`
+    proprietaire.query<{ enfant: string; n: number }>(
+      `
       SELECT e.id AS enfant, count(c.id)::int AS n
       FROM "Enfant" e
       LEFT JOIN "CarteFamille" c ON c."familleId" = e."familleId"
         AND c."revoqueeLe" IS NULL AND c."activeLe" IS NOT NULL
         AND (c."enfantId" IS NULL OR c."enfantId" = e.id)
-      GROUP BY e.id`),
+      WHERE e."egliseId" = $1
+      GROUP BY e.id`,
+      [a.egliseId],
+    ),
   );
   for (const { enfant, n } of rows) expect(n, enfant).toBeLessThanOrEqual(1);
 }
@@ -245,7 +250,9 @@ describe("réémission groupée", () => {
     // Once the deadline has passed (read at scan time, without writing).
     await enEglise(proprietaire, a.egliseId, () =>
       proprietaire.query(
-        `UPDATE "ReemissionCartes" SET "dateLimite" = now() - interval '1 minute'`,
+        `UPDATE "ReemissionCartes" SET "dateLimite" = now() - interval '1 minute'
+         WHERE "egliseId" = $1`,
+        [a.egliseId],
       ),
     );
     expect(await resoudre(ancienne.jeton)).toEqual({ statut: "perimee" });
@@ -267,7 +274,9 @@ describe("réémission groupée", () => {
 
   it("refuse une réémission sans famille inscrite", async () => {
     await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`UPDATE "Famille" SET "finaliseeLe" = NULL`),
+      proprietaire.query(`UPDATE "Famille" SET "finaliseeLe" = NULL WHERE "egliseId" = $1`, [
+        a.egliseId,
+      ]),
     );
     await expect(reemettre()).rejects.toThrow(ImpressionRefusee);
     expect(await dbA.reemissionCartes.count()).toBe(0);
@@ -277,13 +286,7 @@ describe("réémission groupée", () => {
     await reemettre();
     expect(rendu.cartes.map((c) => c.famille)).toEqual(["Famille a"]);
     // Filtered on B: the owner role also reads every church's cards (rg14_lecture_proprietaire).
-    const compter = async (table: string) =>
-      (
-        await proprietaire.query(
-          `SELECT count(*)::int AS n FROM "${table}" WHERE "egliseId" = $1`,
-          [b.egliseId],
-        )
-      ).rows[0].n;
+    const compter = (table: string) => compterDansEglise(proprietaire, table, b.egliseId);
     const dansB = await enEglise(proprietaire, b.egliseId, async () => ({
       cartes: await compter("CarteFamille"),
       reemissions: await compter("ReemissionCartes"),

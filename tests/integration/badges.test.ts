@@ -36,6 +36,7 @@ import {
   type Client,
   type Jeu,
   codeErreur,
+  compterDansEglise,
   connecter,
   contexteVerifie,
   creerEglise,
@@ -278,10 +279,8 @@ describe("isolation A/B", () => {
     ]);
     expect(rows).toEqual([{ actif: true }]);
     const dansB = await enEglise(proprietaire, b.egliseId, () =>
-      proprietaire.query(`SELECT count(*)::int AS n FROM "BadgeMoniteur" WHERE "egliseId" = $1`, [
-        b.egliseId,
-      ]),
+      compterDansEglise(proprietaire, "BadgeMoniteur", b.egliseId),
     );
-    expect(dansB.rows[0].n).toBe(0);
+    expect(dansB).toBe(0);
   });
 });

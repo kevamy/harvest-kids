@@ -106,7 +106,8 @@ describe("migration des badges moniteurs", () => {
       await client.query("SELECT set_config('app.eglise_id', 'eglise_m', true)");
       const { rows } = await client.query(
         `SELECT "membreId", "tokenHash", "revoqueLe" IS NOT NULL AS revoque
-         FROM "BadgeMoniteur" ORDER BY "membreId"`,
+         FROM "BadgeMoniteur" WHERE "egliseId" = $1 ORDER BY "membreId"`,
+        ["eglise_m"],
       );
       await client.query("COMMIT");
       // A member deactivated, or without the MONITEUR role, gets a revoked badge.

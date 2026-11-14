@@ -9,6 +9,7 @@ import {
   type Client,
   type Jeu,
   codeErreur,
+  compterDansEglise,
   connecter,
   creerEglise,
   enEglise,
@@ -175,11 +176,7 @@ describe("RG-14 : hk_jeton_autre_eglise()", () => {
       await app.query("SELECT hk_jeton_autre_eglise($1)", [empreinte(CARTE_B)]);
       await app.query("SELECT hk_jeton_autre_eglise($1)", [empreinte(BADGE_B)]);
       for (const table of ["CarteFamille", "BadgeMoniteur"]) {
-        const { rows } = await app.query(
-          `SELECT count(*)::int AS n FROM "${table}" WHERE "egliseId" = $1`,
-          [b.egliseId],
-        );
-        expect(rows[0].n, table).toBe(0);
+        expect(await compterDansEglise(app, table, b.egliseId), table).toBe(0);
       }
     });
     // The owner-only reading policy does not apply to hk_app.

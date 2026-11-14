@@ -68,6 +68,50 @@ export async function purgerBasesDeMigration(proprietaire: pg.Client) {
   for (const { datname } of rows) await supprimerBase(proprietaire, datname);
 }
 
+/** A quoted church table name; anything else is refused (the name goes into the SQL text). */
+function tableEglise(table: string): string {
+  if (!/^[A-Z][A-Za-z]+$/.test(table)) throw new Error(`Nom de table refusé : ${table}`);
+  return `"${table}"`;
+}
+
+/**
+ * Rows of a church table that belong to one church: the general case. The filter on the
+ * church is explicit, because RLS alone does not confine a test: the owner role reads
+ * CarteFamille and BadgeMoniteur in every church (policy rg14_lecture_proprietaire, RG-14).
+ * `condition` is an optional fixed SQL fragment, e.g. `statut = 'PRESENT'`.
+ */
+export async function compterDansEglise(
+  client: pg.Client,
+  table: string,
+  egliseId: string,
+  condition?: string,
+): Promise<number> {
+  const { rows } = await client.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM ${tableEglise(table)}
+     WHERE "egliseId" = $1${condition ? ` AND (${condition})` : ""}`,
+    [egliseId],
+  );
+  return rows[0]!.n;
+}
+
+/**
+ * Rows of a church table with no filter at all: reserved for isolation proofs, and each call
+ * says in a comment what it proves. Inside a church (app role, or owner under FORCE RLS), it
+ * proves that RLS hides the rows of the other churches; with no active church, that RLS hides
+ * every row. Never on CarteFamille or BadgeMoniteur through the owner role, which reads them
+ * in every church (policy rg14_lecture_proprietaire).
+ */
+export async function compterToutesEglises(
+  client: pg.Client,
+  table: string,
+  condition?: string,
+): Promise<number> {
+  const { rows } = await client.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM ${tableEglise(table)}${condition ? ` WHERE ${condition}` : ""}`,
+  );
+  return rows[0]!.n;
+}
+
 /** Error code of a failed query, e.g. 42501 (RLS / privilege), 23503 (FK), 23505 (unique). */
 export async function codeErreur(promesse: Promise<unknown>): Promise<string | undefined> {
   try {
