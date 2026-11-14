@@ -110,4 +110,6 @@ Tests d'intégration (2026-11-14, `59e3812`) : 75 requêtes SQL brutes sur une t
 
 Corrections validées, pas encore appliquées : aucune.
 
-Étape 4 : plan proposé le 2026-11-14, en attente des réponses de l'utilisateur (qui confirme l'arrivée, scan d'une carte en attente en salle, annulation d'une confirmation).
+PR n°10 (tests d'intégration) fusionnée le 2026-11-14 (`392d838`). Étapes 4 à 6 sur `lot-2-suite`, PR n°11.
+
+Étape 4 (vue moniteur, confirmation en salle, annulation ; cahier 1.5, ADR 0015) commitée le 2026-11-14 (`cec4ac2`). CI de la PR n°11 : lint, types, unitaires, intégration et image Docker verts ; **e2e rouge**, `salle.spec.ts` (les deux tests, paysage). Cause trouvée : la route `/api/direct/classes/[id]` plante (`Cannot read properties of null (reading 'map')`) sur un enfant dont `alertes` est NULL (colonne `TEXT[]` sans valeur par défaut ; les enfants créés par la fixture e2e n'en ont pas). Correction proposée, **pas encore validée** : `COALESCE(e.alertes, '{}')` dans la requête de `listeDeClasse` (`src/server/salle.ts`), et un cas d'enfant sans alerte dans `salle.test.ts`.
