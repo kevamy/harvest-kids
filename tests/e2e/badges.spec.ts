@@ -71,7 +71,9 @@ test("le scan d'un badge : valide, remplacé ou d'une autre église", async ({
     await expect(page.getByRole("status")).toHaveText(message);
   };
   await verifier(jeton(eglise, "V"), "Badge moniteur valide.");
-  await expect(page.getByText("Moniteur : Moniteur test")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Résultat de la vérification" })).toContainText(
+    "Moniteur : Moniteur test",
+  );
   await verifier(
     jeton(eglise, "R"),
     "Ce badge a été remplacé. Utilisez votre nouveau badge ou sélectionnez-vous dans la liste.",

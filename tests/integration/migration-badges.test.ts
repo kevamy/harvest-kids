@@ -10,7 +10,13 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type Client, connecter } from "./support/db";
+import {
+  type Client,
+  PREFIXE_BASE_MIGRATION,
+  connecter,
+  purgerBasesDeMigration,
+  supprimerBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 const DOSSIER = join(process.cwd(), "prisma", "migrations");
@@ -28,7 +34,7 @@ const sql = (migration: string) => readFile(join(DOSSIER, migration, "migration.
 
 /** New database with every migration before the badge one, and three members with badges. */
 async function baseAvantBadges(): Promise<pg.Client> {
-  const nom = `hk_migration_${randomBytes(4).toString("hex")}`;
+  const nom = `${PREFIXE_BASE_MIGRATION}${randomBytes(4).toString("hex")}`;
   await proprietaire.query(`CREATE DATABASE ${nom}`);
   basesCreees.push(nom);
   const url = new URL(urlsDeTest().migration);
@@ -80,13 +86,15 @@ async function colonnes(client: pg.Client, table: string) {
 
 beforeAll(async () => {
   proprietaire = await connecter("proprietaire");
+  await purgerBasesDeMigration(proprietaire);
 });
 
 afterAll(async () => {
-  for (const nom of basesCreees) {
-    await proprietaire.query(`DROP DATABASE IF EXISTS ${nom} WITH (FORCE)`);
+  try {
+    for (const nom of basesCreees) await supprimerBase(proprietaire, nom);
+  } finally {
+    await proprietaire?.end();
   }
-  await proprietaire?.end();
 });
 
 describe("migration des badges moniteurs", () => {

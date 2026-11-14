@@ -172,7 +172,8 @@ test("RG-16 : l'administrateur passe en mode enfant et réémet les cartes, 3 ca
         }>(
           `SELECT "familleId", "enfantId", "activeLe" IS NOT NULL AS active,
                   "revoqueeLe" IS NOT NULL AS revoquee, "reemissionId" IS NOT NULL AS reemission
-           FROM "CarteFamille" ORDER BY "enfantId" NULLS FIRST`,
+           FROM "CarteFamille" WHERE "egliseId" = $1 ORDER BY "enfantId" NULLS FIRST`,
+          [eglise.id],
         )
       ).rows,
   );

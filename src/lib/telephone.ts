@@ -128,6 +128,18 @@ const formaterNational = (national: string) => {
   return [tete, ...paires].filter(Boolean).join(" ");
 };
 
+const E164 = /^\+[1-9]\d{7,14}$/;
+
+/** `tel:` link of a stored number, or null when it is not E.164: never a guessed number. */
+export function lienTelephone(e164: string): string | null {
+  return E164.test(e164) ? `tel:${e164}` : null;
+}
+
+/** WhatsApp link (wa.me takes the international number without its "+"), or null. */
+export function lienWhatsApp(e164: string): string | null {
+  return E164.test(e164) ? `https://wa.me/${e164.slice(1)}` : null;
+}
+
 /** "+229 01 97 45 12 33" for display (pairs of digits after the country code). */
 export function formaterTelephone(e164: string): string {
   if (!/^\+\d{8,15}$/.test(e164)) return e164;

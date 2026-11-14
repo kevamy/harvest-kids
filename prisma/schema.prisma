@@ -83,28 +83,29 @@ model Eglise {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  membres             Membre[]
-  accesSupport        AccesSupport[]
-  familles            Famille[]
-  tuteurs             Tuteur[]
-  personnesAutorisees PersonneAutorisee[]
-  enfants             Enfant[]
-  cartes              CarteFamille[]
-  reemissions         ReemissionCartes[]
-  badges              BadgeMoniteur[]
-  classes             Classe[]
-  cultes              Culte[]
-  sessions            Session[]
-  sessionClasses      SessionClasse[]
-  affectations        AffectationMoniteur[]
-  presences           Presence[]
-  evenements          EvenementPresence[]
-  appels              Appel[]
-  appelsTelephoniques AppelTelephonique[]
-  incidents           Incident[]
-  auditLogs           AuditLog[]
-  parametres          Parametre[]
-  fichiersASupprimer  FichierASupprimer[]
+  membres               Membre[]
+  accesSupport          AccesSupport[]
+  familles              Famille[]
+  tuteurs               Tuteur[]
+  personnesAutorisees   PersonneAutorisee[]
+  enfants               Enfant[]
+  cartes                CarteFamille[]
+  reemissions           ReemissionCartes[]
+  badges                BadgeMoniteur[]
+  classes               Classe[]
+  cultes                Culte[]
+  sessions              Session[]
+  sessionClasses        SessionClasse[]
+  affectations          AffectationMoniteur[]
+  presences             Presence[]
+  evenements            EvenementPresence[]
+  appels                Appel[]
+  appelsTelephoniques   AppelTelephonique[]
+  incidents             Incident[]
+  auditLogs             AuditLog[]
+  parametres            Parametre[]
+  retraitsExceptionnels RetraitExceptionnel[]
+  fichiersASupprimer    FichierASupprimer[]
 }
 
 // Compte (Better Auth). `name` et `email` sont imposés par Better Auth ; un compte créé par
@@ -122,12 +123,14 @@ model User {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  membres         Membre[]
-  sessions        AuthSession[]
-  comptes         AuthAccount[]
-  jetonsCompte    JetonCompte[]
-  accesSupport    AccesSupport[]
-  forcagesClasses SessionClasse[] @relation("ForcageClasse")
+  membres           Membre[]
+  sessions          AuthSession[]
+  comptes           AuthAccount[]
+  jetonsCompte      JetonCompte[]
+  accesSupport      AccesSupport[]
+  forcagesClasses   SessionClasse[]       @relation("ForcageClasse")
+  retraitsAutorises RetraitExceptionnel[] @relation("RetraitAutorisePar")
+  retraitsRemis     RetraitExceptionnel[] @relation("RetraitRemisPar")
 }
 
 // Rattachement d'un compte à une église. Hors RLS : il faut pouvoir lister les églises
@@ -281,10 +284,11 @@ model Famille {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  tuteurs   Tuteur[]
-  enfants   Enfant[]
-  autorises PersonneAutorisee[]
-  cartes    CarteFamille[]
+  tuteurs               Tuteur[]
+  enfants               Enfant[]
+  autorises             PersonneAutorisee[]
+  cartes                CarteFamille[]
+  retraitsExceptionnels RetraitExceptionnel[]
 
   @@unique([id, egliseId])
   @@index([egliseId, nom])
@@ -486,9 +490,10 @@ model Session {
   statut       StatutSession @default(PLANIFIEE)
   clotureMotif String?
 
-  classes   SessionClasse[]
-  presences Presence[]
-  incidents Incident[]
+  classes               SessionClasse[]
+  presences             Presence[]
+  incidents             Incident[]
+  retraitsExceptionnels RetraitExceptionnel[]
 
   @@unique([egliseId, culteId, date])
   @@unique([id, egliseId])
@@ -526,32 +531,39 @@ model AffectationMoniteur {
   arrivee         DateTime      @default(now())
   depart          DateTime?
 
+  // Un moniteur n'est que dans une classe à la fois : rejoindre une classe termine
+  // l'affectation précédente (depart), la clôture d'une session aussi.
+  @@unique([membreId], where: raw("\"depart\" IS NULL"), map: "AffectationMoniteur_une_active_par_membre")
   @@index([egliseId, sessionClasseId])
 }
 
 model Presence {
-  id            String             @id @default(cuid())
-  egliseId      String
-  eglise        Eglise             @relation(fields: [egliseId], references: [id], onDelete: Restrict)
-  sessionId     String
-  session       Session            @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Restrict)
-  enfantId      String
-  enfant        Enfant             @relation(fields: [enfantId, egliseId], references: [id, egliseId], onDelete: Restrict)
-  classeId      String
-  classe        Classe             @relation(fields: [classeId, egliseId], references: [id, egliseId], onDelete: Restrict)
-  statut        StatutPresence
-  codeRetrait   String // 4 caractères, valable pour cette session seulement (RG-04)
-  appelParent   Boolean            @default(false)
-  checkinPar    String
-  checkinLe     DateTime           @default(now())
-  enSalleLe     DateTime?
-  recupereLe    DateTime?
-  recuperePar   String? // personne autorisée qui a récupéré l'enfant
-  autorise      PersonneAutorisee? @relation(fields: [recuperePar, egliseId], references: [id, egliseId], onDelete: Restrict)
-  remisPar      String? // compte qui a remis l'enfant
-  basculeVers   String? // présence créée dans la session suivante
-  basculeCible  Presence?          @relation("Bascule", fields: [basculeVers, egliseId], references: [id, egliseId], onDelete: Restrict)
-  basculeSource Presence?          @relation("Bascule")
+  id                    String               @id @default(cuid())
+  egliseId              String
+  eglise                Eglise               @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionId             String
+  session               Session              @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  enfantId              String
+  enfant                Enfant               @relation(fields: [enfantId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  classeId              String
+  classe                Classe               @relation(fields: [classeId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  statut                StatutPresence
+  codeRetrait           String // 4 caractères, valable pour cette session seulement (RG-04)
+  appelParent           Boolean              @default(false)
+  checkinPar            String
+  checkinLe             DateTime             @default(now())
+  enSalleLe             DateTime?
+  recupereLe            DateTime?
+  recuperePar           String? // personne autorisée qui a récupéré l'enfant
+  autorise              PersonneAutorisee?   @relation(fields: [recuperePar, egliseId], references: [id, egliseId], onDelete: Restrict)
+  remisPar              String? // compte qui a remis l'enfant
+  // Retrait exceptionnel (cahier §7.6). Contraintes CHECK de la migration lot2_sessions :
+  // jamais avec recuperePar, et un statut RECUPERE exige exactement l'un des deux.
+  retraitExceptionnelId String?
+  retraitExceptionnel   RetraitExceptionnel? @relation(fields: [retraitExceptionnelId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  basculeVers           String? // présence créée dans la session suivante
+  basculeCible          Presence?            @relation("Bascule", fields: [basculeVers, egliseId], references: [id, egliseId], onDelete: Restrict)
+  basculeSource         Presence?            @relation("Bascule")
 
   evenements          EvenementPresence[]
   appels              Appel[]
@@ -631,6 +643,40 @@ model Incident {
   createdAt   DateTime     @default(now())
   clotureLe   DateTime?
 
+  retraitExceptionnel RetraitExceptionnel?
+
+  @@unique([id, egliseId])
+  @@index([egliseId, sessionId])
+}
+
+// Retrait par un adulte absent des personnes autorisées (cahier §7.6), après appel du contact
+// principal : autorisé par un RESPONSABLE ou un ADMIN actif de l'église, authentifié par son
+// PIN sur la tablette. Créé avec son incident RETRAIT_NON_AUTORISE, dans la même transaction.
+model RetraitExceptionnel {
+  id          String   @id @default(cuid())
+  egliseId    String
+  eglise      Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  sessionId   String
+  session     Session  @relation(fields: [sessionId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  familleId   String
+  famille     Famille  @relation(fields: [familleId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  nom         String // adulte non reconnu, tel qu'il se présente
+  lien        String?
+  telephone   String? // E.164 (contrainte CHECK)
+  photoKey    String // photo prise sur la tablette, sous eglises/{egliseId}/ (RG-15)
+  motif       String
+  autorisePar String // RESPONSABLE ou ADMIN actif de l'église, authentifié par son PIN
+  autoriseur  User     @relation("RetraitAutorisePar", fields: [autorisePar], references: [id], onDelete: Restrict)
+  remisPar    String // agent qui remet l'enfant
+  remetteur   User     @relation("RetraitRemisPar", fields: [remisPar], references: [id], onDelete: Restrict)
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  presences Presence[]
+
+  @@unique([id, egliseId])
+  @@unique([incidentId, egliseId]) // un retrait par incident
   @@index([egliseId, sessionId])
 }
 

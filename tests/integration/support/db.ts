@@ -39,6 +39,35 @@ export async function viderBase(proprietaire: pg.Client) {
   await proprietaire.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
 }
 
+/** Prefix of the throwaway databases where the migration tests replay their migration. */
+export const PREFIXE_BASE_MIGRATION = "hk_migration_";
+
+/**
+ * Drops a throwaway database. A background process (autovacuum) briefly connected to it
+ * makes WITH (FORCE) fail with "permission denied to terminate process": up to 5 attempts,
+ * 500 ms apart; the last error is thrown, so a cleanup that keeps failing stays visible.
+ */
+export async function supprimerBase(proprietaire: pg.Client, nom: string) {
+  for (let essai = 1; ; essai++) {
+    try {
+      await proprietaire.query(`DROP DATABASE IF EXISTS ${nom} WITH (FORCE)`);
+      return;
+    } catch (erreur) {
+      if (essai === 5) throw erreur;
+      await new Promise((fin) => setTimeout(fin, 500));
+    }
+  }
+}
+
+/** Drops the throwaway databases left by an earlier run whose cleanup failed. */
+export async function purgerBasesDeMigration(proprietaire: pg.Client) {
+  const { rows } = await proprietaire.query<{ datname: string }>(
+    `SELECT datname FROM pg_database WHERE starts_with(datname, $1)`,
+    [PREFIXE_BASE_MIGRATION],
+  );
+  for (const { datname } of rows) await supprimerBase(proprietaire, datname);
+}
+
 /** Error code of a failed query, e.g. 42501 (RLS / privilege), 23503 (FK), 23505 (unique). */
 export async function codeErreur(promesse: Promise<unknown>): Promise<string | undefined> {
   try {

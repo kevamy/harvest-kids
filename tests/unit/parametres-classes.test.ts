@@ -114,6 +114,11 @@ describe("paramètres de l'église", () => {
       "cartes.mode": "FAMILLE",
       impression: { format: "90x54", rectoVerso: false },
       "familles.delaiPurgeBrouillonsJours": 90,
+      // Cahier §17, points 3, 4 and 6 (lot 2 plan).
+      "sessions.delaiAlerteNonRecupereMinutes": 10,
+      "presences.delaiNonArriveEnSalleMinutes": 10,
+      "checkout.lieu": "ACCUEIL",
+      "appels.lieux": ["Accueil enfants", "Infirmerie"],
       "telephone.indicatifParDefaut": "229",
       "cartes.textes": TEXTES_CARTE_PAR_DEFAUT,
     });

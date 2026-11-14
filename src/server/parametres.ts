@@ -26,6 +26,38 @@ export const SCHEMAS_PARAMETRES = {
     .int("Saisissez un nombre entier de jours.")
     .min(7, "Le délai est d'au moins 7 jours.")
     .max(730, "Le délai est d'au plus 730 jours."),
+  // Cahier §7.7 and §17, point 4: after a service's end, delay before each child not yet
+  // collected triggers a parent call and an alert (lot 4).
+  "sessions.delaiAlerteNonRecupereMinutes": z
+    .number({ message: "Saisissez un nombre de minutes." })
+    .int("Saisissez un nombre entier de minutes.")
+    .min(0, "Le délai est d'au moins 0 minute.")
+    .max(120, "Le délai est d'au plus 120 minutes."),
+  // Cahier §7.4: a child still "Présent" after this delay is reported as not arrived in class.
+  "presences.delaiNonArriveEnSalleMinutes": z
+    .number({ message: "Saisissez un nombre de minutes." })
+    .int("Saisissez un nombre entier de minutes.")
+    .min(1, "Le délai est d'au moins 1 minute.")
+    .max(60, "Le délai est d'au plus 60 minutes."),
+  // Cahier §17, point 3: check-out at the reception desk only, or also from the class.
+  "checkout.lieu": z.enum(["ACCUEIL", "ACCUEIL_ET_CLASSES"], {
+    message: "Choisissez où se fait le retrait.",
+  }),
+  // Cahier §7.5 and §17, point 6: meeting places offered when a parent is called (lot 3).
+  "appels.lieux": z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1, "Un lieu est vide : complétez-le ou retirez-le.")
+        .max(40, "Un lieu compte 40 caractères au plus."),
+    )
+    .min(1, "Saisissez au moins un lieu de rendez-vous.")
+    .max(5, "5 lieux de rendez-vous au plus.")
+    .refine(
+      (lieux) => new Set(lieux.map((l) => l.toLocaleLowerCase("fr"))).size === lieux.length,
+      "Deux lieux portent le même nom : renommez ou retirez l'un d'eux.",
+    ),
   // Country code applied to a phone number typed without one.
   "telephone.indicatifParDefaut": z.enum(
     REGLES_TELEPHONE.map((r) => r.indicatif) as [string, ...string[]],
@@ -78,6 +110,11 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   // Provisional until the leaders settle the defaults of a new church (cahier §17, point 9).
   impression: { format: "90x54", rectoVerso: false },
   "familles.delaiPurgeBrouillonsJours": 90,
+  // Cahier §17, points 3, 4 and 6, until the leaders settle them: each church can change them.
+  "sessions.delaiAlerteNonRecupereMinutes": 10,
+  "presences.delaiNonArriveEnSalleMinutes": 10,
+  "checkout.lieu": "ACCUEIL",
+  "appels.lieux": ["Accueil enfants", "Infirmerie"],
   "telephone.indicatifParDefaut": "229",
   "cartes.textes": TEXTES_CARTE_PAR_DEFAUT,
 };

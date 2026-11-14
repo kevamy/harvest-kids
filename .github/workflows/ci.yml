@@ -111,6 +111,18 @@ jobs:
           name: rapport-playwright
           path: playwright-report/
           retention-days: 7
+      # Screens checked by eye in both orientations (fictitious test data only), and the
+      # measured durations (check-in in under 15 s, cahier §15).
+      - name: Captures d'écran
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-e2e
+          path: |
+            test-results/**/capture-*.png
+            test-results/**/mesure-*.txt
+          retention-days: 7
+          if-no-files-found: ignore
 
   docker:
     name: Image Docker de production

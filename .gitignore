@@ -57,3 +57,7 @@ next-env.d.ts
 
 # Docker production secrets
 /docker/production.env
+
+# Local Claude Code settings and skills lock
+/.claude/
+/skills-lock.json
