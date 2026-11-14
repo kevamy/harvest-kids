@@ -15,9 +15,10 @@ export const metadata: Metadata = { title: "Accueil — Harvest Kids" };
 const heure = (h: string) => h.replace(":", " h ");
 
 /**
- * Home of a church member. For the reception team, the desk comes first: the class alerts
- * in a compact band, then the check-in (cahier §7.3), whose tab has the check-out next to it
- * (lot 2, step 5). The full live dashboard comes with lot 4.
+ * Home of a church member. For the reception team, the desk comes first: its tabs, the class
+ * alerts in a compact band (on the tabs' line in landscape), then the check-in (cahier §7.3),
+ * whose tab has the check-out next to it (lot 2, step 5). The full live dashboard comes with
+ * lot 4.
  */
 export default async function Accueil() {
   const [session, { db, contexte }] = await Promise.all([getSessionCourante(), getTenantDb()]);
@@ -58,37 +59,40 @@ export default async function Accueil() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-4">
-        {alertes ? <AlertesClasses compact /> : null}
-        {/* One tab today; the check-out (step 5) takes its place next to it. */}
-        <div
-          role="tablist"
-          aria-label="Poste d'accueil"
-          className="flex flex-wrap items-center gap-2"
-        >
-          <Button
-            type="button"
-            role="tab"
-            id="onglet-checkin"
-            aria-selected="true"
-            aria-controls="panneau-checkin"
-            variant="sombre"
+        {/* Landscape: the tabs and the alerts band share one line. */}
+        <div className="flex flex-col gap-4 md:landscape:flex-row md:landscape:items-center">
+          {/* One tab today; the check-out (step 5) takes its place next to it. */}
+          <div
+            role="tablist"
+            aria-label="Poste d'accueil"
+            className="flex shrink-0 flex-wrap items-center gap-2"
           >
-            Check-in
-          </Button>
-          <Button
-            type="button"
-            role="tab"
-            id="onglet-checkout"
-            aria-selected="false"
-            aria-describedby="checkout-bientot"
-            variant="ghost"
-            disabled
-          >
-            Check-out
-          </Button>
-          <span id="checkout-bientot" className="text-label text-texte-doux">
-            Bientôt disponible
-          </span>
+            <Button
+              type="button"
+              role="tab"
+              id="onglet-checkin"
+              aria-selected="true"
+              aria-controls="panneau-checkin"
+              variant="sombre"
+            >
+              Check-in
+            </Button>
+            <Button
+              type="button"
+              role="tab"
+              id="onglet-checkout"
+              aria-selected="false"
+              aria-describedby="checkout-bientot"
+              variant="ghost"
+              disabled
+            >
+              Check-out
+            </Button>
+            <span id="checkout-bientot" className="text-label text-texte-doux">
+              Bientôt disponible
+            </span>
+          </div>
+          {alertes ? <AlertesClasses compact className="min-w-0 md:landscape:flex-1" /> : null}
         </div>
         <div role="tabpanel" id="panneau-checkin" aria-labelledby="onglet-checkin">
           <Checkin sessions={sessions} />

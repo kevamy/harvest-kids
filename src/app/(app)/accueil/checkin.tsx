@@ -147,11 +147,13 @@ export function Checkin({ sessions }: { sessions: SessionOuverte[] }) {
   const caches = preparation ? preparation.enfants.length - enfantsAffiches.length : 0;
 
   return (
-    <div className="grid items-start gap-4 md:landscape:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+    // Landscape: the scan takes a third of the width, the family two thirds.
+    <div className="grid items-start gap-4 md:landscape:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
       <NotchCard couleur="blanc">
         <div className="grid gap-4">
+          {/* The session is the card's header: it alone leaves room for the notch. */}
           {sessions.length > 1 ? (
-            <div className="grid gap-2">
+            <header className="grid gap-2">
               <label htmlFor="session-checkin" className="text-label font-bold">
                 Session
               </label>
@@ -170,9 +172,11 @@ export function Checkin({ sessions }: { sessions: SessionOuverte[] }) {
                   </option>
                 ))}
               </select>
-            </div>
+            </header>
           ) : (
-            <p className="m-0 font-bold">{sessions[0]!.libelle}</p>
+            <header>
+              <p className="m-0 font-bold">{sessions[0]!.libelle}</p>
+            </header>
           )}
           <Scanner
             avecCamera
@@ -260,10 +264,12 @@ export function Checkin({ sessions }: { sessions: SessionOuverte[] }) {
         {resultat ? (
           <NotchCard couleur="blanc" aria-label="Arrivée enregistrée">
             <div className="grid gap-4">
-              <p role="status" className="m-0 flex items-center gap-3 font-bold text-succes">
-                <CircleCheck aria-hidden className="size-7" />
-                Arrivée enregistrée.
-              </p>
+              <header>
+                <p role="status" className="m-0 flex items-center gap-3 font-bold text-succes">
+                  <CircleCheck aria-hidden className="size-7" />
+                  Arrivée enregistrée.
+                </p>
+              </header>
               <p className="m-0 grid gap-1">
                 <span className="text-label font-bold">Code de retrait à donner au parent</span>
                 <span

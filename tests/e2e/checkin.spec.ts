@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import {
   EGLISES,
   attendreAccueil,
@@ -91,6 +92,11 @@ test("check-in d'une famille de 3 enfants en moins de 15 s, qui active sa nouvel
   await expect(confirmation.getByRole("status")).toHaveText("Arrivée enregistrée.");
   const duree = Date.now() - debut;
   testInfo.annotations.push({ type: "check-in", description: `${duree} ms` });
+  // Uploaded by the CI with the captures (the HTML report only comes on a failure).
+  await writeFile(
+    testInfo.outputPath("mesure-checkin.txt"),
+    `${testInfo.project.name} : ${duree} ms\n`,
+  );
   expect(duree).toBeLessThan(15_000);
   // The focus is back in the scan field for the next family.
   await expect(scan).toBeFocused();
@@ -105,9 +111,13 @@ test("check-in d'une famille de 3 enfants en moins de 15 s, qui active sa nouvel
   // The pending card is active now (first check-in scan); one code for the family.
   const { rows } = await eglise.dansEglise((c) =>
     c.query(
-      `SELECT (SELECT count(*)::int FROM "CarteFamille" WHERE "activeLe" IS NOT NULL) AS actives,
-              (SELECT count(DISTINCT "codeRetrait")::int FROM "Presence") AS codes,
-              (SELECT count(*)::int FROM "Presence" WHERE statut = 'PRESENT') AS presents`,
+      `SELECT (SELECT count(*)::int FROM "CarteFamille"
+                WHERE "egliseId" = $1 AND "activeLe" IS NOT NULL) AS actives,
+              (SELECT count(DISTINCT "codeRetrait")::int FROM "Presence"
+                WHERE "egliseId" = $1) AS codes,
+              (SELECT count(*)::int FROM "Presence"
+                WHERE "egliseId" = $1 AND statut = 'PRESENT') AS presents`,
+      [eglise.id],
     ),
   );
   expect(rows[0]).toEqual({ actives: 1, codes: 1, presents: 3 });
@@ -168,7 +178,7 @@ test("une classe sans ses moniteurs bloque le check-in ; une famille à complét
   ).toHaveAttribute("href", `/familles/${eglise.id}_brouillon`);
 
   const { rows } = await eglise.dansEglise((c) =>
-    c.query(`SELECT count(*)::int AS n FROM "Presence"`),
+    c.query(`SELECT count(*)::int AS n FROM "Presence" WHERE "egliseId" = $1`, [eglise.id]),
   );
   expect(rows[0]).toEqual({ n: 0 });
 });

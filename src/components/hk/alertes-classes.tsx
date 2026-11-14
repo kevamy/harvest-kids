@@ -7,14 +7,21 @@ import type { AlerteClasse } from "@/server/moniteurs-session";
 /**
  * Live class alerts (cahier §7.2.5): a class with no monitor left gets the highest alert,
  * a class under its minimum a red one. Nothing is shown when every class is staffed.
- * Compact: one band of pills, above the reception desk's check-in.
+ * Compact: one band of pills, next to the reception desk's tabs.
  */
-export function AlertesClasses({ compact = false }: { compact?: boolean }) {
+export function AlertesClasses({
+  compact = false,
+  className,
+}: {
+  compact?: boolean;
+  /** Placement of the compact band in its row. */
+  className?: string;
+}) {
   const alertes = useLiveQuery<AlerteClasse[]>(["alertes-classes"], "/api/direct/alertes");
   if (!alertes.data || alertes.data.length === 0) return null;
   if (compact) {
     return (
-      <section aria-label="Alertes des classes">
+      <section aria-label="Alertes des classes" className={className}>
         <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
           {alertes.data.map((a) => (
             <li

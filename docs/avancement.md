@@ -6,7 +6,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
 | 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                   | PR n°4 à n°7 ; `lot-1-matricules-liste` |
-| 2. Sessions, check-in, check-out | à faire                                                                         | —                                       |
+| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 3 commitées, étape 4 à faire                          | `lot-2`, PR n°9                         |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                       |
 | 4. Transition et pilotage        | à faire                                                                         | —                                       |
 | 5. Robustesse et borne           | à faire                                                                         | —                                       |
@@ -89,3 +89,22 @@ Notes pour les lots suivants :
 - **Téléphones** (ADR 0011) : enregistrés au format E.164 (`+2290197451233`), affichés formatés. L'import CSV (étape 7) applique la même normalisation ; `Tuteur.telephone` est facultatif, mais le contact principal d'une famille finalisée a toujours un numéro valide (**lot 3** : le bouton Urgence peut compter dessus) ; les autres tuteurs peuvent ne pas en avoir. **Lot 3** : les liens `tel:` et `https://wa.me/` utilisent ce format (sans le « + » pour wa.me).
 
 Points encore ouverts (section 17) : check-out à la porte des classes (3), horaires des cultes et délai d'alerte (4), lieu de rendez-vous de l'écran d'appel (6), conservation des données (7), domaine et exploitant (8), paramètres par défaut d'une nouvelle église (9).
+
+## Lot 2 — Sessions, check-in, check-out
+
+Plan validé le 2026-11-06 (branche `lot-2`, PR n°9). À relire au début de chaque session : cette section dit où reprendre, y compris les corrections validées qui ne sont pas encore appliquées.
+
+Étapes :
+
+1. [x] Cultes, délais, lieux de rendez-vous et lieu du retrait ; liens `tel:` et WhatsApp (`6a77f23`), puis migration `lot2_sessions` (`cee78d2`).
+2. [x] Sessions du jour, ouverture des classes, moniteurs (`80113ab`) ; ouverture forcée avec au moins un moniteur, alerte maximale sans moniteur (`6892a28`).
+3. [x] Check-in à l'accueil (`308a25f`). Correctif du 2026-11-14 (e2e rouge en CI sur `checkin.spec.ts`, les deux tablettes) :
+   - **Paysage** : la famille ne tenait pas à l'écran, car `NotchCard` réservait la place de l'encoche (environ 70 px) sur tout le contenu enveloppé. Désormais, seul le titre (titre `h1` à `h6` ou `<header>`, jusqu'à deux niveaux sous la carte) laisse cette place ; une carte sans titre la laisse à son premier élément. La règle est reprise parmi les utilitaires : un `m-0` sur le titre l'annulait. En paysage, le scan prend 1/3 de la largeur et la famille 2/3 ; les onglets partagent une ligne avec le bandeau d'alertes.
+   - **Portrait** : les décomptes SQL du test ne filtraient pas sur l'église du test (la connexion des tests ne passe pas par la RLS). Même correction dans `cartes.spec.ts` ; règle ajoutée à `CLAUDE.md`.
+4. [ ] Vue moniteur `/classe/[id]`.
+5. [ ] Check-out.
+6. [ ] Finition : seed, ADR, démonstration.
+
+Corrections validées, pas encore appliquées : aucune.
+
+Question ouverte : les tests d'intégration contiennent une vingtaine de requêtes SQL brutes sans filtre sur l'église (base vidée entre les tests ; certaines comptent toutes les églises exprès, pour prouver l'isolation). Faut-il leur appliquer la nouvelle règle de `CLAUDE.md`, avec une exception pour les preuves d'isolation ?

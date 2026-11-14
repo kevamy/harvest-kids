@@ -149,10 +149,11 @@ export function ClassesSession({
                   className={classe.sousMinimum ? "ring-3 ring-alerte" : undefined}
                 >
                   <div className="grid gap-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    {/* A header: the name and its status pill both stay clear of the notch. */}
+                    <header className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="m-0 font-display text-h3 font-semibold">{classe.nom}</h3>
                       <Etat classe={classe} id={`etat-${sessionId}-${classe.classeId}`} />
-                    </div>
+                    </header>
                     {classe.salle ? (
                       <p className="m-0 text-texte-doux">Salle {classe.salle}</p>
                     ) : null}
