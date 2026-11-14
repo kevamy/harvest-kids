@@ -266,7 +266,8 @@ describe("seed de démonstration", () => {
       for (const { id } of eglises) {
         const { rows } = await enEglise(proprietaire, id, () =>
           proprietaire.query<(typeof tous)[number]>(
-            `SELECT "telephone", "whatsapp" FROM "Tuteur" ORDER BY "id"`,
+            `SELECT "telephone", "whatsapp" FROM "Tuteur" WHERE "egliseId" = $1 ORDER BY "id"`,
+            [id],
           ),
         );
         tous.push(...rows);
@@ -280,7 +281,8 @@ describe("seed de démonstration", () => {
       await enEglise(proprietaire, id, () =>
         proprietaire.query(
           `UPDATE "Tuteur" SET "telephone" = left("telephone", -1), "whatsapp" = left("whatsapp", -1)
-             WHERE "telephone" LIKE '+22901960%'`,
+             WHERE "egliseId" = $1 AND "telephone" LIKE '+22901960%'`,
+          [id],
         ),
       );
     }

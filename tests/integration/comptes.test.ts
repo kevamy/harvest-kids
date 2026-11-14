@@ -117,7 +117,10 @@ describe("création et activation", () => {
     await expect(activer(resultat.jeton, "Encore-un-autre-2026")).rejects.toThrow(LIEN_INVALIDE);
 
     const { rows: audit } = await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`SELECT action, "entiteId", apres FROM "AuditLog" ORDER BY "createdAt"`),
+      proprietaire.query(
+        `SELECT action, "entiteId", apres FROM "AuditLog" WHERE "egliseId" = $1 ORDER BY "createdAt"`,
+        [a.egliseId],
+      ),
     );
     expect(audit.map((e) => e.action)).toEqual(["compte.cree", "compte.active"]);
     expect(JSON.stringify(audit)).not.toMatch(/koffi|harvest-kids\.test|HKC1/i);
@@ -209,7 +212,9 @@ describe("réinitialisation du mot de passe", () => {
     expect(await peutSeConnecter("reinit@harvest-kids.test", NOUVEAU)).toBe(true);
     const { rows } = await enEglise(proprietaire, a.egliseId, () =>
       proprietaire.query(
-        `SELECT action, apres FROM "AuditLog" WHERE action LIKE 'compte.%' ORDER BY "createdAt"`,
+        `SELECT action, apres FROM "AuditLog"
+         WHERE "egliseId" = $1 AND action LIKE 'compte.%' ORDER BY "createdAt"`,
+        [a.egliseId],
       ),
     );
     expect(rows).toEqual([

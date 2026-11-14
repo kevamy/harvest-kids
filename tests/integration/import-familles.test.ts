@@ -23,7 +23,15 @@ import {
 import { ImportRefuse, idCorrection } from "@/server/import-familles/analyse";
 import { analyserImport, importerFamilles } from "@/server/import-familles/service";
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { type Client, type Jeu, connecter, creerEglise, enEglise, viderBase } from "./support/db";
+import {
+  type Client,
+  type Jeu,
+  compterToutesEglises,
+  connecter,
+  creerEglise,
+  enEglise,
+  viderBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 let base: PrismaClient;
@@ -246,12 +254,10 @@ describe("doublons possibles", () => {
     expect((await brouillonsDe(dbA)).map((f) => f.nom)).toEqual(["Dossou"]);
     expect((await brouillonsDe(dbB)).map((f) => f.nom)).toEqual(["Kpadé"]);
     // Row-Level Security: the drafts of A are invisible from B, even by a forced query.
-    const nombre = await enEglise(proprietaire, b.egliseId, async () => {
-      const { rows } = await proprietaire.query<{ n: string }>(
-        `SELECT count(*) AS n FROM "Famille" WHERE nom = 'Dossou'`,
-      );
-      return Number(rows[0]!.n);
-    });
+    // Isolation proof: inside B, FORCE RLS hides A's draft from an unfiltered count.
+    const nombre = await enEglise(proprietaire, b.egliseId, () =>
+      compterToutesEglises(proprietaire, "Famille", "nom = 'Dossou'"),
+    );
     expect(nombre).toBe(0);
   });
 });
@@ -334,8 +340,9 @@ describe("après l'import", () => {
     const familleId = await importer();
     await enEglise(proprietaire, a.egliseId, () =>
       proprietaire.query(
-        `UPDATE "Famille" SET "createdAt" = "createdAt" - interval '91 days' WHERE id = $1`,
-        [familleId],
+        `UPDATE "Famille" SET "createdAt" = "createdAt" - interval '91 days'
+         WHERE id = $1 AND "egliseId" = $2`,
+        [familleId, a.egliseId],
       ),
     );
     expect(await purgerBrouillonsExpires(dbA, 90)).toBe(1);

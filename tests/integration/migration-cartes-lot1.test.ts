@@ -101,10 +101,13 @@ describe("migration du lot 1 : empreintes des jetons", () => {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.eglise_id', 'eglise_m', true)");
       const { rows: cartes } = await client.query(
-        `SELECT "tokenHash", "activeLe" = "emiseLe" AS active FROM "CarteFamille"`,
+        `SELECT "tokenHash", "activeLe" = "emiseLe" AS active FROM "CarteFamille"
+         WHERE "egliseId" = $1`,
+        ["eglise_m"],
       );
       const { rows: familles } = await client.query(
-        `SELECT "finaliseeLe" = "createdAt" AS finalisee FROM "Famille"`,
+        `SELECT "finaliseeLe" = "createdAt" AS finalisee FROM "Famille" WHERE "egliseId" = $1`,
+        ["eglise_m"],
       );
       await client.query("COMMIT");
       expect(cartes).toEqual([{ tokenHash: empreinte(JETON_CARTE), active: true }]);
@@ -136,7 +139,10 @@ describe("migration du lot 1 : empreintes des jetons", () => {
       expect(await colonnes(client, "CarteFamille")).not.toContain("tokenHash");
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.eglise_id', 'eglise_m', true)");
-      const { rows } = await client.query(`SELECT token FROM "CarteFamille"`);
+      const { rows } = await client.query(
+        `SELECT token FROM "CarteFamille" WHERE "egliseId" = $1`,
+        ["eglise_m"],
+      );
       await client.query("COMMIT");
       expect(rows).toEqual([{ token: JETON_CARTE }]);
     } finally {

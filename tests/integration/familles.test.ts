@@ -413,7 +413,8 @@ describe("modification", () => {
 
     // Due in 24 hours, measured on the database's clock (the one that set the date).
     const programmes = await dbA.$queryRaw<{ cle: string; dans24h: boolean }[]>`
-      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"`;
+      SELECT cle, "apresLe" > now() + interval '23 hours' AS dans24h FROM "FichierASupprimer"
+      WHERE "egliseId" = ${a.egliseId}`;
     expect(programmes.map((p) => p.cle).sort()).toEqual([ancienneAdulte, ancienneAyo].sort());
     expect(programmes.every((p) => p.dans24h)).toBe(true);
     expect(await stockage.get(ancienneAdulte)).not.toBeNull();
@@ -515,7 +516,10 @@ describe("isolation A/B", () => {
       ),
     ).rejects.toThrow("Famille introuvable. Rechargez la page.");
     const nomB = await enEglise(proprietaire, b.egliseId, () =>
-      proprietaire.query(`SELECT prenom FROM "Enfant" WHERE id = $1`, [b.enfantId]),
+      proprietaire.query(`SELECT prenom FROM "Enfant" WHERE id = $1 AND "egliseId" = $2`, [
+        b.enfantId,
+        b.egliseId,
+      ]),
     );
     expect(nomB.rows).toEqual([{ prenom: "Prénom" }]);
   });
@@ -542,8 +546,9 @@ describe("numéro des tuteurs d'une famille enregistrée", () => {
   const numeros = (familleId: string) =>
     enEglise(proprietaire, a.egliseId, async () => {
       const { rows } = await proprietaire.query<{ telephone: string | null }>(
-        `SELECT telephone FROM "Tuteur" WHERE "familleId" = $1 ORDER BY principal DESC`,
-        [familleId],
+        `SELECT telephone FROM "Tuteur"
+         WHERE "familleId" = $1 AND "egliseId" = $2 ORDER BY principal DESC`,
+        [familleId, a.egliseId],
       );
       return rows.map((r) => r.telephone);
     });

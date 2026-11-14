@@ -22,7 +22,15 @@ vi.mock("@/server/impression/pdf-carte", async (importOriginal) => {
   };
 });
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { type Client, type Jeu, connecter, creerEglise, enEglise, viderBase } from "./support/db";
+import {
+  type Client,
+  type Jeu,
+  compterDansEglise,
+  connecter,
+  creerEglise,
+  enEglise,
+  viderBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 let base: PrismaClient;
@@ -137,7 +145,10 @@ describe("impression des cartes d'une famille", () => {
 
   it("refuse une famille en brouillon", async () => {
     await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`UPDATE "Famille" SET "finaliseeLe" = NULL WHERE id = $1`, [a.familleId]),
+      proprietaire.query(
+        `UPDATE "Famille" SET "finaliseeLe" = NULL WHERE id = $1 AND "egliseId" = $2`,
+        [a.familleId, a.egliseId],
+      ),
     );
     await expect(imprimer()).rejects.toThrow(ImpressionRefusee);
     expect(await cartesA()).toEqual([]);
@@ -148,8 +159,8 @@ describe("impression des cartes d'une famille", () => {
       "Famille introuvable. Rechargez la page.",
     );
     const cartesB = await enEglise(proprietaire, b.egliseId, () =>
-      proprietaire.query(`SELECT count(*)::int AS n FROM "CarteFamille"`),
+      compterDansEglise(proprietaire, "CarteFamille", b.egliseId),
     );
-    expect(cartesB.rows[0].n).toBe(0);
+    expect(cartesB).toBe(0);
   });
 });

@@ -74,21 +74,33 @@ const activer = (carteId: string) => dbA.$tx((tx) => activerCarte(tx, AUTEUR, ca
 /** Every card and every audit entry of church A, read as the owner inside A. */
 async function etatA() {
   return enEglise(proprietaire, a.egliseId, async () => ({
-    cartes: (await proprietaire.query(`SELECT * FROM "CarteFamille" ORDER BY id`)).rows,
-    audit: (await proprietaire.query(`SELECT * FROM "AuditLog" ORDER BY id`)).rows,
+    cartes: (
+      await proprietaire.query(`SELECT * FROM "CarteFamille" WHERE "egliseId" = $1 ORDER BY id`, [
+        a.egliseId,
+      ])
+    ).rows,
+    audit: (
+      await proprietaire.query(`SELECT * FROM "AuditLog" WHERE "egliseId" = $1 ORDER BY id`, [
+        a.egliseId,
+      ])
+    ).rows,
   }));
 }
 
 /** Invariant: for each child, at most one active card covers it (family or child card). */
 async function cartesActivesParEnfant(): Promise<Record<string, number>> {
   return enEglise(proprietaire, a.egliseId, async () => {
-    const { rows } = await proprietaire.query<{ enfant: string; n: number }>(`
+    const { rows } = await proprietaire.query<{ enfant: string; n: number }>(
+      `
       SELECT e.id AS enfant, count(c.id)::int AS n
       FROM "Enfant" e
       LEFT JOIN "CarteFamille" c ON c."familleId" = e."familleId"
         AND c."revoqueeLe" IS NULL AND c."activeLe" IS NOT NULL
         AND (c."enfantId" IS NULL OR c."enfantId" = e.id)
-      GROUP BY e.id ORDER BY e.id`);
+      WHERE e."egliseId" = $1
+      GROUP BY e.id ORDER BY e.id`,
+      [a.egliseId],
+    );
     return Object.fromEntries(rows.map((r) => [r.enfant, r.n]));
   });
 }
@@ -117,7 +129,10 @@ describe("émission", () => {
 
   it("une famille en brouillon ne reçoit pas de carte", async () => {
     await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`UPDATE "Famille" SET "finaliseeLe" = NULL WHERE id = $1`, [a.familleId]),
+      proprietaire.query(
+        `UPDATE "Famille" SET "finaliseeLe" = NULL WHERE id = $1 AND "egliseId" = $2`,
+        [a.familleId, a.egliseId],
+      ),
     );
     await expect(emettre()).rejects.toThrow(CarteImpossible);
   });

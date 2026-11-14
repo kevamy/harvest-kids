@@ -15,7 +15,15 @@ import {
   type ClientEglise,
 } from "@/lib/tenant";
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { type Client, type Jeu, connecter, creerEglise, enEglise, viderBase } from "./support/db";
+import {
+  type Client,
+  type Jeu,
+  compterDansEglise,
+  connecter,
+  creerEglise,
+  enEglise,
+  viderBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 let base: PrismaClient;
@@ -114,6 +122,7 @@ describe("lecture", () => {
     const forcees = await dbA.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Enfant" WHERE "egliseId" = ${b.egliseId}`;
     expect(forcees).toEqual([]);
+    // Isolation proof: through the app role in A, RLS hides B's rows from an unfiltered count.
     const toutes = await dbA.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "Enfant"`;
     expect(toutes[0]?.n).toBe(ENFANTS_A);
   });
@@ -132,18 +141,28 @@ describe("écriture", () => {
       code: "P2025",
     });
 
-    expect(await lireDansB(`SELECT prenom FROM "Enfant" WHERE id = $1`, [b.enfantId])).toEqual([
-      { prenom: "Prénom" },
-    ]);
-    expect(await lireDansB(`SELECT id FROM "Classe" WHERE id = $1`, [b.classeId])).toHaveLength(1);
+    expect(
+      await lireDansB(`SELECT prenom FROM "Enfant" WHERE id = $1 AND "egliseId" = $2`, [
+        b.enfantId,
+        b.egliseId,
+      ]),
+    ).toEqual([{ prenom: "Prénom" }]);
+    expect(
+      await lireDansB(`SELECT id FROM "Classe" WHERE id = $1 AND "egliseId" = $2`, [
+        b.classeId,
+        b.egliseId,
+      ]),
+    ).toHaveLength(1);
   });
 
   it("une modification en masse sans filtre ne touche que A", async () => {
     const { count } = await dbA.enfant.updateMany({ data: { notes: "vu par A" } });
     expect(count).toBe(ENFANTS_A);
     expect(
-      await lireDansB(`SELECT count(*)::int AS n FROM "Enfant" WHERE notes IS NOT NULL`, []),
-    ).toEqual([{ n: 0 }]);
+      await enEglise(proprietaire, b.egliseId, () =>
+        compterDansEglise(proprietaire, "Enfant", b.egliseId, "notes IS NOT NULL"),
+      ),
+    ).toBe(0);
   });
 
   it("créer une ligne pour B est refusé ; sans église précisée, la ligne va dans A", async () => {

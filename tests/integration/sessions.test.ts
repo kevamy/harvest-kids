@@ -62,7 +62,8 @@ async function membre(jeu: Jeu, cle: string, roles: string[], actif = true) {
 const actions = (jeu: Jeu) =>
   enEglise(proprietaire, jeu.egliseId, async () => {
     const { rows } = await proprietaire.query<{ action: string }>(
-      `SELECT action FROM "AuditLog" ORDER BY "createdAt", id`,
+      `SELECT action FROM "AuditLog" WHERE "egliseId" = $1 ORDER BY "createdAt", id`,
+      [jeu.egliseId],
     );
     return rows.map((r) => r.action);
   });
@@ -70,8 +71,8 @@ const actions = (jeu: Jeu) =>
 const statutSession = (jeu: Jeu) =>
   enEglise(proprietaire, jeu.egliseId, async () => {
     const { rows } = await proprietaire.query<{ statut: string }>(
-      `SELECT statut FROM "Session" WHERE id = $1`,
-      [jeu.sessionId],
+      `SELECT statut FROM "Session" WHERE id = $1 AND "egliseId" = $2`,
+      [jeu.sessionId, jeu.egliseId],
     );
     return rows[0]?.statut;
   });
@@ -294,7 +295,10 @@ describe("moniteurs et ouverture des classes (RG-05)", () => {
     });
     await expect(forcer("Encore")).rejects.toThrow("Cette classe est déjà ouverte.");
     const { rows } = await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`SELECT "forcePar", "forcageMotif" FROM "SessionClasse"`),
+      proprietaire.query(
+        `SELECT "forcePar", "forcageMotif" FROM "SessionClasse" WHERE "egliseId" = $1`,
+        [a.egliseId],
+      ),
     );
     expect(rows).toEqual([
       {
@@ -376,7 +380,9 @@ describe("clôture (lot 2 : tous les enfants récupérés)", () => {
         [a.egliseId, a.familleId],
       );
       await proprietaire.query(
-        `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1' WHERE id = 'p_1'`,
+        `UPDATE "Presence" SET statut = 'RECUPERE', "recuperePar" = 'pa_1'
+         WHERE id = 'p_1' AND "egliseId" = $1`,
+        [a.egliseId],
       );
     });
     expect(await dbA.$tx((tx) => cloturerSession(tx, auteur(a), a.sessionId))).toBe(true);

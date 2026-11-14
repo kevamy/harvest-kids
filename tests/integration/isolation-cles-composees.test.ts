@@ -10,7 +10,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { MODELES_EGLISE, RequeteHorsEglise, clientEglise, type ClientEglise } from "@/lib/tenant";
 import { creerClientPlateforme } from "@/server/plateforme/db";
-import { type Client, type Jeu, connecter, creerEglise, enEglise, viderBase } from "./support/db";
+import {
+  type Client,
+  type Jeu,
+  compterDansEglise,
+  connecter,
+  creerEglise,
+  enEglise,
+  viderBase,
+} from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
 const { datamodel } = await getDMMF({
@@ -168,7 +176,9 @@ describe("relations vers une ligne de B", () => {
       dbA.enfant.create(enfant({ connect: { id: b.familleId } }) as never),
     ).rejects.toThrow();
     const lignes = await enEglise(proprietaire, a.egliseId, () =>
-      proprietaire.query(`SELECT id FROM "Enfant" WHERE id = 'enfant_force'`),
+      proprietaire.query(`SELECT id FROM "Enfant" WHERE id = 'enfant_force' AND "egliseId" = $1`, [
+        a.egliseId,
+      ]),
     );
     expect(lignes.rows).toEqual([]);
   });
@@ -196,8 +206,8 @@ describe("relations vers une ligne de B", () => {
       dbA.enfant.findMany({ where: { famille: { is: { egliseId: b.egliseId } } } } as never),
     ).rejects.toThrow(RequeteHorsEglise);
     const enfantsDeB = await enEglise(proprietaire, b.egliseId, () =>
-      proprietaire.query(`SELECT count(*)::int AS n FROM "Enfant"`),
+      compterDansEglise(proprietaire, "Enfant", b.egliseId),
     );
-    expect(enfantsDeB.rows[0].n).toBe(1);
+    expect(enfantsDeB).toBe(1);
   });
 });
