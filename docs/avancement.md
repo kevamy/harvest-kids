@@ -101,6 +101,7 @@ Plan validé le 2026-11-06 (branche `lot-2`, PR n°9). À relire au début de ch
 3. [x] Check-in à l'accueil (`308a25f`). Correctif du 2026-11-14 (e2e rouge en CI sur `checkin.spec.ts`, les deux tablettes) :
    - **Paysage** : la famille ne tenait pas à l'écran, car `NotchCard` réservait la place de l'encoche (environ 70 px) sur tout le contenu enveloppé. Désormais, seul le titre (titre `h1` à `h6` ou `<header>`, jusqu'à deux niveaux sous la carte) laisse cette place ; une carte sans titre la laisse à son premier élément. La règle est reprise parmi les utilitaires : un `m-0` sur le titre l'annulait. En paysage, le scan prend 1/3 de la largeur et la famille 2/3 ; les onglets partagent une ligne avec le bandeau d'alertes.
    - **Portrait** : les décomptes SQL du test ne filtraient pas sur l'église du test (la connexion des tests ne passe pas par la RLS). Même correction dans `cartes.spec.ts` ; règle ajoutée à `CLAUDE.md`.
+   - CI verte sur `bf65100` (lint, types, unitaires, intégration, e2e, image Docker). Check-in mesuré du scan à la confirmation : 368 ms en paysage, 288 ms en portrait (artefact `captures-e2e`, fichiers `mesure-checkin.txt`).
 4. [ ] Vue moniteur `/classe/[id]`.
 5. [ ] Check-out.
 6. [ ] Finition : seed, ADR, démonstration.
