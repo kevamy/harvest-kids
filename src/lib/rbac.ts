@@ -15,7 +15,8 @@ export const ACTIONS = [
   "classes.gerer",
   "classe.forcer",
   "classe.voir",
-  "enfant.confirmerEnSalle",
+  // Every class list, and correcting an arrival in class after the 1-minute delay (§7.4).
+  "salle.superviser",
   "infirmerie.envoyer",
   "infirmerie.gerer",
   "alertes.voir",
@@ -41,6 +42,7 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "classes.gerer",
     "classe.forcer",
     "classe.voir",
+    "salle.superviser",
     "alertes.voir",
     "incident.declarer",
     "rapports.voir",
@@ -54,9 +56,9 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "parent.appeler",
     "alertes.voir",
   ],
+  // Confirming an arrival in class comes from the assignment, not from a role (droitsSalle).
   MONITEUR: [
     "classe.voir",
-    "enfant.confirmerEnSalle",
     "infirmerie.envoyer",
     "parent.appeler",
     "alertes.voir",
@@ -77,6 +79,20 @@ export class ActionInterdite extends Error {
     super(`Action non autorisée : ${action}`);
     this.name = "ActionInterdite";
   }
+}
+
+/**
+ * A class list in a session (cahier §7.4, ADR 0015). The members assigned to the class for
+ * the session confirm arrivals, whatever their role (monitors and reinforcements); a
+ * RESPONSABLE or an ADMIN sees every class and corrects a confirmation after the 1-minute
+ * delay; a MONITEUR only sees the class they are assigned to.
+ */
+export function droitsSalle(
+  roles: readonly Role[],
+  affecte: boolean,
+): { voir: boolean; confirmer: boolean; corriger: boolean } {
+  const superviser = peut(roles, "salle.superviser");
+  return { voir: affecte || superviser, confirmer: affecte, corriger: superviser };
 }
 
 /** Throws unless one of the roles grants the action. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIONS, ActionInterdite, exigerDroit, peut } from "@/lib/rbac";
+import { ACTIONS, ActionInterdite, droitsSalle, exigerDroit, peut } from "@/lib/rbac";
 
 describe("droits par rôle (cahier §4)", () => {
   it("l'administrateur peut tout dans son église, sauf l'écran d'appel technique", () => {
@@ -27,7 +27,9 @@ describe("droits par rôle (cahier §4)", () => {
     ["RESPONSABLE", "classes.gerer", true],
     ["ACCUEIL", "classes.gerer", false],
     ["ACCUEIL", "eglise.parametrer", false],
-    ["MONITEUR", "enfant.confirmerEnSalle", true],
+    ["RESPONSABLE", "salle.superviser", true],
+    ["MONITEUR", "salle.superviser", false],
+    ["ACCUEIL", "salle.superviser", false],
     ["MONITEUR", "infirmerie.envoyer", true],
     ["MONITEUR", "checkout", false],
     ["MONITEUR", "familles.gerer", false],
@@ -48,6 +50,20 @@ describe("droits par rôle (cahier §4)", () => {
 
   it("sans rôle, rien n'est permis", () => {
     for (const action of ACTIONS) expect(peut([], action)).toBe(false);
+  });
+
+  it.each([
+    // Assigned to the class: confirms, whatever the role (monitor or reinforcement).
+    [["MONITEUR"], true, { voir: true, confirmer: true, corriger: false }],
+    [["ACCUEIL"], true, { voir: true, confirmer: true, corriger: false }],
+    // A MONITEUR only sees the class they are assigned to.
+    [["MONITEUR"], false, { voir: false, confirmer: false, corriger: false }],
+    // RESPONSABLE and ADMIN not assigned: see every class, correct, never confirm.
+    [["RESPONSABLE"], false, { voir: true, confirmer: false, corriger: true }],
+    [["ADMIN"], false, { voir: true, confirmer: false, corriger: true }],
+    [["RESPONSABLE"], true, { voir: true, confirmer: true, corriger: true }],
+  ] as const)("arrivée en salle : %j, affecté %s → %j", (roles, affecte, attendu) => {
+    expect(droitsSalle(roles, affecte)).toEqual(attendu);
   });
 
   it("exigerDroit lève une erreur explicite", () => {

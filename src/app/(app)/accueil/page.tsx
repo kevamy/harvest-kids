@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AlertesClasses } from "@/components/hk/alertes-classes";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Pastille } from "@/components/hk/status-pill";
@@ -7,6 +8,8 @@ import { peut } from "@/lib/rbac";
 import { LIBELLES_ROLES } from "@/lib/roles";
 import { getSessionCourante } from "@/lib/session";
 import { getTenantDb } from "@/lib/tenant";
+import { affectationActive } from "@/server/moniteurs-session";
+import { classeDeSession } from "@/server/salle";
 import { listerSessionsDuJour } from "@/server/sessions";
 import { Checkin } from "./checkin";
 
@@ -22,6 +25,9 @@ const heure = (h: string) => h.replace(":", " h ");
  */
 export default async function Accueil() {
   const [session, { db, contexte }] = await Promise.all([getSessionCourante(), getTenantDb()]);
+  // A member assigned to a class (monitor or reinforcement, whatever the role) reaches its list.
+  const affectation = await affectationActive(db, contexte.membreId);
+  const maClasse = affectation ? await classeDeSession(db, affectation.sessionClasseId) : null;
   const checkin = peut(contexte.roles, "checkin");
   const alertes = peut(contexte.roles, "tableau.direct");
   const sessions = checkin
@@ -44,6 +50,13 @@ export default async function Accueil() {
           </li>
         ))}
       </ul>
+      {maClasse ? (
+        <p className="mt-4 mb-0">
+          <Link href={`/classe/${maClasse.sessionClasseId}`} className="font-bold">
+            Ouvrir la liste de ma classe : {maClasse.nom}
+          </Link>
+        </p>
+      ) : null}
     </NotchCard>
   );
 

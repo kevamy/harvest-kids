@@ -189,6 +189,8 @@ export async function forcerOuverture(
 
 export type EtatClasse = {
   classeId: string;
+  /** The class in this session (link to its list of children), once the session is open. */
+  sessionClasseId: string | null;
   nom: string;
   salle: string | null;
   minMoniteurs: number;
@@ -217,6 +219,7 @@ export async function etatClasses(
     db.sessionClasse.findMany({
       where: { sessionId },
       select: {
+        id: true,
         classeId: true,
         ouverteLe: true,
         forcageMotif: true,
@@ -235,6 +238,7 @@ export async function etatClasses(
     const ouverte = Boolean(sc?.ouverteLe);
     return {
       classeId: k.id,
+      sessionClasseId: sc?.id ?? null,
       nom: k.nom,
       salle: k.salle,
       minMoniteurs: k.minMoniteurs,
@@ -286,9 +290,11 @@ export async function alertesClasses(db: Pick<ClientDeBase, "$queryRaw">): Promi
 export async function affectationActive(
   db: Pick<ClientDeBase, "$queryRaw">,
   membreId: string,
-): Promise<{ sessionId: string; classeId: string } | null> {
-  const [ligne] = await db.$queryRaw<{ sessionId: string; classeId: string }[]>`
-    SELECT sc."sessionId", sc."classeId"
+): Promise<{ sessionId: string; classeId: string; sessionClasseId: string } | null> {
+  const [ligne] = await db.$queryRaw<
+    { sessionId: string; classeId: string; sessionClasseId: string }[]
+  >`
+    SELECT sc."sessionId", sc."classeId", sc.id AS "sessionClasseId"
     FROM "AffectationMoniteur" a
     JOIN "SessionClasse" sc ON sc.id = a."sessionClasseId"
     JOIN "Session" s ON s.id = sc."sessionId"

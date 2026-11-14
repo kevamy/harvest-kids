@@ -38,11 +38,23 @@ export async function executerActionAvec<T>(
   action: Action | Action[],
   fn: (acces: { db: ClientEglise; contexte: ContexteEglise }) => Promise<T>,
 ): Promise<{ ok: true; donnees: T } | { ok: false; erreur: string }> {
+  const actions = Array.isArray(action) ? action : [action];
+  return executerActionVerifiee(async ({ contexte }) => {
+    if (!actions.some((a) => peut(contexte.roles, a))) exigerDroit(contexte, actions[0]!);
+  }, fn);
+}
+
+/**
+ * Same frame when the right depends on data, not only on the roles (an assignment to a
+ * class, ADR 0015): `verifier` reads it through lib/rbac.ts and throws ActionInterdite.
+ */
+export async function executerActionVerifiee<T>(
+  verifier: (acces: { db: ClientEglise; contexte: ContexteEglise }) => Promise<void>,
+  fn: (acces: { db: ClientEglise; contexte: ContexteEglise }) => Promise<T>,
+): Promise<{ ok: true; donnees: T } | { ok: false; erreur: string }> {
   try {
     const acces = await getTenantDb();
-    const actions = Array.isArray(action) ? action : [action];
-    if (!actions.some((a) => peut(acces.contexte.roles, a)))
-      exigerDroit(acces.contexte, actions[0]!);
+    await verifier(acces);
     return { ok: true, donnees: await fn(acces) };
   } catch (erreur) {
     if (erreur instanceof AccesRefuse) return { ok: false, erreur: MESSAGES.acces };

@@ -1,6 +1,6 @@
 # Harvest Kids — Cahier des charges
 
-Version 1.4, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
+Version 1.5, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur ; 1.5 : arrivée en salle confirmée par les membres affectés à la classe, annulation d'une confirmation). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
 
 ---
 
@@ -123,7 +123,7 @@ ATTENDU ──► PRESENT ──► EN_SALLE ──► RECUPERE
 | Statut | Signification | Déclencheur |
 |---|---|---|
 | `PRESENT` | Enregistré à l'accueil, en route vers sa classe | Check-in à l'accueil |
-| `EN_SALLE` | Confirmé par un moniteur de la classe | Scan ou toucher par un moniteur de la classe |
+| `EN_SALLE` | Confirmé par un membre affecté à la classe | Scan ou toucher par un membre affecté à la classe pour la session ; annulable (retour à `PRESENT`, section 7.4) |
 | `INFIRMERIE` | À l'infirmerie | Moniteur ou infirmerie ; enregistre l'heure et l'accompagnant |
 | `RECUPERE` | Remis à une personne autorisée | Check-out validé |
 | Drapeau `appelParent` | Le parent est appelé | Moniteur, accueil ou infirmerie ; affiché sur l'écran d'appel jusqu'à résolution |
@@ -164,9 +164,10 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 
 ### 7.4 Arrivée en salle (MONITEUR)
 
-1. La tablette du moniteur affiche la liste de sa classe : enfants `PRESENT` à confirmer en haut, enfants `EN_SALLE` en dessous.
-2. Le moniteur confirme l'arrivée d'un enfant par un toucher ou un scan ; l'enfant passe en `EN_SALLE`.
-3. Un enfant resté `PRESENT` plus de 10 minutes (paramétrable) génère une alerte « non arrivé en salle » sur le tableau de bord de l'accueil.
+1. La tablette du moniteur affiche la liste de sa classe : enfants `PRESENT` à confirmer en haut, enfants `EN_SALLE` en dessous. Un MONITEUR ne voit que la classe où il est affecté ; un RESPONSABLE ou un ADMIN non affecté voit toutes les classes, sans confirmer.
+2. Seuls les membres affectés à la classe pour la session (moniteurs et renforts, quel que soit leur rôle) confirment l'arrivée d'un enfant, par un toucher ou un scan ; l'enfant passe en `EN_SALLE`. Le scan d'une carte famille confirme les enfants de la famille présents dans cette classe, celui d'une carte enfant cet enfant seul. Une carte en attente scannée en salle sert à retrouver la famille, sans être activée (l'activation reste au check-in et au check-out).
+3. **Annulation d'une confirmation** (une erreur de toucher marquerait « en salle » un enfant qui n'y est pas, le risque de l'incident d'origine) : pendant 1 minute après la confirmation, le membre qui l'a faite voit un bouton « Annuler », qui remet l'enfant en `PRESENT`. Après ce délai, seul un RESPONSABLE peut la corriger, avec un motif obligatoire. Le délai est vérifié par le serveur, avec l'horloge de la base. Chaque annulation crée un événement de présence et une entrée d'audit dans la même transaction.
+4. Un enfant resté `PRESENT` plus de 10 minutes (paramétrable) génère une alerte « non arrivé en salle » sur le tableau de bord de l'accueil.
 
 ### 7.5 Pendant le culte (MONITEUR, INFIRMERIE, ACCUEIL)
 
