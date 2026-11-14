@@ -6,7 +6,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
 | -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
 | 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
 | 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                   | PR n°4 à n°7 ; `lot-1-matricules-liste` |
-| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 3 commitées, étape 4 à faire                          | `lot-2`, PR n°9                         |
+| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 3 fusionnées le 2026-11-14, étapes 4 à 6 à faire      | PR n°9 ; `lot-2-suite`, PR n°10         |
 | 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                       |
 | 4. Transition et pilotage        | à faire                                                                         | —                                       |
 | 5. Robustesse et borne           | à faire                                                                         | —                                       |
@@ -92,7 +92,7 @@ Points encore ouverts (section 17) : check-out à la porte des classes (3), hora
 
 ## Lot 2 — Sessions, check-in, check-out
 
-Plan validé le 2026-11-06 (branche `lot-2`, PR n°9). À relire au début de chaque session : cette section dit où reprendre, y compris les corrections validées qui ne sont pas encore appliquées.
+Plan validé le 2026-11-06. Étapes 1 à 3 validées et fusionnées le 2026-11-14 (PR n°9, `eea9d1f`) ; « Migrations Neon » a appliqué `lot2_sessions`, `/api/sante` répond `{"ok":true}`. Recette de l'utilisateur à venir sur https://harvest-kids.vercel.app : écrans à encoche (`/sessions`, Paramètres, familles) et un check-in réel. Étapes 4 à 6 sur `lot-2-suite` (PR n°10). À relire au début de chaque session : cette section dit où reprendre, y compris les corrections validées qui ne sont pas encore appliquées.
 
 Étapes :
 
@@ -106,6 +106,8 @@ Plan validé le 2026-11-06 (branche `lot-2`, PR n°9). À relire au début de ch
 5. [ ] Check-out.
 6. [ ] Finition : seed, ADR, démonstration.
 
+Tests d'intégration (2026-11-14, `59e3812`) : 75 requêtes SQL brutes sur une table d'église reprises : filtrées sur l'église du test, sauf les preuves d'isolation, laissées sans filtre et commentées ; décomptes par `compterDansEglise`, ou `compterToutesEglises` pour les preuves d'isolation. Suite complète pas encore relancée en local (Docker Desktop arrêté) ; la CI de la PR n°10 la fait tourner.
+
 Corrections validées, pas encore appliquées : aucune.
 
-Question ouverte : les tests d'intégration contiennent une vingtaine de requêtes SQL brutes sans filtre sur l'église (base vidée entre les tests ; certaines comptent toutes les églises exprès, pour prouver l'isolation). Faut-il leur appliquer la nouvelle règle de `CLAUDE.md`, avec une exception pour les preuves d'isolation ?
+Étape 4 : plan proposé le 2026-11-14, en attente des réponses de l'utilisateur (qui confirme l'arrivée, scan d'une carte en attente en salle, annulation d'une confirmation).
