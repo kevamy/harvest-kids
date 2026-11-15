@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { alerte, attendreAccueil, reinitialiserLimites, seConnecter } from "./support/base";
+import { PIN, alerte, attendreAccueil, reinitialiserLimites, seConnecter } from "./support/base";
 import { expect, jetonDeTest, test, type EgliseIsolee } from "./support/eglise-isolee";
 
 // Lot 2, step 5a: check-out at the reception desk (cahier §7.6, RG-04, RG-06). Each test
@@ -123,6 +123,62 @@ test("check-out autorisé : la carte scannée, la photo de la personne touchée,
     ),
   );
   expect(rows[0]).toEqual({ n: 2 });
+});
+
+test("ni carte ni code : la famille cherchée par son nom, un collègue confirme avec son PIN", async ({
+  page,
+  eglise,
+}) => {
+  const { familleId } = await familleAuCulte(eglise, "Quatre", "MNPQ");
+  const { panneau } = await ouvrirCheckout(page, eglise);
+
+  const recherche = panneau.getByRole("search", {
+    name: "Rechercher une famille sans carte ni code",
+  });
+  await recherche.getByRole("searchbox").fill("Quatre");
+  await recherche.getByRole("button", { name: "Rechercher" }).click();
+  await panneau
+    .getByRole("list", { name: "Familles trouvées" })
+    .getByRole("button", { name: /^Famille Quatre/ })
+    .click();
+
+  const famille = panneau.getByRole("region", { name: "Retrait de la famille Quatre" });
+  await famille
+    .getByRole("group", { name: /^Qui récupère \?/ })
+    .getByRole("radio", { name: "Afi Quatre Mère" })
+    .check();
+  await famille.getByRole("button", { name: "Faire confirmer par un collègue" }).click();
+
+  const confirmation = famille.getByRole("form", { name: "Confirmation par un second membre" });
+  // The agent is not offered: the confirmation comes from someone else.
+  await expect(
+    confirmation.getByRole("combobox", { name: "Second membre" }).getByRole("option", {
+      name: "Accueil test",
+    }),
+  ).toHaveCount(0);
+  await confirmation
+    .getByRole("combobox", { name: "Second membre" })
+    .selectOption({ label: "Responsable test" });
+  await confirmation.getByLabel("Son code PIN").fill("111222");
+  await confirmation.getByRole("button", { name: "Confirmer le retrait" }).click();
+  await expect(alerte(page, "PIN incorrect")).toHaveText("PIN incorrect. Encore 4 essais.");
+
+  await confirmation.getByLabel("Son code PIN").fill(PIN);
+  await confirmation.getByRole("button", { name: "Confirmer le retrait" }).click();
+  await expect(
+    panneau.getByRole("region", { name: "Retrait confirmé" }).getByRole("status"),
+  ).toHaveText("Retrait confirmé : Ayo et Sèna remis à Afi Quatre.");
+
+  const { rows } = await eglise.dansEglise((c) =>
+    c.query(
+      `SELECT DISTINCT detail->>'carte' AS carte, detail->>'secondMembre' AS "secondMembre"
+       FROM "EvenementPresence" e JOIN "Presence" p ON p.id = e."presenceId"
+       JOIN "Enfant" x ON x.id = p."enfantId"
+       WHERE e."egliseId" = $1 AND e.type = 'checkout' AND x."familleId" = $2`,
+      [eglise.id, familleId],
+    ),
+  );
+  expect(rows).toEqual([{ carte: "recherche", secondMembre: `${eglise.id}_responsable` }]);
 });
 
 test("check-out refusé : un code erroné est compté, un adulte non reconnu bloque le retrait", async ({

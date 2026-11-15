@@ -63,8 +63,14 @@ export type PersonneCheckout = {
 
 export type PreparationCheckout = {
   famille: { id: string; nom: string };
-  /** How the family was found: the card (with its type) or the session's retrieval code. */
-  moyen: { type: "carte"; carte: "famille" | "enfant"; enAttente: boolean } | { type: "code" };
+  /**
+   * How the family was found: the card (with its type), the session's retrieval code, or a
+   * search by name when both are missing (reinforced check: a second member confirms).
+   */
+  moyen:
+    | { type: "carte"; carte: "famille" | "enfant"; enAttente: boolean }
+    | { type: "code" }
+    | { type: "recherche" };
   /** Infirmary first (RG-07), then the others in the order of the family. */
   enfants: EnfantCheckout[];
   personnes: PersonneCheckout[];
@@ -165,14 +171,17 @@ async function enfantsPresents(
 export async function preparerCheckout(
   db: Lecture,
   verifier: VerificationMoniteur,
-  saisie: { sessionId: string } & ({ jeton: string } | { code: string }),
+  saisie: { sessionId: string } & ({ jeton: string } | { code: string } | { familleId: string }),
 ): Promise<PreparationCheckout> {
   await sessionOuverte(db, saisie.sessionId);
 
   let familleId: string;
   let enfantScanne: string | null = null;
   let moyen: PreparationCheckout["moyen"];
-  if ("jeton" in saisie) {
+  if ("familleId" in saisie) {
+    familleId = saisie.familleId;
+    moyen = { type: "recherche" };
+  } else if ("jeton" in saisie) {
     const carte = await carteScannee(db, saisie.jeton, verifier);
     familleId = carte.familleId;
     enfantScanne = carte.enfantId;
@@ -240,7 +249,31 @@ export const schemaCheckout = z
       .min(1, "Cochez au moins un enfant.")
       .refine((l) => new Set(l).size === l.length, "Un enfant est en double."),
   })
-  .refine((s) => Boolean(s.jeton) !== Boolean(s.code), "Scannez la carte ou saisissez le code.");
+  .refine((s) => !(s.jeton && s.code), "Scannez la carte ou saisissez le code, pas les deux.");
+
+/** Families with children still in the session, by family name, first name or matricule. */
+export async function rechercherPourCheckout(
+  db: Pick<ClientDeBase, "$queryRaw">,
+  sessionId: string,
+  terme: string,
+): Promise<{ id: string; nom: string; prenoms: string[] }[]> {
+  if (terme.trim().length < 2) return [];
+  const motif = `%${terme.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  // The match may be on any child of the family; the list shows the children to hand over.
+  return db.$queryRaw<{ id: string; nom: string; prenoms: string[] }[]>`
+    SELECT f.id, f.nom, array_agg(e.prenom ORDER BY e."dateNaissance", e.prenom) AS prenoms
+    FROM "Famille" f
+    JOIN "Enfant" e ON e."familleId" = f.id
+    JOIN "Presence" p ON p."enfantId" = e.id
+    WHERE p."sessionId" = ${sessionId} AND p.statut <> 'RECUPERE' AND p."basculeVers" IS NULL
+      AND (f.nom ILIKE ${motif} OR EXISTS (
+        SELECT 1 FROM "Enfant" x
+        WHERE x."familleId" = f.id AND (x.prenom ILIKE ${motif} OR x.matricule ILIKE ${motif})
+      ))
+    GROUP BY f.id, f.nom
+    ORDER BY f.nom
+    LIMIT 10`;
+}
 
 export type ResultatCheckout = {
   /** First names of the children handed over. */
@@ -258,6 +291,11 @@ export async function validerCheckout(
   auteur: Auteur,
   verifier: VerificationMoniteur,
   saisie: unknown,
+  /**
+   * Without card or code: the second member who confirmed with their PIN (cahier §7.6),
+   * checked by the caller (confirmerAvecPin). Never read from the client's input.
+   */
+  confirmation?: { secondMembreUserId: string },
 ): Promise<ResultatCheckout> {
   const { sessionId, familleId, jeton, code, personneAutoriseeId, presenceIds } =
     schemaCheckout.parse(saisie);
@@ -268,8 +306,16 @@ export async function validerCheckout(
   }
 
   // The card or the code is checked again: the screen may have been left open.
-  let carte: "scan" | "code";
-  if (jeton) {
+  let carte: "scan" | "code" | "recherche";
+  if (!jeton && !code) {
+    // Reinforced check: the photo touched, and a second member's confirmation.
+    if (!confirmation) {
+      throw new CheckoutRefuse(
+        "Sans carte ni code, un second membre de l'équipe confirme le retrait avec son PIN.",
+      );
+    }
+    carte = "recherche";
+  } else if (jeton) {
     const scan = await carteScannee(tx, jeton, verifier);
     if (scan.familleId !== familleId) {
       throw new CheckoutRefuse(
@@ -324,11 +370,18 @@ export async function validerCheckout(
     );
   }
 
+  const second = confirmation ? { secondMembre: confirmation.secondMembreUserId } : {};
   for (const r of remis) {
     const evenement: Omit<Prisma.EvenementPresenceUncheckedCreateInput, "egliseId"> = {
       presenceId: r.id,
       type: "checkout",
-      detail: { statut: "RECUPERE", depuis: r.statut, personneAutoriseeId: personne.id, carte },
+      detail: {
+        statut: "RECUPERE",
+        depuis: r.statut,
+        personneAutoriseeId: personne.id,
+        carte,
+        ...second,
+      },
       userId: auteur.userId,
       appareil: auteur.appareil,
     };
@@ -341,7 +394,7 @@ export async function validerCheckout(
       entite: "Presence",
       entiteId: r.id,
       avant: { statut: r.statut },
-      apres: { statut: "RECUPERE", personneAutoriseeId: personne.id },
+      apres: { statut: "RECUPERE", personneAutoriseeId: personne.id, ...second },
     });
   }
 

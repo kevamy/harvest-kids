@@ -1,6 +1,14 @@
 "use client";
 
-import { CircleCheck, MessageCircle, Phone, TriangleAlert, UserRound, UserX } from "lucide-react";
+import {
+  CircleCheck,
+  MessageCircle,
+  Phone,
+  Search,
+  TriangleAlert,
+  UserRound,
+  UserX,
+} from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
@@ -10,7 +18,13 @@ import { Button } from "@/components/ui/button";
 import { appelerAction } from "@/lib/appel-action";
 import { formaterTelephone, lienTelephone, lienWhatsApp } from "@/lib/telephone";
 import type { PreparationCheckout, ResultatCheckout } from "@/server/checkout";
-import { preparerLeCheckout, validerLeCheckout } from "./actions";
+import { usePret } from "@/lib/use-pret";
+import {
+  membresPourConfirmer,
+  preparerLeCheckout,
+  rechercherPourLeCheckout,
+  validerLeCheckout,
+} from "./actions";
 import type { SessionOuverte } from "./checkin";
 
 /** A retrieval code (4 characters, no ambiguous ones, RG-04); anything else is a card token. */
@@ -40,7 +54,19 @@ export function Checkout({
   actif?: boolean;
 }) {
   const [sessionId, setSessionId] = useState(sessions[0]?.id ?? "");
-  const [moyen, setMoyen] = useState<{ jeton: string } | { code: string } | null>(null);
+  const [moyen, setMoyen] = useState<
+    { jeton: string } | { code: string } | { familleId: string } | null
+  >(null);
+  const [terme, setTerme] = useState("");
+  const [trouvees, setTrouvees] = useState<{ id: string; nom: string; prenoms: string[] }[] | null>(
+    null,
+  );
+  // Without card or code: the colleague who confirms, and their PIN (cahier §7.6).
+  const [confirmateurs, setConfirmateurs] = useState<{ membreId: string; nom: string }[] | null>(
+    null,
+  );
+  const [second, setSecond] = useState({ membreId: "", pin: "" });
+  const pret = usePret();
   const [preparation, setPreparation] = useState<PreparationCheckout | null>(null);
   const [coches, setCoches] = useState<Record<string, boolean>>({});
   const [personneId, setPersonneId] = useState<string | null>(null);
@@ -62,6 +88,8 @@ export function Checkout({
     setNonReconnue(false);
     setRefus(null);
     setResultat(null);
+    setConfirmateurs(null);
+    setSecond({ membreId: "", pin: "" });
   };
 
   const familleSuivante = () => {
@@ -69,11 +97,14 @@ export function Checkout({
     champScan.current?.focus();
   };
 
-  const preparer = (valeur: string) => {
-    const saisie = valeur.trim();
-    const source = CODE.test(saisie.toUpperCase())
-      ? { code: saisie.toUpperCase() }
-      : { jeton: saisie };
+  const preparer = (valeur: string | { familleId: string }) => {
+    const saisie = typeof valeur === "string" ? valeur.trim() : "";
+    const source =
+      typeof valeur !== "string"
+        ? valeur
+        : CODE.test(saisie.toUpperCase())
+          ? { code: saisie.toUpperCase() }
+          : { jeton: saisie };
     demarrer(async () => {
       recommencer();
       const reponse = await appelerAction(() => preparerLeCheckout({ sessionId, ...source }));
@@ -89,8 +120,32 @@ export function Checkout({
       setMoyen(source);
       setPreparation(lue);
       setCoches(Object.fromEntries(lue.enfants.map((e) => [e.presenceId, e.coche])));
+      setTrouvees(null);
     });
   };
+
+  const rechercher = () =>
+    demarrer(async () => {
+      setRefus(null);
+      const reponse = await appelerAction(() => rechercherPourLeCheckout(sessionId, terme));
+      if (!reponse.ok) {
+        setRefus(reponse.erreur);
+        return;
+      }
+      setTrouvees(reponse.donnees);
+    });
+
+  /** Without card or code, the colleagues who may confirm are listed first. */
+  const demanderConfirmation = () =>
+    demarrer(async () => {
+      setRefus(null);
+      const reponse = await appelerAction(() => membresPourConfirmer());
+      if (!reponse.ok) {
+        setRefus(reponse.erreur);
+        return;
+      }
+      setConfirmateurs(reponse.donnees);
+    });
 
   const valider = () => {
     if (!preparation || !moyen) return;
@@ -106,8 +161,10 @@ export function Checkout({
           ...moyen,
           personneAutoriseeId: personneId ?? "",
           presenceIds,
+          ...("familleId" in moyen ? { secondMembreId: second.membreId, pin: second.pin } : {}),
         }),
       );
+      setSecond((s) => ({ ...s, pin: "" }));
       if (!reponse.ok) {
         setRefus(reponse.erreur);
         return;
@@ -174,6 +231,57 @@ export function Checkout({
               if (resultat) familleSuivante();
             }}
           />
+          <form
+            role="search"
+            aria-label="Rechercher une famille sans carte ni code"
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              rechercher();
+            }}
+          >
+            <div className="grid min-w-48 flex-1 gap-2">
+              <label htmlFor="recherche-checkout" className="text-label font-bold">
+                Ni carte ni code : nom, prénom ou matricule
+              </label>
+              <input
+                id="recherche-checkout"
+                type="search"
+                value={terme}
+                onChange={(e) => setTerme(e.target.value)}
+                className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+              />
+            </div>
+            <Button type="submit" variant="ghost" disabled={enCours || terme.trim().length < 2}>
+              <Search aria-hidden />
+              Rechercher
+            </Button>
+          </form>
+          {trouvees ? (
+            trouvees.length === 0 ? (
+              <p className="m-0 text-texte-doux">
+                Aucune famille de cette session ne correspond. Vérifiez l&apos;orthographe.
+              </p>
+            ) : (
+              <ul className="m-0 grid list-none gap-2 p-0" aria-label="Familles trouvées">
+                {trouvees.map((f) => (
+                  <li key={f.id}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={() => preparer({ familleId: f.id })}
+                    >
+                      Famille {f.nom}
+                      <span className="truncate font-normal text-texte-doux">
+                        {f.prenoms.join(", ")}
+                      </span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
         </div>
       </NotchCard>
 
@@ -224,6 +332,12 @@ export function Checkout({
                   {e.prenom} est à l&apos;infirmerie. Accompagnez le parent.
                 </p>
               ))}
+              {preparation.moyen.type === "recherche" ? (
+                <p className="m-0 rounded-md bg-soleil px-4 py-2 text-label text-nuit">
+                  Ni carte ni code : vérification renforcée. Touchez la photo de l&apos;adulte, puis
+                  un second membre de l&apos;équipe confirme le retrait avec son PIN.
+                </p>
+              ) : null}
               {preparation.moyen.type === "carte" && preparation.moyen.enAttente ? (
                 <p className="m-0 rounded-md bg-soleil px-4 py-2 text-label text-nuit">
                   Nouvelle carte : elle sera activée par ce retrait, et les anciennes cartes
@@ -308,15 +422,27 @@ export function Checkout({
               </fieldset>
 
               <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  variant="rose"
-                  size="xl"
-                  disabled={enCours || !personneId || !Object.values(coches).some(Boolean)}
-                  onClick={valider}
-                >
-                  Confirmer le retrait
-                </Button>
+                {preparation.moyen.type !== "recherche" ? (
+                  <Button
+                    type="button"
+                    variant="rose"
+                    size="xl"
+                    disabled={enCours || !personneId || !Object.values(coches).some(Boolean)}
+                    onClick={valider}
+                  >
+                    Confirmer le retrait
+                  </Button>
+                ) : confirmateurs === null ? (
+                  <Button
+                    type="button"
+                    variant="rose"
+                    size="xl"
+                    disabled={enCours || !personneId || !Object.values(coches).some(Boolean)}
+                    onClick={demanderConfirmation}
+                  >
+                    Faire confirmer par un collègue
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -333,6 +459,83 @@ export function Checkout({
                   Annuler
                 </Button>
               </div>
+
+              {preparation.moyen.type === "recherche" && confirmateurs !== null ? (
+                confirmateurs.length === 0 ? (
+                  <p role="alert" className="m-0 font-bold text-alerte">
+                    Aucun collègue ne peut confirmer sur cette tablette : il faut un autre membre de
+                    l&apos;accueil ou un responsable, avec son code PIN.
+                  </p>
+                ) : (
+                  <form
+                    method="post"
+                    aria-label="Confirmation par un second membre"
+                    className="grid gap-3 rounded-md bg-creme px-5 py-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      valider();
+                    }}
+                  >
+                    <p className="m-0 font-bold">
+                      Un collègue vérifie l&apos;adulte avec vous, puis confirme avec son PIN.
+                    </p>
+                    <div className="grid gap-2">
+                      <label htmlFor="second-membre" className="text-label font-bold">
+                        Second membre
+                      </label>
+                      <select
+                        id="second-membre"
+                        required
+                        value={second.membreId}
+                        onChange={(e) => setSecond({ ...second, membreId: e.target.value })}
+                        className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+                      >
+                        <option value="">Choisissez la personne</option>
+                        {confirmateurs.map((m) => (
+                          <option key={m.membreId} value={m.membreId}>
+                            {m.nom}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label htmlFor="second-pin" className="text-label font-bold">
+                        Son code PIN
+                      </label>
+                      <input
+                        id="second-pin"
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={6}
+                        required
+                        value={second.pin}
+                        onChange={(e) =>
+                          setSecond({ ...second, pin: e.target.value.replace(/\D/g, "") })
+                        }
+                        className="min-h-touch max-w-60 rounded-md bg-blanc px-5 text-body-lg tracking-[6px] shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+                      />
+                    </div>
+                    <div>
+                      <Button
+                        type="submit"
+                        variant="rose"
+                        size="xl"
+                        disabled={
+                          !pret ||
+                          enCours ||
+                          !personneId ||
+                          !second.membreId ||
+                          second.pin.length !== 6 ||
+                          !Object.values(coches).some(Boolean)
+                        }
+                      >
+                        Confirmer le retrait
+                      </Button>
+                    </div>
+                  </form>
+                )
+              ) : null}
 
               {nonReconnue ? (
                 <section

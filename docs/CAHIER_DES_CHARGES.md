@@ -1,6 +1,6 @@
 # Harvest Kids — Cahier des charges
 
-Version 1.5, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur ; 1.5 : arrivée en salle confirmée par les membres affectés à la classe, annulation d'une confirmation). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
+Version 1.6, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur ; 1.5 : arrivée en salle confirmée par les membres affectés à la classe, annulation d'une confirmation ; 1.6 : check-out, second membre et photo de l'adulte non reconnu). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
 
 ---
 
@@ -185,8 +185,8 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 5. Cas particuliers :
    - **Enfant à l'infirmerie** : message en tête « Ayo est à l'infirmerie. Accompagnez le parent. », le check-out reste possible depuis l'infirmerie.
    - **Enfant encore en salle** : l'agent demande à la classe de l'amener (notification sur la tablette de la classe) ou accompagne le parent.
-   - **Adulte non reconnu parmi les personnes autorisées** : retrait bloqué. L'écran propose d'appeler le contact principal ; le responsable peut autoriser exceptionnellement après appel, en saisissant le nom de l'adulte, une photo et le motif. L'événement crée automatiquement un incident.
-   - **Carte et code absents** : recherche par nom, vérification renforcée (photo obligatoire de la personne autorisée reconnue + confirmation par un second membre de l'équipe).
+   - **Adulte non reconnu parmi les personnes autorisées** : retrait bloqué. L'écran propose d'appeler le contact principal ; le responsable peut autoriser exceptionnellement après appel, en saisissant le nom de l'adulte, une photo et le motif. L'événement crée automatiquement un incident. Le responsable (RESPONSABLE ou ADMIN) confirme avec son PIN sur la tablette de l'agent. La photo est prise avec la caméra de la tablette uniquement ; l'écran de prise de vue affiche la consigne « Prévenez la personne que sa photo est prise pour la sécurité de l'enfant ». Elle ne s'affiche que dans le détail de l'incident, pour un RESPONSABLE ou un ADMIN, jamais dans une liste.
+   - **Carte et code absents** : recherche par nom, vérification renforcée (photo obligatoire de la personne autorisée reconnue + confirmation par un second membre de l'équipe). Le second membre est un autre compte que celui de l'agent connecté, actif dans l'église, avec le rôle ACCUEIL, RESPONSABLE ou ADMIN ; il confirme par son PIN sur la même tablette, et ses PIN erronés comptent dans le même compteur de blocage que le déverrouillage.
 
 ### 7.7 Transition entre les deux cultes (ACCUEIL, RESPONSABLE)
 
@@ -743,6 +743,6 @@ Chaque lot se termine par une démonstration sur l'environnement Vercel et une v
 4. Les horaires exacts des deux cultes et le délai d'alerte après la fin du culte 1.
 5. ~~Qui imprime et plastifie les cartes, et sur quel matériel.~~ **Tranché : chaque église imprime ses cartes elle-même**, dans l'un des cinq formats proposés (section 7.10, « Impression des cartes et des badges »).
 6. Le lieu de rendez-vous à afficher sur l'écran d'appel (accueil enfants, infirmerie, autre).
-7. La durée de conservation des données.
+7. La durée de conservation des données. Les photos des adultes non reconnus, prises lors d'un retrait exceptionnel (section 7.6), entreront dans cette règle de conservation ; d'ici là, elles sont gardées avec leur incident.
 8. Le nom de domaine de la plateforme et qui joue le rôle d'exploitant (super-administrateur) et de sous-traitant des données.
 9. Les paramètres par défaut créés pour une nouvelle église (classes, cultes, textes de consentement).

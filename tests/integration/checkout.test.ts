@@ -9,7 +9,12 @@ import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { clientEglise, type ClientEglise } from "@/lib/tenant";
-import { CheckoutRefuse, preparerCheckout, validerCheckout } from "@/server/checkout";
+import {
+  CheckoutRefuse,
+  preparerCheckout,
+  rechercherPourCheckout,
+  validerCheckout,
+} from "@/server/checkout";
 import {
   REGLE_CODE_RETRAIT,
   cleCodeRetrait,
@@ -372,6 +377,62 @@ describe("validation", () => {
       [fb.presences[0], b.egliseId],
     );
     expect(rows).toEqual([{ statut: "EN_SALLE" }]);
+  });
+});
+
+describe("ni carte ni code", () => {
+  it("cherche les familles de la session par nom, prénom ou matricule, sans voir l'autre église", async () => {
+    const { familleId } = await famille(a, "f1", "K7MP");
+    await famille(b, "f1b", "K7MP");
+    for (const terme of ["Famille f1", "sèna", "hk-f11"]) {
+      expect(await rechercherPourCheckout(dbA, a.sessionId, terme)).toEqual([
+        { id: familleId, nom: "Famille f1", prenoms: ["Ayo", "Sèna"] },
+      ]);
+    }
+    expect(await rechercherPourCheckout(dbA, a.sessionId, "f1b")).toEqual([]);
+    expect(await rechercherPourCheckout(dbA, a.sessionId, "a")).toEqual([]);
+  });
+
+  it("refuse sans la confirmation d'un second membre ; avec elle, la trace dans l'événement et l'audit", async () => {
+    const { familleId, presences } = await famille(a, "f1", "K7MP");
+    const saisie = { familleId, personneAutoriseeId: "pa_f1_mere", presenceIds: [presences[0]] };
+    await expect(valider(saisie)).rejects.toThrow(
+      "Sans carte ni code, un second membre de l'équipe confirme le retrait avec son PIN.",
+    );
+
+    await dbA.$tx((tx) =>
+      validerCheckout(
+        tx,
+        auteur(a),
+        aucunMoniteur,
+        { sessionId: a.sessionId, ...saisie },
+        { secondMembreUserId: "user_collegue" },
+      ),
+    );
+    expect(await lignes(`SELECT detail FROM "EvenementPresence" WHERE "egliseId" = $1`)).toEqual([
+      {
+        detail: {
+          statut: "RECUPERE",
+          depuis: "EN_SALLE",
+          personneAutoriseeId: "pa_f1_mere",
+          carte: "recherche",
+          secondMembre: "user_collegue",
+        },
+      },
+    ]);
+    expect(
+      await lignes(
+        `SELECT apres FROM "AuditLog" WHERE "egliseId" = $1 AND action = 'presence.checkout'`,
+      ),
+    ).toEqual([
+      {
+        apres: {
+          statut: "RECUPERE",
+          personneAutoriseeId: "pa_f1_mere",
+          secondMembre: "user_collegue",
+        },
+      },
+    ]);
   });
 });
 
