@@ -128,6 +128,70 @@ test("le moniteur confirme par toucher, annule son erreur dans la minute, puis c
   expect(rows[0]).toEqual({ enSalle: 3, actives: 0, annulations: 1 });
 });
 
+test("retrait à la porte de la classe : le code du parent, les seuls enfants de la classe", async ({
+  page,
+  eglise,
+}) => {
+  const { familleId } = await classeAvecFamille(eglise);
+  await eglise.dansEglise(async (c) => {
+    // The church allows the check-out in class (Paramètres › Cultes et accueil).
+    await c.query(
+      `INSERT INTO "Parametre" ("egliseId", cle, valeur)
+       VALUES ($1, 'checkout.lieu', '"ACCUEIL_ET_CLASSES"')`,
+      [eglise.id],
+    );
+    await c.query(
+      `INSERT INTO "PersonneAutorisee" (id, "egliseId", "familleId", prenom, nom, lien, "photoKey")
+       VALUES ($1, $2, $3, 'Afi', 'Trois', 'Mère', $4)`,
+      [`${familleId}_afi`, eglise.id, familleId, `eglises/${eglise.id}/photos/afi.webp`],
+    );
+    // Koffi is in another class (9–12 ans): handed over there, not here.
+    await c.query(`UPDATE "Presence" SET "classeId" = $2 WHERE id = $1 AND "egliseId" = $3`, [
+      `${eglise.id}_presence_2`,
+      `${eglise.id}_classe_4`,
+      eglise.id,
+    ]);
+  });
+
+  await seConnecter(page, eglise.email("MONITEUR"));
+  await attendreAccueil(page, eglise.nom);
+  await page.goto(`/classe/${eglise.id}_sc_3`);
+  const retrait = page.getByRole("region", { name: "Retrait à la porte de la classe" });
+  const scan = retrait.getByRole("textbox", {
+    name: "Scannez la carte ou saisissez le code de retrait",
+  });
+  await scan.fill("K7MP");
+  await scan.press("Enter");
+
+  const famille = retrait.getByRole("region", { name: "Retrait de la famille Trois" });
+  const enfants = famille.getByRole("list", { name: "Enfants à remettre" });
+  const koffi = enfants.getByRole("listitem", { name: "Koffi" });
+  await expect(koffi.getByRole("checkbox", { name: "Koffi" })).toBeDisabled();
+  await expect(koffi).toHaveAccessibleDescription(
+    "Dans une autre classe : 9–12 ans. Le parent va le chercher là-bas.",
+  );
+  // In class, no search and no exceptional retrieval: they go to the reception desk.
+  await expect(retrait.getByRole("search")).toHaveCount(0);
+  await famille.getByRole("button", { name: "Personne non reconnue" }).click();
+  await expect(
+    famille.getByRole("region", { name: "Personne non reconnue" }).getByRole("alert"),
+  ).toHaveText(
+    "Retrait bloqué : cet adulte n'est pas parmi les personnes autorisées. Accompagnez le parent à l'accueil.",
+  );
+  await expect(
+    famille.getByRole("button", { name: "Retrait exceptionnel avec le responsable" }),
+  ).toHaveCount(0);
+
+  await famille
+    .getByRole("group", { name: /^Qui récupère \?/ })
+    .getByRole("radio", { name: "Afi Trois Mère" })
+    .check();
+  await famille.getByRole("button", { name: "Confirmer le retrait" }).click();
+  await expect(
+    retrait.getByRole("region", { name: "Retrait confirmé" }).getByRole("status"),
+  ).toHaveText("Retrait confirmé : Ayo et Sèna remis à Afi Trois.");
+});
+
 test("après la minute, seul le responsable corrige, avec un motif ; l'accueil voit l'enfant pas encore en salle", async ({
   browser,
   eglise,

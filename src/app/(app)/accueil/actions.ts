@@ -9,13 +9,10 @@ import {
 } from "@/server/checkin";
 import { randomUUID } from "node:crypto";
 import { cleFichier } from "@/lib/fichiers";
-import { getSessionCourante } from "@/lib/session";
 import { stockage } from "@/lib/storage";
 import { normaliserTelephone } from "@/lib/telephone";
-import type { ClientEglise, ContexteEglise } from "@/lib/tenant";
 import {
   CheckoutRefuse,
-  journaliserCodeErrone,
   preparerCheckout,
   rechercherPourCheckout,
   retraitExceptionnel,
@@ -33,11 +30,7 @@ import {
 import { FamilleRefusee, convertirPhoto, rechercherFamilles } from "@/server/familles";
 import { lireParametres } from "@/server/parametres";
 import { prismaPourMoniteurs } from "@/server/plateforme/badges";
-import {
-  REGLE_CODE_RETRAIT,
-  codeRetraitBloque,
-  compterCodeErrone,
-} from "@/server/plateforme/limitation";
+import { blocageCode, refuserCode } from "../codes-retrait";
 import { RefusMetier, executerActionAvec } from "../executer-action";
 
 /**
@@ -94,27 +87,6 @@ export async function validerLeCheckin(saisie: unknown) {
 }
 
 export type ReponsePreparationCheckout = { preparation: PreparationCheckout } | { refus: string };
-
-/** The tablet, for the wrong-code limit: the signed-in session (ADR 0016). */
-async function tablette(): Promise<string> {
-  return (await getSessionCourante())?.sessionId ?? "inconnue";
-}
-
-const messageBlocage = (ms: number) =>
-  `Trop de codes erronés sur cette tablette : la saisie d'un code reprend dans ${Math.max(1, Math.ceil(ms / 60_000))} min. Scannez la carte du parent, ou appelez le responsable.`;
-
-/** Counts a wrong code against the tablet, audits it, and says what to do. */
-async function refuserCode(
-  { db, contexte }: { db: ClientEglise; contexte: ContexteEglise },
-  sessionId: string,
-  message: string,
-): Promise<string> {
-  const etat = await compterCodeErrone(contexte.egliseId, sessionId, await tablette());
-  await db.$tx((tx) => journaliserCodeErrone(tx, contexte, sessionId, etat.essais));
-  if (etat.bloque) return messageBlocage(etat.reessayerDansMs);
-  const restants = REGLE_CODE_RETRAIT.max - etat.essais;
-  return `${message} Encore ${restants} essai${restants > 1 ? "s" : ""} avant le blocage de la tablette.`;
-}
 
 /** What to say after a second person's PIN (cahier §7.6), unless it was confirmed. */
 function messageConfirmation(
@@ -271,8 +243,8 @@ export async function preparerLeCheckout(saisie: {
       }
     }
     if (!jeton) {
-      const etat = await codeRetraitBloque(contexte.egliseId, sessionId, await tablette());
-      if (etat.bloque) return { refus: messageBlocage(etat.reessayerDansMs) };
+      const blocage = await blocageCode(contexte.egliseId, sessionId);
+      if (blocage) return { refus: blocage };
     }
     try {
       const preparation = await preparerCheckout(
@@ -310,8 +282,8 @@ export async function validerLeCheckout(saisie: {
     const sessionId = texte(saisie.sessionId);
     const { secondMembreId, pin, ...donnees } = saisie;
     if (texte(saisie.code)) {
-      const etat = await codeRetraitBloque(contexte.egliseId, sessionId, await tablette());
-      if (etat.bloque) throw new RefusMetier(messageBlocage(etat.reessayerDansMs));
+      const blocage = await blocageCode(contexte.egliseId, sessionId);
+      if (blocage) throw new RefusMetier(blocage);
     }
     // Neither card nor code: a colleague confirms with their PIN, checked here (cahier §7.6).
     let confirmation: { secondMembreUserId: string } | undefined;

@@ -438,6 +438,76 @@ describe("ni carte ni code", () => {
   });
 });
 
+describe("check-out en salle : les seuls enfants de la classe", () => {
+  /** Ayo in the fixture class, Sèna in a second class of A. */
+  async function familleDansDeuxClasses() {
+    const f = await famille(a, "f1", "K7MP");
+    await sql(
+      a,
+      `INSERT INTO "Classe" (id, "egliseId", nom, "ageMinMois", "ageMaxMois")
+       VALUES ('classe_a2', $1, '6–8 ans', 72, 107)`,
+      [a.egliseId],
+    );
+    await sql(
+      a,
+      `UPDATE "Presence" SET "classeId" = 'classe_a2' WHERE id = $1 AND "egliseId" = $2`,
+      [f.presences[1], a.egliseId],
+    );
+    return f;
+  }
+
+  it("ne propose que les enfants de la classe ; refuse une famille qui n'y a aucun enfant", async () => {
+    await familleDansDeuxClasses();
+    const { enfants } = await preparerCheckout(
+      dbA,
+      aucunMoniteur,
+      { sessionId: a.sessionId, code: "K7MP" },
+      { classeId: a.classeId },
+    );
+    expect(enfants.map((e) => [e.prenom, e.remettable, e.coche, e.lieu])).toEqual([
+      ["Ayo", true, true, "3–5 ans"],
+      ["Sèna", false, false, "6–8 ans"],
+    ]);
+    await expect(
+      preparerCheckout(
+        dbA,
+        aucunMoniteur,
+        { sessionId: a.sessionId, code: "K7MP" },
+        { classeId: "classe_vide" },
+      ),
+    ).rejects.toThrow(
+      "Aucun enfant de cette famille n'est dans cette classe : accompagnez le parent à l'accueil.",
+    );
+  });
+
+  it("refuse de remettre en salle un enfant d'une autre classe, sans rien écrire", async () => {
+    const { familleId, presences } = await familleDansDeuxClasses();
+    await expect(
+      dbA.$tx((tx) =>
+        validerCheckout(
+          tx,
+          auteur(a),
+          aucunMoniteur,
+          {
+            sessionId: a.sessionId,
+            familleId,
+            code: "K7MP",
+            personneAutoriseeId: "pa_f1_mere",
+            presenceIds: presences,
+          },
+          undefined,
+          { classeId: a.classeId },
+        ),
+      ),
+    ).rejects.toThrow(
+      "Un enfant coché n'est pas dans cette classe, ou vient d'être récupéré : rechargez la famille.",
+    );
+    expect(
+      await lignes(`SELECT id FROM "Presence" WHERE "egliseId" = $1 AND statut = 'RECUPERE'`),
+    ).toEqual([]);
+  });
+});
+
 describe("retrait exceptionnel autorisé par le responsable", () => {
   /** The accounts that authorise and hand over (RetraitExceptionnel references User). */
   async function comptes() {

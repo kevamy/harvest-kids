@@ -51,6 +51,11 @@ export type EnfantCheckout = {
   alertes: string[];
   /** Preselected: every child for a family card or a code, the scanned child for a child card. */
   coche: boolean;
+  /**
+   * May be handed over here: always at the reception desk; in a class (check-out in class,
+   * cahier §7.6), only the children of that class.
+   */
+  remettable: boolean;
 };
 
 export type PersonneCheckout = {
@@ -148,13 +153,14 @@ async function enfantsPresents(
       matricule: string;
       photoKey: string | null;
       statut: EnfantCheckout["statut"];
+      classeId: string;
       classe: string;
       alertes: string[];
       alerteDetail: string | null;
     }[]
   >`
     SELECT p.id AS "presenceId", e.id AS "enfantId", e.prenom, e.nom, e.matricule, e."photoKey",
-           p.statut::text AS statut, k.nom AS classe,
+           p.statut::text AS statut, p."classeId", k.nom AS classe,
            COALESCE(e.alertes, '{}') AS alertes, e."alerteDetail"
     FROM "Presence" p
     JOIN "Enfant" e ON e.id = p."enfantId"
@@ -172,6 +178,8 @@ export async function preparerCheckout(
   db: Lecture,
   verifier: VerificationMoniteur,
   saisie: { sessionId: string } & ({ jeton: string } | { code: string } | { familleId: string }),
+  /** Check-out in a class: only its children may be handed over (cahier §7.6). */
+  options: { classeId?: string } = {},
 ): Promise<PreparationCheckout> {
   await sessionOuverte(db, saisie.sessionId);
 
@@ -222,16 +230,25 @@ export async function preparerCheckout(
       "Aucune personne autorisée n'est enregistrée pour cette famille : appelez le responsable.",
     );
   }
+  if (options.classeId && !lignes.some((l) => l.classeId === options.classeId)) {
+    throw new CheckoutRefuse(
+      "Aucun enfant de cette famille n'est dans cette classe : accompagnez le parent à l'accueil.",
+    );
+  }
 
   return {
     famille,
     moyen,
-    enfants: lignes.map(({ enfantId, classe, alertes, alerteDetail, ...l }) => ({
-      ...l,
-      lieu: l.statut === "INFIRMERIE" ? "Infirmerie" : classe,
-      alertes: alertesLisibles({ alertes, alerteDetail }),
-      coche: enfantScanne === null || enfantScanne === enfantId,
-    })),
+    enfants: lignes.map(({ enfantId, classeId, classe, alertes, alerteDetail, ...l }) => {
+      const remettable = !options.classeId || options.classeId === classeId;
+      return {
+        ...l,
+        lieu: l.statut === "INFIRMERIE" ? "Infirmerie" : classe,
+        alertes: alertesLisibles({ alertes, alerteDetail }),
+        coche: remettable && (enfantScanne === null || enfantScanne === enfantId),
+        remettable,
+      };
+    }),
     personnes,
     contact,
   };
@@ -296,7 +313,10 @@ export async function validerCheckout(
    * checked by the caller (confirmerAvecPin). Never read from the client's input.
    */
   confirmation?: { secondMembreUserId: string },
+  /** Check-out in a class: only its children are handed over (cahier §7.6). */
+  options: { classeId?: string } = {},
 ): Promise<ResultatCheckout> {
+  const classeId = options.classeId ?? null;
   const { sessionId, familleId, jeton, code, personneAutoriseeId, presenceIds } =
     schemaCheckout.parse(saisie);
   const statut = await verrouillerSession(tx, sessionId);
@@ -354,6 +374,7 @@ export async function validerCheckout(
       SELECT p.id, p.statut FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
       WHERE p.id = ANY(${presenceIds}::text[]) AND p."sessionId" = ${sessionId}
         AND e."familleId" = ${familleId} AND p.statut <> 'RECUPERE' AND p."basculeVers" IS NULL
+        AND (${classeId}::text IS NULL OR p."classeId" = ${classeId}::text)
       FOR UPDATE OF p
     )
     UPDATE "Presence" p
@@ -366,7 +387,9 @@ export async function validerCheckout(
   remis.sort(duPlusAgeAuPlusJeune);
   if (remis.length !== presenceIds.length) {
     throw new CheckoutRefuse(
-      "Un enfant coché vient d'être récupéré sur une autre tablette, ou n'est plus dans cette session. Rechargez la famille.",
+      classeId
+        ? "Un enfant coché n'est pas dans cette classe, ou vient d'être récupéré : rechargez la famille."
+        : "Un enfant coché vient d'être récupéré sur une autre tablette, ou n'est plus dans cette session. Rechargez la famille.",
     );
   }
 

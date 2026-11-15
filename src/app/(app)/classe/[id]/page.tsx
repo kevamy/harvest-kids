@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { droitsSalle, peut } from "@/lib/rbac";
 import { AccesRefuse, getTenantDb } from "@/lib/tenant";
+import { lireParametres } from "@/server/parametres";
 import { classeDeSession, estAffecte } from "@/server/salle";
+import { Checkout } from "../../accueil/checkout";
 import { ListeClasse } from "./liste-classe";
 
 export const metadata: Metadata = { title: "Ma classe — Harvest Kids" };
@@ -28,6 +30,11 @@ export default async function PageClasse({ params }: PageProps<"/classe/[id]">) 
   if (!classe) notFound();
   const droits = droitsSalle(contexte.roles, await estAffecte(db, id, contexte.membreId));
   if (!droits.voir) notFound();
+  // Check-out in class (cahier §7.6): the assigned members, when the church allows it.
+  const retraitEnSalle =
+    droits.confirmer &&
+    classe.sessionOuverte &&
+    (await lireParametres(db))["checkout.lieu"] === "ACCUEIL_ET_CLASSES";
 
   return (
     <div className="grid gap-6">
@@ -45,6 +52,19 @@ export default async function PageClasse({ params }: PageProps<"/classe/[id]">) 
         ) : null}
       </div>
       <ListeClasse sessionClasseId={classe.sessionClasseId} nomClasse={classe.nom} />
+      {retraitEnSalle ? (
+        <section aria-labelledby="retrait-en-salle" className="grid gap-4">
+          <h2 id="retrait-en-salle" className="m-0 font-display text-h2 font-semibold">
+            Retrait à la porte de la classe
+          </h2>
+          {/* No autofocus: the list's scan field confirms arrivals. */}
+          <Checkout
+            actif={false}
+            sessions={[{ id: classe.sessionId, libelle: classe.culte ?? "Session" }]}
+            salle={{ sessionClasseId: classe.sessionClasseId }}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

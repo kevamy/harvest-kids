@@ -24,6 +24,7 @@ import type {
 } from "@/server/checkout";
 import { reduirePhoto } from "@/lib/photo-navigateur";
 import { usePret } from "@/lib/use-pret";
+import { preparerRetraitEnSalle, validerRetraitEnSalle } from "../classe/[id]/actions";
 import {
   autoriserRetraitExceptionnel,
   membresPourAutoriser,
@@ -258,10 +259,17 @@ function enumerer(prenoms: string[]): string {
 export function Checkout({
   sessions,
   actif = true,
+  salle,
 }: {
   sessions: SessionOuverte[];
   /** The tab is shown: its scan field takes the focus back. */
   actif?: boolean;
+  /**
+   * Check-out in a class (cahier §7.6, setting "accueil et classes"): only the children of
+   * this class are handed over; no search and no exceptional retrieval, which go to the
+   * reception desk.
+   */
+  salle?: { sessionClasseId: string };
 }) {
   const [sessionId, setSessionId] = useState(sessions[0]?.id ?? "");
   const [moyen, setMoyen] = useState<
@@ -333,7 +341,11 @@ export function Checkout({
           : { jeton: saisie };
     demarrer(async () => {
       recommencer();
-      const reponse = await appelerAction(() => preparerLeCheckout({ sessionId, ...source }));
+      const reponse = await appelerAction(() =>
+        salle && !("familleId" in source)
+          ? preparerRetraitEnSalle({ sessionClasseId: salle.sessionClasseId, ...source })
+          : preparerLeCheckout({ sessionId, ...source }),
+      );
       if (!reponse.ok) {
         setRefus(reponse.erreur);
         return;
@@ -381,14 +393,22 @@ export function Checkout({
     demarrer(async () => {
       setRefus(null);
       const reponse = await appelerAction(() =>
-        validerLeCheckout({
-          sessionId,
-          familleId: preparation.famille.id,
-          ...moyen,
-          personneAutoriseeId: personneId ?? "",
-          presenceIds,
-          ...("familleId" in moyen ? { secondMembreId: second.membreId, pin: second.pin } : {}),
-        }),
+        salle
+          ? validerRetraitEnSalle({
+              sessionClasseId: salle.sessionClasseId,
+              familleId: preparation.famille.id,
+              ...moyen,
+              personneAutoriseeId: personneId ?? "",
+              presenceIds,
+            })
+          : validerLeCheckout({
+              sessionId,
+              familleId: preparation.famille.id,
+              ...moyen,
+              personneAutoriseeId: personneId ?? "",
+              presenceIds,
+              ...("familleId" in moyen ? { secondMembreId: second.membreId, pin: second.pin } : {}),
+            }),
       );
       setSecond((s) => ({ ...s, pin: "" }));
       if (!reponse.ok) {
@@ -457,32 +477,35 @@ export function Checkout({
               if (resultat) familleSuivante();
             }}
           />
-          <form
-            role="search"
-            aria-label="Rechercher une famille sans carte ni code"
-            className="flex flex-wrap items-end gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              rechercher();
-            }}
-          >
-            <div className="grid min-w-48 flex-1 gap-2">
-              <label htmlFor="recherche-checkout" className="text-label font-bold">
-                Ni carte ni code : nom, prénom ou matricule
-              </label>
-              <input
-                id="recherche-checkout"
-                type="search"
-                value={terme}
-                onChange={(e) => setTerme(e.target.value)}
-                className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
-              />
-            </div>
-            <Button type="submit" variant="ghost" disabled={enCours || terme.trim().length < 2}>
-              <Search aria-hidden />
-              Rechercher
-            </Button>
-          </form>
+          {/* In a class, no search: without card or code, the parent goes to the desk. */}
+          {salle ? null : (
+            <form
+              role="search"
+              aria-label="Rechercher une famille sans carte ni code"
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                rechercher();
+              }}
+            >
+              <div className="grid min-w-48 flex-1 gap-2">
+                <label htmlFor="recherche-checkout" className="text-label font-bold">
+                  Ni carte ni code : nom, prénom ou matricule
+                </label>
+                <input
+                  id="recherche-checkout"
+                  type="search"
+                  value={terme}
+                  onChange={(e) => setTerme(e.target.value)}
+                  className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+                />
+              </div>
+              <Button type="submit" variant="ghost" disabled={enCours || terme.trim().length < 2}>
+                <Search aria-hidden />
+                Rechercher
+              </Button>
+            </form>
+          )}
           {trouvees ? (
             trouvees.length === 0 ? (
               <p className="m-0 text-texte-doux">
@@ -600,6 +623,7 @@ export function Checkout({
                       <input
                         type="checkbox"
                         className="size-6 accent-rose-fonce"
+                        disabled={!e.remettable}
                         checked={coches[e.presenceId] ?? false}
                         onChange={(ev) =>
                           setCoches({ ...coches, [e.presenceId]: ev.target.checked })
@@ -612,11 +636,13 @@ export function Checkout({
                       <StatusPill statut={e.statut} />
                     </div>
                     <p id={`lieu-${e.presenceId}`} className="col-span-full m-0 text-texte-doux">
-                      {e.statut === "PRESENT"
-                        ? `Pas encore en salle : en route vers ${e.lieu}. Allez le chercher avec le parent.`
-                        : e.statut === "EN_SALLE"
-                          ? `En salle : ${e.lieu}. Demandez à la classe de l'amener, ou accompagnez le parent.`
-                          : "À l'infirmerie."}
+                      {!e.remettable
+                        ? `Dans une autre classe : ${e.lieu}. Le parent va le chercher là-bas.`
+                        : e.statut === "PRESENT"
+                          ? `Pas encore en salle : en route vers ${e.lieu}. Allez le chercher avec le parent.`
+                          : e.statut === "EN_SALLE"
+                            ? `En salle : ${e.lieu}. Demandez à la classe de l'amener, ou accompagnez le parent.`
+                            : "À l'infirmerie."}
                     </p>
                     {e.alertes.length > 0 ? (
                       <p className="col-span-full m-0 flex gap-2 font-bold text-alerte">
@@ -786,9 +812,9 @@ export function Checkout({
                   className="grid gap-3 rounded-md bg-rose-voile px-5 py-4"
                 >
                   <p role="alert" className="m-0 font-bold text-alerte">
-                    Retrait bloqué : cet adulte n&apos;est pas parmi les personnes autorisées.
-                    Appelez le contact principal ; le responsable peut ensuite autoriser un retrait
-                    exceptionnel.
+                    {salle
+                      ? "Retrait bloqué : cet adulte n'est pas parmi les personnes autorisées. Accompagnez le parent à l'accueil."
+                      : "Retrait bloqué : cet adulte n'est pas parmi les personnes autorisées. Appelez le contact principal ; le responsable peut ensuite autoriser un retrait exceptionnel."}
                   </p>
                   {contact ? (
                     <div className="flex flex-wrap items-center gap-3">
@@ -819,7 +845,7 @@ export function Checkout({
                       Aucun contact principal enregistré : appelez le responsable.
                     </p>
                   )}
-                  {autorisateurs === null ? (
+                  {salle ? null : autorisateurs === null ? (
                     <div>
                       <Button
                         type="button"
