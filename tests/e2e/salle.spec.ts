@@ -83,7 +83,9 @@ test("le moniteur confirme par toucher, annule son erreur dans la minute, puis c
   const liste = page.getByRole("region", { name: "Liste de 6–8 ans" });
   const aConfirmer = liste.getByRole("list", { name: "Enfants à confirmer" });
   const enSalle = liste.getByRole("list", { name: "Enfants en salle" });
-  await expect(aConfirmer.getByRole("listitem")).toHaveCount(3);
+  // A child's item is named by its first name; its medical alerts are nested items too.
+  const enfants = { name: /^(Ayo|Sèna|Koffi)$/ };
+  await expect(aConfirmer.getByRole("listitem", enfants)).toHaveCount(3);
   const ayo = aConfirmer.getByRole("listitem", { name: "Ayo" });
   await expect(ayo.getByRole("list", { name: "Alertes médicales" })).toHaveText("Asthme");
   await expect(ayo).toHaveAccessibleDescription(/^Check-in à l'accueil il y a \d+ min$/);
@@ -100,7 +102,7 @@ test("le moniteur confirme par toucher, annule son erreur dans la minute, puis c
   await expect(liste.getByRole("status")).toHaveText(
     "Arrivée de Ayo annulée : à confirmer de nouveau.",
   );
-  await expect(aConfirmer.getByRole("listitem")).toHaveCount(3);
+  await expect(aConfirmer.getByRole("listitem", enfants)).toHaveCount(3);
 
   // The family card scanned at the door: the three children at once.
   const scan = liste.getByRole("textbox", {
@@ -109,7 +111,7 @@ test("le moniteur confirme par toucher, annule son erreur dans la minute, puis c
   await scan.fill(jeton);
   await scan.press("Enter");
   await expect(liste.getByRole("status")).toHaveText("Arrivées de Ayo, Sèna et Koffi confirmées.");
-  await expect(enSalle.getByRole("listitem")).toHaveCount(3);
+  await expect(enSalle.getByRole("listitem", enfants)).toHaveCount(3);
   await expect(liste.getByRole("list", { name: "Enfants à confirmer" })).toHaveCount(0);
 
   const { rows } = await eglise.dansEglise((c) =>
