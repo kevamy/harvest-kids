@@ -12,6 +12,7 @@ import { creerStockageLocal } from "@/lib/storage/local";
 
 const contexte = vi.hoisted(() => ({
   egliseId: null as string | null,
+  roles: ["ACCUEIL"] as string[],
   dossier: "",
 }));
 
@@ -21,7 +22,7 @@ vi.mock("@/lib/tenant", async (importOriginal) => {
     ...original,
     getEgliseActive: vi.fn(async () => {
       if (!contexte.egliseId) throw new original.AccesRefuse("non_authentifie");
-      return { egliseId: contexte.egliseId };
+      return { egliseId: contexte.egliseId, roles: contexte.roles };
     }),
   };
 });
@@ -39,6 +40,7 @@ const EGLISE_A = "eglise_a";
 const EGLISE_B = "eglise_b";
 const photoA = cleFichier(EGLISE_A, "photos", "enfant-a.png");
 const photoB = cleFichier(EGLISE_B, "photos", "enfant-b.png");
+const retraitA = cleFichier(EGLISE_A, "retraits", "adulte-a.webp");
 
 async function demander(cle: string) {
   const reponse = await GET(new Request(`http://localhost/api/fichiers/${cle}`), {
@@ -52,6 +54,7 @@ beforeAll(async () => {
   const stockage = creerStockageLocal(contexte.dossier);
   await stockage.put(photoA, new Uint8Array([1, 2, 3]), "image/png");
   await stockage.put(photoB, new Uint8Array([4, 5, 6]), "image/png");
+  await stockage.put(retraitA, new Uint8Array([7, 8, 9]), "image/webp");
 });
 
 afterAll(async () => {
@@ -60,6 +63,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   contexte.egliseId = EGLISE_A;
+  contexte.roles = ["ACCUEIL"];
 });
 
 describe("route /api/fichiers", () => {
@@ -89,6 +93,22 @@ describe("route /api/fichiers", () => {
     ]) {
       expect(await demander(cle), cle).toEqual(reference);
     }
+  });
+
+  it("sert la photo d'un retrait exceptionnel au seul RESPONSABLE ou ADMIN, le même 404 sinon", async () => {
+    const reference = await demander(cleFichier(EGLISE_A, "photos", "absent.png"));
+    for (const roles of [["ACCUEIL"], ["MONITEUR"], ["INFIRMERIE"]]) {
+      contexte.roles = roles;
+      expect(await demander(retraitA), roles.join()).toEqual(reference);
+    }
+    for (const roles of [["RESPONSABLE"], ["ADMIN"]]) {
+      contexte.roles = roles;
+      expect((await demander(retraitA)).statut, roles.join()).toBe(200);
+    }
+    // Even for a RESPONSABLE, another church's photo is the same 404.
+    contexte.egliseId = EGLISE_B;
+    contexte.roles = ["RESPONSABLE"];
+    expect((await demander(retraitA)).statut).toBe(404);
   });
 
   it("refuse sans session valide (absente ou expirée) par un 401, sans lire le fichier", async () => {

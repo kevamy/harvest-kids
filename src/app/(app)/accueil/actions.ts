@@ -7,24 +7,31 @@ import {
   type PreparationCheckin,
   type ResultatCheckin,
 } from "@/server/checkin";
+import { randomUUID } from "node:crypto";
+import { cleFichier } from "@/lib/fichiers";
 import { getSessionCourante } from "@/lib/session";
+import { stockage } from "@/lib/storage";
+import { normaliserTelephone } from "@/lib/telephone";
 import type { ClientEglise, ContexteEglise } from "@/lib/tenant";
 import {
   CheckoutRefuse,
   journaliserCodeErrone,
   preparerCheckout,
   rechercherPourCheckout,
+  retraitExceptionnel,
   validerCheckout,
   type PreparationCheckout,
   type ResultatCheckout,
 } from "@/server/checkout";
 import {
+  ROLES_AUTORISATION_RETRAIT,
   ROLES_SECOND_MEMBRE,
   confirmerAvecPinEglise,
   membresConfirmateursEglise,
   type ResultatConfirmationPin,
 } from "@/server/plateforme/pin";
-import { rechercherFamilles } from "@/server/familles";
+import { FamilleRefusee, convertirPhoto, rechercherFamilles } from "@/server/familles";
+import { lireParametres } from "@/server/parametres";
 import { prismaPourMoniteurs } from "@/server/plateforme/badges";
 import {
   REGLE_CODE_RETRAIT,
@@ -143,6 +150,95 @@ export async function membresPourConfirmer() {
       roles: ROLES_SECOND_MEMBRE,
     }),
   );
+}
+
+/** The RESPONSABLE and ADMIN who may authorise an exceptional retrieval on this tablet. */
+export async function membresPourAutoriser() {
+  return executerActionAvec("checkout", ({ contexte }) =>
+    membresConfirmateursEglise({
+      egliseId: contexte.egliseId,
+      agentUserId: contexte.userId,
+      roles: ROLES_AUTORISATION_RETRAIT,
+    }),
+  );
+}
+
+/**
+ * Exceptional retrieval (cahier §7.6): the RESPONSABLE's PIN is checked first, then the photo
+ * taken by the tablet is stored under eglises/{church}/retraits/, then everything is written
+ * in one transaction (incident, retrieval, children). A failed transaction removes the photo.
+ */
+export async function autoriserRetraitExceptionnel(formulaire: FormData) {
+  return executerActionAvec("checkout", async ({ db, contexte }) => {
+    const champ = (nom: string) => texte(formulaire.get(nom));
+    const resultat = await confirmerAvecPinEglise(
+      {
+        egliseId: contexte.egliseId,
+        membreId: champ("responsableId"),
+        agentUserId: contexte.userId,
+        roles: ROLES_AUTORISATION_RETRAIT,
+      },
+      champ("pin"),
+    );
+    if (resultat.statut !== "confirme") throw new RefusMetier(messageConfirmation(resultat));
+
+    let telephone = "";
+    if (champ("telephone")) {
+      const indicatif = (await lireParametres(db))["telephone.indicatifParDefaut"];
+      const lu = normaliserTelephone(champ("telephone"), indicatif);
+      if (lu.statut !== "valide") {
+        throw new RefusMetier(
+          lu.statut === "a_confirmer"
+            ? "Saisissez le numéro en entier, avec ses 10 chiffres."
+            : lu.message,
+        );
+      }
+      telephone = lu.e164;
+    }
+
+    const fichier = formulaire.get("photo");
+    if (!(fichier instanceof File) || fichier.size === 0) {
+      throw new RefusMetier("Prenez la photo de l'adulte avec la tablette, puis recommencez.");
+    }
+    let webp: Buffer;
+    try {
+      webp = await convertirPhoto({
+        type: fichier.type,
+        octets: new Uint8Array(await fichier.arrayBuffer()),
+      });
+    } catch (erreur) {
+      if (erreur instanceof FamilleRefusee) throw new RefusMetier(erreur.message);
+      throw erreur;
+    }
+    const cle = cleFichier(contexte.egliseId, "retraits", `${randomUUID()}.webp`);
+    await stockage().put(cle, webp, "image/webp");
+
+    try {
+      return await db.$tx((tx) =>
+        retraitExceptionnel(
+          tx,
+          contexte,
+          {
+            sessionId: champ("sessionId"),
+            familleId: champ("familleId"),
+            presenceIds: formulaire.getAll("presenceIds").map(texte),
+            nom: champ("nom"),
+            lien: champ("lien"),
+            telephone,
+            motif: champ("motif"),
+          },
+          { autoriseParUserId: resultat.userId, photoKey: cle },
+        ),
+      );
+    } catch (erreur) {
+      // Nothing was recorded: the photo must not stay behind.
+      await stockage()
+        .delete(cle)
+        .catch(() => undefined);
+      if (erreur instanceof CheckoutRefuse) throw new RefusMetier(erreur.message);
+      throw erreur;
+    }
+  });
 }
 
 /** Check-out (cahier §7.6), after a scan (jeton), a retrieval code or a search. Read-only. */

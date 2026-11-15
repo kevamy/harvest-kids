@@ -21,6 +21,8 @@ export const ACTIONS = [
   "infirmerie.gerer",
   "alertes.voir",
   "incident.declarer",
+  // Incidents and their detail, with the photo of an exceptional retrieval (cahier §7.6).
+  "incidents.voir",
   "rapports.voir",
   "audit.voir",
   "comptes.gerer",
@@ -45,6 +47,7 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "salle.superviser",
     "alertes.voir",
     "incident.declarer",
+    "incidents.voir",
     "rapports.voir",
     "audit.voir",
   ],

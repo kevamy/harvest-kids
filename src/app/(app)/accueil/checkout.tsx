@@ -17,9 +17,16 @@ import { StatusPill } from "@/components/hk/status-pill";
 import { Button } from "@/components/ui/button";
 import { appelerAction } from "@/lib/appel-action";
 import { formaterTelephone, lienTelephone, lienWhatsApp } from "@/lib/telephone";
-import type { PreparationCheckout, ResultatCheckout } from "@/server/checkout";
+import type {
+  PreparationCheckout,
+  ResultatCheckout,
+  ResultatRetraitExceptionnel,
+} from "@/server/checkout";
+import { reduirePhoto } from "@/lib/photo-navigateur";
 import { usePret } from "@/lib/use-pret";
 import {
+  autoriserRetraitExceptionnel,
+  membresPourAutoriser,
   membresPourConfirmer,
   preparerLeCheckout,
   rechercherPourLeCheckout,
@@ -29,6 +36,209 @@ import type { SessionOuverte } from "./checkin";
 
 /** A retrieval code (4 characters, no ambiguous ones, RG-04); anything else is a card token. */
 const CODE = /^[2-9A-HJKMNP-Z]{4}$/;
+
+type Autorisateur = { membreId: string; nom: string };
+
+/**
+ * Exceptional retrieval (cahier §7.6): after calling the main contact, a RESPONSABLE or an
+ * ADMIN authorises it on this tablet with their PIN. The adult's photo is taken with the
+ * tablet's camera only (`capture`), after telling them why.
+ */
+function FormulaireExceptionnel({
+  sessionId,
+  familleId,
+  presenceIds,
+  autorisateurs,
+  onEnregistre,
+}: {
+  sessionId: string;
+  familleId: string;
+  presenceIds: string[];
+  autorisateurs: Autorisateur[];
+  onEnregistre: (resultat: ResultatRetraitExceptionnel) => void;
+}) {
+  const [champs, setChamps] = useState({
+    nom: "",
+    lien: "",
+    telephone: "",
+    motif: "",
+    responsableId: "",
+    pin: "",
+  });
+  const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [enCours, demarrer] = useTransition();
+  const pret = usePret();
+  const changer = (nom: keyof typeof champs) => (e: { target: { value: string } }) =>
+    setChamps({ ...champs, [nom]: e.target.value });
+
+  useEffect(() => () => (photo ? URL.revokeObjectURL(photo.url) : undefined), [photo]);
+
+  if (autorisateurs.length === 0) {
+    return (
+      <p role="alert" className="m-0 font-bold text-alerte">
+        Aucun responsable ne peut autoriser sur cette tablette : il faut un RESPONSABLE ou un ADMIN
+        présent, avec son code PIN.
+      </p>
+    );
+  }
+
+  return (
+    <form
+      method="post"
+      aria-label="Retrait exceptionnel"
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!photo) return;
+        const donnees = new FormData();
+        donnees.set("sessionId", sessionId);
+        donnees.set("familleId", familleId);
+        for (const id of presenceIds) donnees.append("presenceIds", id);
+        for (const [cle, valeur] of Object.entries(champs)) donnees.set(cle, valeur);
+        donnees.set("photo", new File([photo.blob], "adulte.jpg", { type: "image/jpeg" }));
+        demarrer(async () => {
+          setErreur(null);
+          const reponse = await appelerAction(() => autoriserRetraitExceptionnel(donnees));
+          setChamps((c) => ({ ...c, pin: "" }));
+          if (!reponse.ok) {
+            setErreur(reponse.erreur);
+            return;
+          }
+          onEnregistre(reponse.donnees);
+        });
+      }}
+    >
+      <p className="m-0 font-bold">
+        Après l&apos;appel au contact principal, le responsable peut autoriser ce retrait. Un
+        incident est créé.
+      </p>
+      {erreur ? (
+        <p role="alert" className="m-0 font-bold text-alerte">
+          {erreur}
+        </p>
+      ) : null}
+      {(
+        [
+          ["nom", "Nom de l'adulte", true],
+          ["lien", "Lien avec l'enfant (facultatif)", false],
+          ["telephone", "Téléphone de l'adulte (facultatif)", false],
+        ] as const
+      ).map(([nom, libelle, requis]) => (
+        <div key={nom} className="grid gap-2">
+          <label htmlFor={`exceptionnel-${nom}`} className="text-label font-bold">
+            {libelle}
+          </label>
+          <input
+            id={`exceptionnel-${nom}`}
+            type={nom === "telephone" ? "tel" : "text"}
+            required={requis}
+            value={champs[nom]}
+            onChange={changer(nom)}
+            className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+          />
+        </div>
+      ))}
+      <div className="grid gap-2">
+        <label htmlFor="exceptionnel-motif" className="text-label font-bold">
+          Motif
+        </label>
+        <textarea
+          id="exceptionnel-motif"
+          required
+          rows={2}
+          maxLength={300}
+          value={champs.motif}
+          onChange={changer("motif")}
+          className="rounded-md bg-blanc px-4 py-3 text-body shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+        />
+      </div>
+      <div className="grid gap-2" aria-describedby="consigne-photo">
+        <label htmlFor="exceptionnel-photo" className="text-label font-bold">
+          Photo de l&apos;adulte
+        </label>
+        <p id="consigne-photo" className="m-0 rounded-md bg-soleil px-4 py-2 text-label text-nuit">
+          Prévenez la personne que sa photo est prise pour la sécurité de l&apos;enfant.
+        </p>
+        <input
+          id="exceptionnel-photo"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          aria-describedby="consigne-photo"
+          onChange={async (e) => {
+            const fichier = e.target.files?.[0];
+            if (!fichier) return;
+            try {
+              const blob = await reduirePhoto(fichier);
+              setPhoto({ blob, url: URL.createObjectURL(blob) });
+            } catch {
+              setErreur("La photo est illisible. Reprenez-la.");
+            }
+          }}
+        />
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local preview of the photo taken
+          <img src={photo.url} alt="Photo prise" className="size-28 rounded-md object-cover" />
+        ) : null}
+      </div>
+      <div className="grid gap-2">
+        <label htmlFor="exceptionnel-responsable" className="text-label font-bold">
+          Responsable qui autorise
+        </label>
+        <select
+          id="exceptionnel-responsable"
+          required
+          value={champs.responsableId}
+          onChange={changer("responsableId")}
+          className="min-h-touch rounded-md bg-blanc px-5 text-body-lg shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+        >
+          <option value="">Choisissez le responsable</option>
+          {autorisateurs.map((m) => (
+            <option key={m.membreId} value={m.membreId}>
+              {m.nom}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="grid gap-2">
+        <label htmlFor="exceptionnel-pin" className="text-label font-bold">
+          Code PIN du responsable
+        </label>
+        <input
+          id="exceptionnel-pin"
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={6}
+          required
+          value={champs.pin}
+          onChange={(e) => setChamps({ ...champs, pin: e.target.value.replace(/\D/g, "") })}
+          className="min-h-touch max-w-60 rounded-md bg-blanc px-5 text-body-lg tracking-[6px] shadow-[inset_0_0_0_2px_var(--color-ligne)]"
+        />
+      </div>
+      <div>
+        <Button
+          type="submit"
+          variant="rose"
+          size="xl"
+          disabled={
+            !pret ||
+            enCours ||
+            !photo ||
+            presenceIds.length === 0 ||
+            champs.nom.trim().length < 2 ||
+            champs.motif.trim().length < 3 ||
+            !champs.responsableId ||
+            champs.pin.length !== 6
+          }
+        >
+          Autoriser le retrait exceptionnel
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 /** "Ayo", "Ayo et Sèna", "Ayo, Sèna et Koffi". */
 function enumerer(prenoms: string[]): string {
@@ -66,6 +276,8 @@ export function Checkout({
     null,
   );
   const [second, setSecond] = useState({ membreId: "", pin: "" });
+  const [autorisateurs, setAutorisateurs] = useState<Autorisateur[] | null>(null);
+  const [exceptionnel, setExceptionnel] = useState<ResultatRetraitExceptionnel | null>(null);
   const pret = usePret();
   const [preparation, setPreparation] = useState<PreparationCheckout | null>(null);
   const [coches, setCoches] = useState<Record<string, boolean>>({});
@@ -78,7 +290,7 @@ export function Checkout({
 
   useEffect(() => {
     if (actif) champScan.current?.focus();
-  }, [resultat, actif]);
+  }, [resultat, exceptionnel, actif]);
 
   const recommencer = () => {
     setMoyen(null);
@@ -90,7 +302,21 @@ export function Checkout({
     setResultat(null);
     setConfirmateurs(null);
     setSecond({ membreId: "", pin: "" });
+    setAutorisateurs(null);
+    setExceptionnel(null);
   };
+
+  /** Exceptional retrieval: the RESPONSABLE and ADMIN who may authorise are listed first. */
+  const demanderAutorisation = () =>
+    demarrer(async () => {
+      setRefus(null);
+      const reponse = await appelerAction(() => membresPourAutoriser());
+      if (!reponse.ok) {
+        setRefus(reponse.erreur);
+        return;
+      }
+      setAutorisateurs(reponse.donnees);
+    });
 
   const familleSuivante = () => {
     recommencer();
@@ -292,7 +518,24 @@ export function Checkout({
           </p>
         ) : null}
 
-        {resultat ? (
+        {exceptionnel ? (
+          <NotchCard couleur="blanc" aria-label="Retrait exceptionnel enregistré">
+            <div className="grid gap-4">
+              <header>
+                <p role="status" className="m-0 flex items-center gap-3 font-bold text-succes">
+                  <CircleCheck aria-hidden className="size-7" />
+                  Retrait exceptionnel enregistré : {enumerer(exceptionnel.enfants)} remis à{" "}
+                  {exceptionnel.nom}. Un incident est créé pour le responsable.
+                </p>
+              </header>
+              <div className="flex flex-wrap items-center gap-4">
+                <Button type="button" variant="bleu" size="xl" onClick={familleSuivante}>
+                  Famille suivante
+                </Button>
+              </div>
+            </div>
+          </NotchCard>
+        ) : resultat ? (
           <NotchCard couleur="blanc" aria-label="Retrait confirmé">
             <div className="grid gap-4">
               <header>
@@ -575,6 +818,31 @@ export function Checkout({
                       <UserRound aria-hidden className="size-5" />
                       Aucun contact principal enregistré : appelez le responsable.
                     </p>
+                  )}
+                  {autorisateurs === null ? (
+                    <div>
+                      <Button
+                        type="button"
+                        variant="sombre"
+                        disabled={enCours}
+                        onClick={demanderAutorisation}
+                      >
+                        Retrait exceptionnel avec le responsable
+                      </Button>
+                    </div>
+                  ) : (
+                    <FormulaireExceptionnel
+                      sessionId={sessionId}
+                      familleId={preparation.famille.id}
+                      presenceIds={preparation.enfants
+                        .filter((e) => coches[e.presenceId])
+                        .map((e) => e.presenceId)}
+                      autorisateurs={autorisateurs}
+                      onEnregistre={(r) => {
+                        setPreparation(null);
+                        setExceptionnel(r);
+                      }}
+                    />
                   )}
                 </section>
               ) : null}

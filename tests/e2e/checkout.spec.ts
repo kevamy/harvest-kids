@@ -181,6 +181,79 @@ test("ni carte ni code : la famille cherchée par son nom, un collègue confirme
   expect(rows).toEqual([{ carte: "recherche", secondMembre: `${eglise.id}_responsable` }]);
 });
 
+// A 1×1 PNG: the "photo" taken by the tablet's camera in the test.
+const PHOTO = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+test("retrait exceptionnel : le responsable autorise avec son PIN, l'incident garde la photo pour lui seul", async ({
+  page,
+  browser,
+  eglise,
+}) => {
+  test.slow();
+  await familleAuCulte(eglise, "Cinq", "WXYZ");
+  const { panneau, scan } = await ouvrirCheckout(page, eglise);
+  await scan.fill("WXYZ");
+  await scan.press("Enter");
+
+  const famille = panneau.getByRole("region", { name: "Retrait de la famille Cinq" });
+  await famille.getByRole("button", { name: "Personne non reconnue" }).click();
+  await famille
+    .getByRole("region", { name: "Personne non reconnue" })
+    .getByRole("button", { name: "Retrait exceptionnel avec le responsable" })
+    .click();
+
+  const formulaire = famille.getByRole("form", { name: "Retrait exceptionnel" });
+  await formulaire.getByRole("textbox", { name: "Nom de l'adulte" }).fill("Kossi Cinq");
+  await formulaire.getByRole("textbox", { name: "Motif" }).fill("La mère a confirmé par téléphone");
+  const photo = formulaire.getByLabel("Photo de l'adulte");
+  await expect(photo).toHaveAccessibleDescription(
+    "Prévenez la personne que sa photo est prise pour la sécurité de l'enfant.",
+  );
+  await photo.setInputFiles({ name: "adulte.png", mimeType: "image/png", buffer: PHOTO });
+  await expect(formulaire.getByRole("img", { name: "Photo prise" })).toBeVisible();
+  await formulaire
+    .getByRole("combobox", { name: "Responsable qui autorise" })
+    .selectOption({ label: "Responsable test" });
+  await formulaire.getByLabel("Code PIN du responsable").fill(PIN);
+  await formulaire.getByRole("button", { name: "Autoriser le retrait exceptionnel" }).click();
+
+  await expect(
+    panneau.getByRole("region", { name: "Retrait exceptionnel enregistré" }).getByRole("status"),
+  ).toHaveText(
+    "Retrait exceptionnel enregistré : Ayo et Sèna remis à Kossi Cinq. Un incident est créé pour le responsable.",
+  );
+
+  // The photo: never for the reception desk, even by its URL.
+  const { rows } = await eglise.dansEglise((c) =>
+    c.query(`SELECT "photoKey" FROM "RetraitExceptionnel" WHERE "egliseId" = $1`, [eglise.id]),
+  );
+  const photoKey = (rows[0] as { photoKey: string }).photoKey;
+  expect((await page.request.get(`/api/fichiers/${photoKey}`)).status()).toBe(404);
+
+  // The RESPONSABLE: the incident in the list, without photo; the photo in its detail.
+  const contexte = await browser.newContext();
+  const responsable = await contexte.newPage();
+  await seConnecter(responsable, eglise.email("RESPONSABLE"));
+  await attendreAccueil(responsable, eglise.nom);
+  await responsable.goto("/incidents");
+  const incidents = responsable.getByRole("list", { name: "Incidents" });
+  await expect(incidents.getByRole("img")).toHaveCount(0);
+  await incidents.getByRole("link", { name: /^Retrait par une personne non autorisée · / }).click();
+  const retrait = responsable.getByRole("region", { name: "Retrait exceptionnel" });
+  const image = retrait.getByRole("img", { name: "Photo de Kossi Cinq" });
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(
+    retrait.getByRole("list", { name: "Enfants remis" }).getByRole("listitem"),
+  ).toHaveCount(2);
+  await contexte.close();
+});
+
 test("check-out refusé : un code erroné est compté, un adulte non reconnu bloque le retrait", async ({
   page,
   eglise,

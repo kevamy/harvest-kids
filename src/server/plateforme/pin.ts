@@ -138,6 +138,9 @@ export async function confirmerAvecPin(
 /** Roles of the second member of a retrieval without card or code (cahier §7.6). */
 export const ROLES_SECOND_MEMBRE = ["ACCUEIL", "RESPONSABLE", "ADMIN"] as const satisfies Role[];
 
+/** Roles of the person who authorises an exceptional retrieval (cahier §7.6). */
+export const ROLES_AUTORISATION_RETRAIT = ["RESPONSABLE", "ADMIN"] as const satisfies Role[];
+
 /** Same two readers with the shared platform client (actions), bound to the agent's church. */
 export const confirmerAvecPinEglise = (
   demande: Parameters<typeof confirmerAvecPin>[1],

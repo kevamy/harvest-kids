@@ -404,6 +404,150 @@ export async function validerCheckout(
   };
 }
 
+const E164 = /^\+[1-9]\d{7,14}$/;
+
+export const schemaRetraitExceptionnel = z.object({
+  sessionId: z.string().min(1),
+  familleId: z.string().min(1),
+  presenceIds: z
+    .array(z.string().min(1))
+    .min(1, "Cochez au moins un enfant.")
+    .refine((l) => new Set(l).size === l.length, "Un enfant est en double."),
+  nom: z
+    .string()
+    .trim()
+    .min(2, "Indiquez le nom de l'adulte qui récupère l'enfant.")
+    .max(120, "Le nom tient en 120 caractères au plus."),
+  lien: z
+    .string()
+    .trim()
+    .max(60, "Le lien avec l'enfant tient en 60 caractères au plus.")
+    .optional()
+    .transform((v) => v || null),
+  telephone: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || null)
+    .refine((v) => v === null || E164.test(v), "Le numéro de téléphone n'est pas valide."),
+  motif: z
+    .string()
+    .trim()
+    .min(3, "Indiquez le motif du retrait exceptionnel.")
+    .max(300, "Le motif tient en 300 caractères au plus."),
+});
+
+export type ResultatRetraitExceptionnel = {
+  enfants: string[];
+  nom: string;
+  incidentId: string;
+};
+
+/**
+ * Exceptional retrieval (cahier §7.6, RG-06): the adult is not among the authorised persons;
+ * after calling the main contact, a RESPONSABLE or an ADMIN authorises it with their PIN on
+ * the agent's tablet (checked by the caller, confirmerAvecPin), with the adult's name, a
+ * photo taken by the tablet and the reason. In one transaction: an incident
+ * RETRAIT_NON_AUTORISE, the RetraitExceptionnel linked to it, each child RECUPERE with that
+ * retrieval, an EvenementPresence and audit entries.
+ */
+export async function retraitExceptionnel(
+  tx: Tx & Pick<ClientDeBase, "incident" | "retraitExceptionnel">,
+  auteur: Auteur,
+  saisie: unknown,
+  autorisation: { autoriseParUserId: string; photoKey: string },
+): Promise<ResultatRetraitExceptionnel> {
+  const { sessionId, familleId, presenceIds, nom, lien, telephone, motif } =
+    schemaRetraitExceptionnel.parse(saisie);
+  const statut = await verrouillerSession(tx, sessionId);
+  if (!statut) throw new CheckoutRefuse("Session introuvable. Rechargez la page.");
+  if (statut !== "OUVERTE") {
+    throw new CheckoutRefuse("Cette session n'est plus ouverte : rechargez la page.");
+  }
+
+  const presences = await tx.$queryRaw<
+    { id: string; prenom: string; dateNaissance: Date; statut: string }[]
+  >`
+    SELECT p.id, e.prenom, e."dateNaissance", p.statut::text AS statut
+    FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
+    WHERE p.id = ANY(${presenceIds}::text[]) AND p."sessionId" = ${sessionId}
+      AND e."familleId" = ${familleId} AND p.statut <> 'RECUPERE' AND p."basculeVers" IS NULL
+    FOR UPDATE OF p`;
+  if (presences.length !== presenceIds.length) {
+    throw new CheckoutRefuse(
+      "Un enfant coché vient d'être récupéré sur une autre tablette, ou n'est plus dans cette session. Rechargez la famille.",
+    );
+  }
+  presences.sort(duPlusAgeAuPlusJeune);
+
+  // egliseId is added by the scoped client.
+  const incident = await tx.incident.create({
+    data: {
+      sessionId,
+      type: "RETRAIT_NON_AUTORISE",
+      description: `Retrait exceptionnel : ${presences.map((p) => p.prenom).join(", ")} remis à un adulte qui n'est pas parmi les personnes autorisées. Motif : ${motif}`,
+      personnes: lien ? `${nom} (${lien})` : nom,
+      mesures: "Contact principal appelé ; retrait autorisé par le responsable avec son PIN.",
+      declarePar: auteur.userId,
+    } as Prisma.IncidentUncheckedCreateInput,
+    select: { id: true },
+  });
+  const retrait = await tx.retraitExceptionnel.create({
+    data: {
+      sessionId,
+      familleId,
+      nom,
+      lien,
+      telephone,
+      photoKey: autorisation.photoKey,
+      motif,
+      autorisePar: autorisation.autoriseParUserId,
+      remisPar: auteur.userId,
+      incidentId: incident.id,
+    } as Prisma.RetraitExceptionnelUncheckedCreateInput,
+    select: { id: true },
+  });
+  await tx.$executeRaw`
+    UPDATE "Presence"
+    SET statut = 'RECUPERE', "recupereLe" = now(), "retraitExceptionnelId" = ${retrait.id},
+        "remisPar" = ${auteur.userId}
+    WHERE id = ANY(${presenceIds}::text[])`;
+
+  await journaliser(tx, auteur, {
+    action: "incident.cree",
+    entite: "Incident",
+    entiteId: incident.id,
+    apres: { type: "RETRAIT_NON_AUTORISE", sessionId },
+  });
+  await journaliser(tx, auteur, {
+    action: "retrait.exceptionnel",
+    entite: "RetraitExceptionnel",
+    entiteId: retrait.id,
+    apres: { familleId, autorisePar: autorisation.autoriseParUserId, incidentId: incident.id },
+  });
+  for (const p of presences) {
+    const evenement: Omit<Prisma.EvenementPresenceUncheckedCreateInput, "egliseId"> = {
+      presenceId: p.id,
+      type: "checkout",
+      detail: { statut: "RECUPERE", depuis: p.statut, retraitExceptionnelId: retrait.id },
+      userId: auteur.userId,
+      appareil: auteur.appareil,
+    };
+    await tx.evenementPresence.create({
+      data: evenement as Prisma.EvenementPresenceUncheckedCreateInput,
+    });
+    await journaliser(tx, auteur, {
+      action: "presence.checkout",
+      entite: "Presence",
+      entiteId: p.id,
+      avant: { statut: p.statut },
+      apres: { statut: "RECUPERE", retraitExceptionnelId: retrait.id },
+    });
+  }
+
+  return { enfants: presences.map((p) => p.prenom), nom, incidentId: incident.id };
+}
+
 /** A wrong code, audited (the count only, never the code typed). */
 export async function journaliserCodeErrone(
   tx: Pick<ClientDeBase, "auditLog">,

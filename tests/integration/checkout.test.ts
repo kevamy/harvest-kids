@@ -13,8 +13,10 @@ import {
   CheckoutRefuse,
   preparerCheckout,
   rechercherPourCheckout,
+  retraitExceptionnel,
   validerCheckout,
 } from "@/server/checkout";
+import { detailIncident, listerIncidents } from "@/server/incidents";
 import {
   REGLE_CODE_RETRAIT,
   cleCodeRetrait,
@@ -433,6 +435,119 @@ describe("ni carte ni code", () => {
         },
       },
     ]);
+  });
+});
+
+describe("retrait exceptionnel autorisé par le responsable", () => {
+  /** The accounts that authorise and hand over (RetraitExceptionnel references User). */
+  async function comptes() {
+    await proprietaire.query(
+      `INSERT INTO "User" (id, name, email, "updatedAt") VALUES
+         ('user_test', 'Agent test', 'agent@harvest-kids.test', now()),
+         ('user_resp', 'Responsable test', 'resp@harvest-kids.test', now())`,
+    );
+  }
+
+  const exceptionnel = (saisie: Record<string, unknown>) =>
+    dbA.$tx((tx) =>
+      retraitExceptionnel(
+        tx,
+        auteur(a),
+        { sessionId: a.sessionId, ...saisie },
+        { autoriseParUserId: "user_resp", photoKey: `eglises/${a.egliseId}/retraits/x.webp` },
+      ),
+    );
+
+  it("crée l'incident, le retrait lié et remet les enfants, dans une seule transaction", async () => {
+    await comptes();
+    const { familleId, presences } = await famille(a, "f1", "K7MP");
+
+    const resultat = await exceptionnel({
+      familleId,
+      presenceIds: presences,
+      nom: "Kossi Dossou",
+      lien: "Oncle",
+      telephone: "+2290197451233",
+      motif: "La mère a confirmé par téléphone",
+    });
+    expect(resultat).toMatchObject({ enfants: ["Ayo", "Sèna"], nom: "Kossi Dossou" });
+
+    expect(
+      await lignes(`SELECT type, personnes, "declarePar" FROM "Incident" WHERE "egliseId" = $1`),
+    ).toEqual([
+      { type: "RETRAIT_NON_AUTORISE", personnes: "Kossi Dossou (Oncle)", declarePar: "user_test" },
+    ]);
+    expect(
+      await lignes(
+        `SELECT nom, telephone, "photoKey", "autorisePar", "remisPar", "incidentId"
+         FROM "RetraitExceptionnel" WHERE "egliseId" = $1`,
+      ),
+    ).toEqual([
+      {
+        nom: "Kossi Dossou",
+        telephone: "+2290197451233",
+        photoKey: `eglises/${a.egliseId}/retraits/x.webp`,
+        autorisePar: "user_resp",
+        remisPar: "user_test",
+        incidentId: resultat.incidentId,
+      },
+    ]);
+    expect(
+      await lignes(
+        `SELECT statut, "recuperePar", "retraitExceptionnelId" IS NOT NULL AS exceptionnel
+         FROM "Presence" WHERE "egliseId" = $1 ORDER BY id`,
+      ),
+    ).toEqual([
+      { statut: "RECUPERE", recuperePar: null, exceptionnel: true },
+      { statut: "RECUPERE", recuperePar: null, exceptionnel: true },
+    ]);
+    expect(
+      (
+        await lignes(`SELECT action FROM "AuditLog" WHERE "egliseId" = $1 ORDER BY "createdAt", id`)
+      ).map((l) => l.action),
+    ).toEqual([
+      "session.ouverte",
+      "incident.cree",
+      "retrait.exceptionnel",
+      "presence.checkout",
+      "presence.checkout",
+    ]);
+
+    // The incident's detail carries the photo key; the list never does.
+    const detail = await detailIncident(dbA, resultat.incidentId);
+    expect(detail?.retrait).toMatchObject({
+      nom: "Kossi Dossou",
+      photoKey: `eglises/${a.egliseId}/retraits/x.webp`,
+      enfants: [
+        { prenom: "Ayo", matricule: "HK-f10" },
+        { prenom: "Sèna", matricule: "HK-f11" },
+      ],
+    });
+    const liste = await listerIncidents(dbA);
+    expect(liste).toHaveLength(1);
+    expect(JSON.stringify(liste)).not.toContain("retraits/");
+    // Isolation A/B: B sees neither the incident nor its detail.
+    const dbB = clientEglise(base, b.egliseId);
+    expect(await listerIncidents(dbB)).toEqual([]);
+    expect(await detailIncident(dbB, resultat.incidentId)).toBeNull();
+  });
+
+  it("refuse un motif vide, un numéro mal formé et un enfant d'une autre famille, sans rien écrire", async () => {
+    await comptes();
+    const f1 = await famille(a, "f1", "K7MP");
+    const f2 = await famille(a, "f2", "QRST");
+    const saisie = { familleId: f1.familleId, presenceIds: [f1.presences[0]], nom: "Kossi" };
+
+    await expect(exceptionnel({ ...saisie, motif: " " })).rejects.toThrow(
+      "Indiquez le motif du retrait exceptionnel.",
+    );
+    await expect(exceptionnel({ ...saisie, motif: "Appel", telephone: "0197" })).rejects.toThrow(
+      "Le numéro de téléphone n'est pas valide.",
+    );
+    await expect(
+      exceptionnel({ ...saisie, motif: "Appel", presenceIds: [f2.presences[0]] }),
+    ).rejects.toThrow(CheckoutRefuse);
+    expect(await lignes(`SELECT id FROM "Incident" WHERE "egliseId" = $1`)).toEqual([]);
   });
 });
 

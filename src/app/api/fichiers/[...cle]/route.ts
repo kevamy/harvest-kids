@@ -1,4 +1,5 @@
-import { cleAppartientA } from "@/lib/fichiers";
+import { analyserCle } from "@/lib/fichiers";
+import { peut } from "@/lib/rbac";
 import { stockage } from "@/lib/storage";
 import { AccesRefuse, getEgliseActive } from "@/lib/tenant";
 
@@ -10,17 +11,23 @@ const INTROUVABLE = () => new Response(null, { status: 404 });
  * missing file, so the existence of another church's file cannot be guessed.
  */
 export async function GET(_requete: Request, { params }: RouteContext<"/api/fichiers/[...cle]">) {
-  let egliseId: string;
+  let contexte: Awaited<ReturnType<typeof getEgliseActive>>;
   try {
     // Loading an image is not user activity (it also happens on live screens).
-    ({ egliseId } = await getEgliseActive({ rafraichissementAuto: true }));
+    contexte = await getEgliseActive({ rafraichissementAuto: true });
   } catch (erreur) {
     if (erreur instanceof AccesRefuse) return new Response(null, { status: 401 });
     throw erreur;
   }
 
   const cle = (await params).cle.join("/");
-  if (!cleAppartientA(cle, egliseId)) return INTROUVABLE();
+  const analyse = analyserCle(cle);
+  if (analyse?.egliseId !== contexte.egliseId) return INTROUVABLE();
+  // The photo of an adult not recognised at check-out: RESPONSABLE and ADMIN only, and the
+  // same 404 for anyone else (cahier §7.6).
+  if (analyse.categorie === "retraits" && !peut(contexte.roles ?? [], "incidents.voir")) {
+    return INTROUVABLE();
+  }
 
   const fichier = await stockage().get(cle);
   if (!fichier) return INTROUVABLE();

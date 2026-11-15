@@ -42,7 +42,25 @@ export async function membresAffectables(
     .map((m) => ({ membreId: m.id, nom: m.user.name, moniteur: m.roles.includes("MONITEUR") }));
 }
 
+/**
+ * Names of accounts that are members of the church (who authorised, who handed over), by
+ * user id; an account of another church is never named.
+ */
+export async function nomsMembres(
+  base: PrismaClient,
+  contexte: Pick<ContexteEglise, "egliseId">,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const membres = await base.membre.findMany({
+    where: { egliseId: contexte.egliseId, userId: { in: userIds } },
+    select: { userId: true, user: { select: { name: true } } },
+  });
+  return new Map(membres.map((m) => [m.userId, m.user.name]));
+}
+
 /** Same readers with the shared platform client (pages, actions, routes). */
+export const nomsMembresEglise = (contexte: ContexteEglise, userIds: string[]) =>
+  nomsMembres(prismaPlateforme(), contexte, userIds);
 export const lectureMembreEglise = (contexte: ContexteEglise) =>
   lectureMembre(prismaPlateforme(), contexte);
 export const membresAffectablesEglise = (contexte: ContexteEglise) =>
