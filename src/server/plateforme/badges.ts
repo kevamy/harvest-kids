@@ -80,7 +80,7 @@ async function verrouillerMembre(tx: TransactionPrisma, egliseId: string, membre
   const lignes = await tx.$queryRaw<
     { userId: string; roles: Role[]; actif: boolean; compteActif: boolean }[]
   >`
-    SELECT m."userId", m.roles::text[] AS roles, m.actif, u.actif AS "compteActif"
+    SELECT m."userId", COALESCE(m.roles::text[], '{}') AS roles, m.actif, u.actif AS "compteActif"
     FROM "Membre" m JOIN "User" u ON u.id = m."userId"
     WHERE m.id = ${membreId} AND m."egliseId" = ${egliseId}
     FOR UPDATE OF m`;

@@ -141,7 +141,8 @@ model Membre {
   eglise          Eglise    @relation(fields: [egliseId], references: [id], onDelete: Cascade)
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles           Role[]
+  // NOT NULL DEFAULT '{}' (migration tableaux_non_nuls) : une liste vide, jamais NULL.
+  roles           Role[]    @default([])
   pinHash         String?
   pinEchecs       Int       @default(0)
   pinBloqueJusqua DateTime?
@@ -353,7 +354,8 @@ model Enfant {
   dateNaissance  DateTime @db.Date
   sexe           String?
   photoKey       String?
-  alertes        String[]
+  // NOT NULL DEFAULT '{}' (migration tableaux_non_nuls) : une liste vide, jamais NULL.
+  alertes        String[] @default([])
   alerteDetail   String?
   notes          String?
   classeForceeId String?

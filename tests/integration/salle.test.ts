@@ -24,6 +24,7 @@ import { ouvrirSession } from "@/server/sessions";
 import {
   type Client,
   type Jeu,
+  codeErreur,
   compterDansEglise,
   connecter,
   contexteVerifie,
@@ -460,6 +461,61 @@ describe("liste de la classe et alerte « non arrivé en salle »", () => {
     ]);
     await toucher(moniteur, classeA, presences[0]!);
     expect(await alertesNonArrives(dbA, 10)).toEqual([]);
+  });
+});
+
+describe("enfants sans alerte médicale", () => {
+  it("un enfant créé sans alerte a une liste vide : la liste de la classe s'affiche", async () => {
+    await sql(
+      a,
+      `INSERT INTO "Famille" (id, "egliseId", nom, "finaliseeLe", "updatedAt")
+       VALUES ('famille_sans', $1, 'Sans', now(), now())`,
+      [a.egliseId],
+    );
+    // No "alertes" column in the INSERT: the database default applies.
+    await sql(
+      a,
+      `INSERT INTO "Enfant" (id, "egliseId", matricule, "familleId", prenom, nom, "dateNaissance", "updatedAt")
+       VALUES ('enfant_sans', $1, 'HK-9001', 'famille_sans', 'Mawuli', 'Sans', '2021-05-02', now())`,
+      [a.egliseId],
+    );
+    await sql(
+      a,
+      `INSERT INTO "Presence" (id, "egliseId", "sessionId", "enfantId", "classeId", statut,
+                               "codeRetrait", "checkinPar")
+       VALUES ('presence_sans', $1, $2, 'enfant_sans', $3, 'PRESENT', 'K7MP', 'user_accueil')`,
+      [a.egliseId, a.sessionId, a.classeId],
+    );
+
+    expect(await listeDeClasse(dbA, classeA, "user_test", 10)).toEqual([
+      expect.objectContaining({ prenom: "Mawuli", alertes: [] }),
+    ]);
+  });
+
+  it("la base refuse NULL dans Enfant.alertes, à l'insertion comme à la mise à jour", async () => {
+    await sql(
+      a,
+      `INSERT INTO "Famille" (id, "egliseId", nom, "updatedAt") VALUES ('famille_nul', $1, 'Nul', now())`,
+      [a.egliseId],
+    );
+    expect(
+      await codeErreur(
+        sql(
+          a,
+          `INSERT INTO "Enfant" (id, "egliseId", "familleId", prenom, nom, "dateNaissance", alertes, "updatedAt")
+           VALUES ('enfant_nul', $1, 'famille_nul', 'Nul', 'Nul', '2021-05-02', NULL, now())`,
+          [a.egliseId],
+        ),
+      ),
+    ).toBe("23502");
+    expect(
+      await codeErreur(
+        sql(a, `UPDATE "Enfant" SET alertes = NULL WHERE id = $1 AND "egliseId" = $2`, [
+          a.enfantId,
+          a.egliseId,
+        ]),
+      ),
+    ).toBe("23502");
   });
 });
 

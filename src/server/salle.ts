@@ -109,7 +109,9 @@ export async function listeDeClasse(
     })[]
   >`
     SELECT p.id AS "presenceId", e.prenom, e.nom, e.matricule, e."photoKey",
-           e."dateNaissance", e.alertes, e."alerteDetail", p.statut::text AS statut,
+           -- NOT NULL since tableaux_non_nuls; kept as a second barrier for a raw read.
+           e."dateNaissance", COALESCE(e.alertes, '{}') AS alertes, e."alerteDetail",
+           p.statut::text AS statut,
            floor(extract(epoch FROM now() - p."checkinLe") / 60)::int AS "attenteMinutes",
            (p.statut = 'PRESENT'
              AND p."checkinLe" < now() - make_interval(mins => ${delaiNonArriveMinutes}::int))
