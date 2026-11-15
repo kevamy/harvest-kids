@@ -314,6 +314,27 @@ describe("validation", () => {
     ).toEqual([]);
   });
 
+  it("nomme les enfants remis du plus âgé au plus jeune, quel que soit l'ordre des lignes", async () => {
+    const { familleId, presences } = await famille(a, "f1", "K7MP", [
+      "EN_SALLE",
+      "EN_SALLE",
+      "PRESENT",
+    ]);
+    // Koffi, inserted last, is the eldest: the order of the rows is not the family's.
+    await sql(
+      a,
+      `UPDATE "Enfant" SET "dateNaissance" = '2015-03-01' WHERE id = $1 AND "egliseId" = $2`,
+      [`${familleId}_2`, a.egliseId],
+    );
+    const resultat = await valider({
+      familleId,
+      code: "K7MP",
+      personneAutoriseeId: "pa_f1_mere",
+      presenceIds: presences,
+    });
+    expect(resultat.enfants).toEqual(["Koffi", "Ayo", "Sèna"]);
+  });
+
   it("deux tablettes remettent le même enfant en même temps : une seule réussit", async () => {
     const { familleId, presences } = await famille(a, "f1", "K7MP");
     const saisie = {

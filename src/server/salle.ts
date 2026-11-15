@@ -22,6 +22,16 @@ type Auteur = Pick<ContexteEglise, "userId" | "appareil">;
 type Lecture = Pick<ClientDeBase, "carteFamille" | "badgeMoniteur" | "$queryRaw">;
 type Tx = Lecture & Pick<ClientDeBase, "evenementPresence" | "auditLog" | "$executeRaw">;
 
+/** Children named in a message in the order of the family lists: eldest first, then name. */
+export function duPlusAgeAuPlusJeune(
+  x: { prenom: string; dateNaissance: Date },
+  y: { prenom: string; dateNaissance: Date },
+): number {
+  return (
+    x.dateNaissance.getTime() - y.dateNaissance.getTime() || x.prenom.localeCompare(y.prenom, "fr")
+  );
+}
+
 /** Undoing one's own confirmation without a reason is possible for this long (cahier §7.4). */
 export const DELAI_ANNULATION_SECONDES = 60;
 
@@ -202,13 +212,16 @@ async function confirmer(
   presenceIds: string[],
   mode: "toucher" | "scan",
 ): Promise<ResultatConfirmation> {
-  const confirmes = await tx.$queryRaw<{ id: string; prenom: string }[]>`
-    UPDATE "Presence" p SET statut = 'EN_SALLE', "enSalleLe" = now()
-    FROM "Enfant" e
-    WHERE e.id = p."enfantId" AND p.id = ANY(${presenceIds}::text[])
-      AND p."sessionId" = ${classe.sessionId} AND p."classeId" = ${classe.classeId}
-      AND p.statut = 'PRESENT' AND p."basculeVers" IS NULL
-    RETURNING p.id, e.prenom`;
+  // RETURNING has no guaranteed order: sorted like the family lists, eldest first.
+  const confirmes = (
+    await tx.$queryRaw<{ id: string; prenom: string; dateNaissance: Date }[]>`
+      UPDATE "Presence" p SET statut = 'EN_SALLE', "enSalleLe" = now()
+      FROM "Enfant" e
+      WHERE e.id = p."enfantId" AND p.id = ANY(${presenceIds}::text[])
+        AND p."sessionId" = ${classe.sessionId} AND p."classeId" = ${classe.classeId}
+        AND p.statut = 'PRESENT' AND p."basculeVers" IS NULL
+      RETURNING p.id, e.prenom, e."dateNaissance"`
+  ).sort(duPlusAgeAuPlusJeune);
   for (const { id } of confirmes) {
     await tracer(
       tx,
@@ -228,7 +241,7 @@ async function confirmer(
           SELECT e.prenom FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
           WHERE p.id = ANY(${restants}::text[]) AND p."sessionId" = ${classe.sessionId}
             AND p."classeId" = ${classe.classeId} AND p.statut = 'EN_SALLE'
-          ORDER BY e.prenom`;
+          ORDER BY e."dateNaissance", e.prenom`;
   if (confirmes.length === 0 && dejaEnSalle.length === 0) {
     throw new SalleRefusee(
       "Cet enfant n'est pas attendu dans cette classe. Vérifiez sa classe à l'accueil.",

@@ -7,6 +7,7 @@ import { activerAuPremierScan } from "./cartes/cycle";
 import { MESSAGES_SCAN, resoudreJeton, type VerificationMoniteur } from "./cartes/resolution";
 import { alertesLisibles } from "./checkin";
 import { FORMAT_CODE_RETRAIT } from "./checkin-regles";
+import { duPlusAgeAuPlusJeune } from "./salle";
 import { verrouillerSession } from "./sessions";
 
 /**
@@ -300,7 +301,9 @@ export async function validerCheckout(
     );
   }
 
-  const remis = await tx.$queryRaw<{ id: string; prenom: string; statut: string }[]>`
+  const remis = await tx.$queryRaw<
+    { id: string; prenom: string; dateNaissance: Date; statut: string }[]
+  >`
     WITH avant AS (
       SELECT p.id, p.statut FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
       WHERE p.id = ANY(${presenceIds}::text[]) AND p."sessionId" = ${sessionId}
@@ -312,7 +315,9 @@ export async function validerCheckout(
         "remisPar" = ${auteur.userId}
     FROM avant, "Enfant" e
     WHERE p.id = avant.id AND e.id = p."enfantId"
-    RETURNING p.id, e.prenom, avant.statut::text AS statut`;
+    RETURNING p.id, e.prenom, e."dateNaissance", avant.statut::text AS statut`;
+  // RETURNING has no guaranteed order: sorted like the family lists, eldest first.
+  remis.sort(duPlusAgeAuPlusJeune);
   if (remis.length !== presenceIds.length) {
     throw new CheckoutRefuse(
       "Un enfant coché vient d'être récupéré sur une autre tablette, ou n'est plus dans cette session. Rechargez la famille.",

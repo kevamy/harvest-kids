@@ -310,6 +310,35 @@ describe("confirmation de l'arrivée en salle", () => {
     ).toEqual({ confirmes: [], dejaEnSalle: ["Ayo", "Koffi"] });
   });
 
+  it("nomme les enfants confirmés du plus âgé au plus jeune, quel que soit l'ordre des lignes", async () => {
+    const moniteur = await membre(a, "m1", ["MONITEUR"]);
+    await affecter(a, classeA, moniteur);
+    const { familleId } = await famille(a, "f1", [a.classeId, a.classeId, a.classeId]);
+    await sql(
+      a,
+      `INSERT INTO "CarteFamille" (id, "egliseId", "familleId", "tokenHash", "activeLe")
+       VALUES ('carte_o', $1, $2, $3, now())`,
+      [a.egliseId, familleId, empreinte(jetonCarte("O"))],
+    );
+    // Sèna, inserted second, is the eldest; Koffi, inserted last, comes before Ayo.
+    for (const [i, naissance] of [
+      [0, "2021-05-02"],
+      [1, "2018-01-10"],
+      [2, "2020-07-20"],
+    ] as const) {
+      await sql(a, `UPDATE "Enfant" SET "dateNaissance" = $3 WHERE id = $1 AND "egliseId" = $2`, [
+        `${familleId}_${i}`,
+        a.egliseId,
+        naissance,
+      ]);
+    }
+    expect(
+      await dbA.$tx((tx) =>
+        confirmerParScan(tx, moniteur, aucunMoniteur, classeA, jetonCarte("O")),
+      ),
+    ).toEqual({ confirmes: ["Sèna", "Koffi", "Ayo"], dejaEnSalle: [] });
+  });
+
   it("par scan : une carte enfant confirme cet enfant seul ; un badge et une carte inconnue sont refusés", async () => {
     const moniteur = await membre(a, "m1", ["MONITEUR"]);
     await affecter(a, classeA, moniteur);
