@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { prismaPlateforme } from "./db";
 
 export type Regle = { fenetreMs: number; max: number };
 
@@ -24,6 +25,86 @@ export const REGLES_ACTIVATION = {
   jeton: { fenetreMs: QUINZE_MINUTES, max: 10 },
   ip: GARDE_IP,
 } as const satisfies Record<string, Regle>;
+
+/**
+ * Wrong retrieval codes at check-out (cahier §7.6, ADR 0016): 5 per tablet and per session in
+ * 15 minutes, then the tablet is blocked for the rest of the window and the reception desk
+ * gets an alert. A tablet is a signed-in session; only wrong codes are counted.
+ */
+export const REGLE_CODE_RETRAIT: Regle = { fenetreMs: QUINZE_MINUTES, max: 5 };
+
+const PREFIXE_CODE_RETRAIT = "checkout-code:";
+
+export const cleCodeRetrait = (egliseId: string, sessionId: string, tablette: string) =>
+  `${PREFIXE_CODE_RETRAIT}${egliseId}:${sessionId}:${tablette}`;
+
+/** Read only: whether the counter has reached its maximum in the current window. */
+export async function etatLimite(
+  base: PrismaClient,
+  cle: string,
+  regle: Regle,
+  maintenant: Date,
+): Promise<{ bloque: boolean; essais: number; reessayerDansMs: number }> {
+  const ligne = await base.authRateLimit.findUnique({
+    where: { key: cle },
+    select: { count: true, lastRequest: true },
+  });
+  const fin = ligne ? Number(ligne.lastRequest) + regle.fenetreMs : 0;
+  if (!ligne || fin <= maintenant.getTime()) {
+    return { bloque: false, essais: 0, reessayerDansMs: 0 };
+  }
+  const bloque = ligne.count >= regle.max;
+  return {
+    bloque,
+    essais: ligne.count,
+    reessayerDansMs: bloque ? fin - maintenant.getTime() : 0,
+  };
+}
+
+/** Tablets of the church blocked for wrong retrieval codes now, by session. */
+export async function tablettesBloquees(
+  base: PrismaClient,
+  egliseId: string,
+  maintenant: Date,
+): Promise<{ sessionId: string; reessayerDansMs: number }[]> {
+  const prefixe = `${PREFIXE_CODE_RETRAIT}${egliseId}:`;
+  const lignes = await base.authRateLimit.findMany({
+    where: {
+      key: { startsWith: prefixe },
+      count: { gte: REGLE_CODE_RETRAIT.max },
+      lastRequest: { gt: BigInt(maintenant.getTime() - REGLE_CODE_RETRAIT.fenetreMs) },
+    },
+    select: { key: true, lastRequest: true },
+  });
+  return lignes.map((l) => ({
+    sessionId: l.key.slice(prefixe.length).split(":")[0]!,
+    reessayerDansMs: Number(l.lastRequest) + REGLE_CODE_RETRAIT.fenetreMs - maintenant.getTime(),
+  }));
+}
+
+/** Whether the tablet is blocked for wrong retrieval codes in this session. */
+export function codeRetraitBloque(egliseId: string, sessionId: string, tablette: string) {
+  return etatLimite(
+    prismaPlateforme(),
+    cleCodeRetrait(egliseId, sessionId, tablette),
+    REGLE_CODE_RETRAIT,
+    new Date(),
+  );
+}
+
+/** Counts one wrong retrieval code; says whether the tablet is now blocked. */
+export async function compterCodeErrone(egliseId: string, sessionId: string, tablette: string) {
+  const base = prismaPlateforme();
+  const cle = cleCodeRetrait(egliseId, sessionId, tablette);
+  const maintenant = new Date();
+  await consommer(base, cle, REGLE_CODE_RETRAIT, maintenant);
+  return etatLimite(base, cle, REGLE_CODE_RETRAIT, maintenant);
+}
+
+/** The church's tablets blocked now (alert of the reception dashboard). */
+export function tablettesBloqueesEglise(egliseId: string) {
+  return tablettesBloquees(prismaPlateforme(), egliseId, new Date());
+}
 
 export const essaisConnexion = (identifiant: string, ip: string) =>
   [

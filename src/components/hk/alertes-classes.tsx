@@ -1,6 +1,6 @@
 "use client";
 
-import { DoorOpen, OctagonAlert, TriangleAlert } from "lucide-react";
+import { DoorOpen, OctagonAlert, ShieldAlert, TriangleAlert } from "lucide-react";
 import type { AlertesDirect } from "@/app/api/direct/alertes/route";
 import { useLiveQuery } from "@/lib/live-query";
 import { cn } from "@/lib/utils";
@@ -26,11 +26,32 @@ export function AlertesClasses({
   const alertes = useLiveQuery<AlertesDirect>(["alertes-classes"], "/api/direct/alertes");
   const classes = alertes.data?.classes ?? [];
   const nonArrives = alertes.data?.nonArrives ?? [];
-  if (classes.length === 0 && nonArrives.length === 0) return null;
+  const bloquees = alertes.data?.tablettesBloquees ?? [];
+  if (classes.length === 0 && nonArrives.length === 0 && bloquees.length === 0) return null;
+
+  // Wrong retrieval codes: someone may be trying codes at the desk (cahier §7.6).
+  const tablettes =
+    bloquees.length > 0 ? (
+      <section aria-label="Tablettes bloquées">
+        <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
+          {bloquees.map((t, i) => (
+            <li
+              key={`${t.sessionId}-${i}`}
+              className="flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
+            >
+              <ShieldAlert aria-hidden className="size-5 shrink-0" />
+              Tablette bloquée après 5 codes de retrait erronés (encore {t.minutes} min) : vérifiez
+              qui se présente au retrait.
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
 
   if (compact) {
     return (
       <div className={cn("flex flex-wrap gap-2", className)}>
+        {tablettes}
         {classes.length > 0 ? (
           <section aria-label="Alertes des classes">
             <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
@@ -80,6 +101,7 @@ export function AlertesClasses({
 
   return (
     <div className={cn("grid gap-3", className)}>
+      {tablettes}
       {classes.length > 0 ? (
         <section aria-label="Alertes des classes" className="grid gap-3">
           <ul role="alert" className="m-0 grid list-none gap-3 p-0">
