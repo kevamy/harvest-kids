@@ -3,7 +3,8 @@
  * The scan or the code only reads; validating hands over the ticked children to an authorised
  * person of the family, activates a pending card (first scan), and writes an EvenementPresence
  * and an audit entry per child, in one transaction. Wrong codes are counted per tablet and per
- * session (5 in 15 minutes); time is moved by moving the stored dates back.
+ * session (5 in 15 minutes), and per session on every tablet (20); time is moved by moving the
+ * stored dates back.
  */
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -18,10 +19,15 @@ import {
 } from "@/server/checkout";
 import { detailIncident, listerIncidents } from "@/server/incidents";
 import {
+  REGLE_CODES_SESSION,
   REGLE_CODE_RETRAIT,
   cleCodeRetrait,
+  cleCodesSession,
+  compterCodeErroneDans,
   consommer,
+  etatCodeRetrait,
   etatLimite,
+  sessionsCodesBloques,
   tablettesBloquees,
 } from "@/server/plateforme/limitation";
 import { creerClientPlateforme } from "@/server/plateforme/db";
@@ -653,5 +659,87 @@ describe("codes erronés : 5 par tablette et par session en 15 minutes", () => {
     );
     expect((await etatLimite(base, cle, REGLE_CODE_RETRAIT, maintenant)).bloque).toBe(false);
     expect(await tablettesBloquees(base, a.egliseId, maintenant)).toEqual([]);
+  });
+});
+
+describe("codes erronés : 20 par session de culte, toutes tablettes et connexions confondues", () => {
+  it("5 erreurs, déconnexion, reconnexion : le compteur de la session continue jusqu'au blocage de toutes les tablettes et à l'alerte", async () => {
+    const maintenant = new Date();
+    const erreur = (connexion: string) =>
+      compterCodeErroneDans(base, a.egliseId, a.sessionId, connexion, maintenant);
+
+    // First sign-in: 5 wrong codes block this tablet only.
+    for (let i = 1; i < REGLE_CODE_RETRAIT.max; i++) {
+      expect(await erreur("connexion_1")).toMatchObject({
+        bloque: false,
+        essais: i,
+        essaisSession: i,
+        restants: REGLE_CODE_RETRAIT.max - i,
+        prochainBlocage: "tablette",
+      });
+    }
+    expect(await erreur("connexion_1")).toMatchObject({ bloque: "tablette", essaisSession: 5 });
+    expect(await sessionsCodesBloques(base, a.egliseId, maintenant)).toEqual([]);
+
+    // Signed out and in again: a new tablet counter, but the session one goes on.
+    expect(await etatCodeRetrait(base, a.egliseId, a.sessionId, "connexion_2", maintenant)).toEqual(
+      {
+        bloque: false,
+        reessayerDansMs: 0,
+        essais: 0,
+        essaisSession: 5,
+        restants: 5,
+        prochainBlocage: "tablette",
+      },
+    );
+    for (const connexion of ["connexion_2", "connexion_3"]) {
+      for (let i = 0; i < REGLE_CODE_RETRAIT.max; i++) await erreur(connexion);
+    }
+    // 15 wrong codes; on a fourth sign-in, both blocks are as near, and the session one is
+    // the one announced.
+    for (let i = 1; i < REGLE_CODE_RETRAIT.max; i++) {
+      expect(await erreur("connexion_4")).toMatchObject({
+        bloque: false,
+        essais: i,
+        essaisSession: 15 + i,
+        restants: REGLE_CODES_SESSION.max - 15 - i,
+        prochainBlocage: "session",
+      });
+    }
+    expect(await erreur("connexion_4")).toMatchObject({
+      bloque: "session",
+      essaisSession: REGLE_CODES_SESSION.max,
+      restants: 0,
+    });
+
+    // A fresh sign-in, or another tablet: code entry stays blocked for the whole session.
+    expect(
+      await etatCodeRetrait(base, a.egliseId, a.sessionId, "connexion_5", maintenant),
+    ).toMatchObject({ bloque: "session", essais: 0 });
+    // The reception desk of A gets the alert; B's does not, nor another session of A.
+    expect(await sessionsCodesBloques(base, a.egliseId, maintenant)).toEqual([a.sessionId]);
+    expect(await sessionsCodesBloques(base, b.egliseId, maintenant)).toEqual([]);
+    expect(
+      (await etatCodeRetrait(base, a.egliseId, "autre_session", "connexion_5", maintenant)).bloque,
+    ).toBe(false);
+    expect(
+      (await etatCodeRetrait(base, b.egliseId, b.sessionId, "connexion_5", maintenant)).bloque,
+    ).toBe(false);
+
+    // The window covers the session whole: still blocked 15 minutes later, free a day later.
+    const reculer = (ms: number) =>
+      proprietaire.query(
+        `UPDATE "AuthRateLimit" SET "lastRequest" = "lastRequest" - $2 WHERE key = $1`,
+        [cleCodesSession(a.egliseId, a.sessionId), ms],
+      );
+    await reculer(REGLE_CODE_RETRAIT.fenetreMs);
+    expect(
+      (await etatCodeRetrait(base, a.egliseId, a.sessionId, "connexion_5", maintenant)).bloque,
+    ).toBe("session");
+    await reculer(REGLE_CODES_SESSION.fenetreMs);
+    expect(
+      (await etatCodeRetrait(base, a.egliseId, a.sessionId, "connexion_5", maintenant)).bloque,
+    ).toBe(false);
+    expect(await sessionsCodesBloques(base, a.egliseId, maintenant)).toEqual([]);
   });
 });

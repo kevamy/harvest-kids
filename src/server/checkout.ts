@@ -571,17 +571,20 @@ export async function retraitExceptionnel(
   return { enfants: presences.map((p) => p.prenom), nom, incidentId: incident.id };
 }
 
-/** A wrong code, audited (the count only, never the code typed). */
+/**
+ * A wrong code, audited (the counts only, never the code typed): on this tablet, and in the
+ * session on every tablet.
+ */
 export async function journaliserCodeErrone(
   tx: Pick<ClientDeBase, "auditLog">,
   auteur: Auteur,
   sessionId: string,
-  essais: number,
+  { essais, essaisSession }: { essais: number; essaisSession: number },
 ) {
   await journaliser(tx, auteur, {
     action: "checkout.code_errone",
     entite: "Session",
     entiteId: sessionId,
-    apres: { essais },
+    apres: { essais, essaisSession },
   });
 }

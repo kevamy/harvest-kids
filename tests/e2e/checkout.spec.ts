@@ -298,3 +298,73 @@ test("check-out refusé : un code erroné est compté, un adulte non reconnu blo
   );
   expect(rows[0]).toEqual({ recuperes: 0, erreurs: 1 });
 });
+
+test("codes erronés : la reconnexion ne remet pas à zéro le compteur de la session, bloqué à 20 avec l'alerte de l'accueil", async ({
+  page,
+  eglise,
+}) => {
+  test.slow(); // 20 codes and 5 sign-ins.
+  await familleAuCulte(eglise, "Trois", "QRST");
+  const errone =
+    "Ce code ne correspond à aucune famille de cette session : vérifiez-le avec le parent, ou scannez sa carte.";
+  const blocageSession =
+    "Trop de codes erronés pendant cette session, toutes tablettes confondues : la saisie des codes est bloquée jusqu'à la fin de la session. Scannez la carte du parent, ou appelez le responsable.";
+  const essais = (n: number) => `Encore ${n} essai${n > 1 ? "s" : ""}`;
+
+  // Four sign-ins of 5 wrong codes each: each one blocks its tablet; signing out and in
+  // again gives a new tablet, while the session counter goes on to 20.
+  for (let connexion = 1; connexion <= 4; connexion++) {
+    const { panneau, scan } = await ouvrirCheckout(page, eglise);
+    const refus = panneau.getByRole("alert");
+    for (let erreur = 1; erreur <= 5; erreur++) {
+      await scan.fill("ZZZZ");
+      await scan.press("Enter");
+      const restants = 5 - erreur;
+      if (erreur < 5) {
+        await expect(refus).toHaveText(
+          connexion < 4
+            ? `${errone} ${essais(restants)} avant le blocage de la tablette.`
+            : `${errone} ${essais(restants)} avant le blocage des codes sur toutes les tablettes.`,
+        );
+      } else if (connexion < 4) {
+        await expect(refus).toHaveText(
+          /^Trop de codes erronés sur cette tablette : la saisie d'un code reprend dans 15 min\./,
+        );
+      } else {
+        await expect(refus).toHaveText(blocageSession);
+      }
+    }
+    if (connexion < 4) {
+      await page.getByRole("banner").getByRole("button", { name: "Se déconnecter" }).click();
+      await expect(page).toHaveURL(/\/connexion$/);
+    }
+  }
+
+  // The reception desk's alert, on the board of every tablet.
+  const alerteSession = page
+    .getByRole("region", { name: "Codes de retrait bloqués" })
+    .getByRole("listitem")
+    .filter({ hasText: "toutes les tablettes" });
+  await expect(alerteSession).toHaveText(
+    "Codes de retrait bloqués sur toutes les tablettes jusqu'à la fin de la session, après 20 codes erronés : scannez les cartes et vérifiez qui se présente au retrait.",
+  );
+
+  // A fifth sign-in: even the right code is refused before it is checked.
+  await page.getByRole("banner").getByRole("button", { name: "Se déconnecter" }).click();
+  await expect(page).toHaveURL(/\/connexion$/);
+  const { panneau, scan } = await ouvrirCheckout(page, eglise);
+  await scan.fill("QRST");
+  await scan.press("Enter");
+  await expect(panneau.getByRole("alert")).toHaveText(blocageSession);
+  await expect(panneau.getByRole("region", { name: "Retrait de la famille Trois" })).toHaveCount(0);
+
+  const { rows } = await eglise.dansEglise((c) =>
+    c.query(
+      `SELECT count(*)::int AS erreurs,
+              max(("apres"->>'essaisSession')::int) AS "essaisSession"
+         FROM "AuditLog" WHERE "egliseId" = $1 AND action = 'checkout.code_errone'`,
+      [eglise.id],
+    ),
+  );
+  expect(rows[0]).toEqual({ erreurs: 20, essaisSession: 20 });
+});

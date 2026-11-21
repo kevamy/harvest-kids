@@ -27,13 +27,32 @@ export function AlertesClasses({
   const classes = alertes.data?.classes ?? [];
   const nonArrives = alertes.data?.nonArrives ?? [];
   const bloquees = alertes.data?.tablettesBloquees ?? [];
-  if (classes.length === 0 && nonArrives.length === 0 && bloquees.length === 0) return null;
+  const sessionsBloquees = alertes.data?.sessionsCodesBloques ?? [];
+  if (
+    classes.length === 0 &&
+    nonArrives.length === 0 &&
+    bloquees.length === 0 &&
+    sessionsBloquees.length === 0
+  ) {
+    return null;
+  }
 
-  // Wrong retrieval codes: someone may be trying codes at the desk (cahier §7.6).
+  // Wrong retrieval codes: someone may be trying codes at the desk (cahier §7.6, ADR 0016).
   const tablettes =
-    bloquees.length > 0 ? (
-      <section aria-label="Tablettes bloquées">
+    bloquees.length > 0 || sessionsBloquees.length > 0 ? (
+      <section aria-label="Codes de retrait bloqués">
         <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
+          {sessionsBloquees.map((s) => (
+            <li
+              key={s.sessionId}
+              className="flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
+            >
+              <ShieldAlert aria-hidden className="size-5 shrink-0" />
+              Codes de retrait bloqués sur toutes les tablettes jusqu&apos;à la fin de la session
+              {s.culte ? ` (${s.culte})` : ""}, après 20 codes erronés : scannez les cartes et
+              vérifiez qui se présente au retrait.
+            </li>
+          ))}
           {bloquees.map((t, i) => (
             <li
               key={`${t.sessionId}-${i}`}
