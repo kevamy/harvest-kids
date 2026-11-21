@@ -2,14 +2,24 @@
 
 Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque lot se termine par une démonstration sur l'environnement Vercel et une validation avant le suivant.
 
-| Lot                              | État                                                                            | Branche et pull request                 |
-| -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
-| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
-| 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                   | PR n°4 à n°7 ; `lot-1-matricules-liste` |
-| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 3 fusionnées le 2026-11-14, étapes 4 à 6 à faire      | PR n°9 ; `lot-2-suite`, PR n°10         |
-| 3. Infirmerie, appels, urgence   | à faire                                                                         | —                                       |
-| 4. Transition et pilotage        | à faire                                                                         | —                                       |
-| 5. Robustesse et borne           | à faire                                                                         | —                                       |
+| Lot                              | État                                                                                                           | Branche et pull request                 |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30                                | `lot-0`, PR n°1 ; correctif PR n°2      |
+| 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                                                  | PR n°4 à n°7 ; `lot-1-matricules-liste` |
+| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 3 fusionnées le 2026-11-14 ; étapes 4 et 5 validées le 2026-11-21 ; étape 6 en cours | PR n°9 et n°10 ; `lot-2-suite`, PR n°11 |
+| 3. Infirmerie, appels, urgence   | à faire                                                                                                        | —                                       |
+| 4. Transition et pilotage        | à faire                                                                                                        | —                                       |
+| 5. Robustesse et borne           | à faire                                                                                                        | —                                       |
+
+## Décisions et questions ouvertes
+
+À relire au début de chaque session. Chaque validation d'étape, décision ou vérification demandée par l'utilisateur y est notée dès qu'elle est donnée, avec sa date.
+
+- **2026-11-21** — Vérification demandée : aucun écart de schéma après la migration `tableaux_non_nuls`. **Faite par l'utilisateur** (`prisma migrate diff`, aucun écart).
+- **2026-11-21** — **Étape 5 du lot 2 validée** (check-out à l'accueil, cas exceptionnels, check-out en salle).
+- **2026-11-21** — Question ouverte, à traiter en premier dans l'étape 6 : la revue du schéma prévoyait, en plus des 5 codes erronés par tablette, une **limite globale de 20 codes erronés par session de culte**, toutes tablettes et sessions de connexion confondues, avec une alerte au tableau de l'accueil. Elle n'existe pas (l'ADR 0016 dit seulement qu'une reconnexion remet le compteur de la tablette à zéro) : à ajouter, avec un test (5 erreurs, déconnexion, reconnexion, nouvelles erreurs jusqu'à la limite globale et l'alerte), puis corriger l'ADR 0016.
+- **2026-11-21** — Règle de suivi : toute validation, décision ou vérification demandée est notée immédiatement dans cette section.
+- **2026-11-21** — Étape 6 demandée : pousser `0d21560`, corriger le tableau d'avancement, seed de démonstration du lot 2, ADR manquants, fusion de la PR n°11 une fois la CI verte, vérification de « Migrations Neon », puis liste de démonstration sur https://harvest-kids.vercel.app.
 
 ## Lot 0 — Fondations
 
@@ -102,8 +112,8 @@ Plan validé le 2026-11-06. Étapes 1 à 3 validées et fusionnées le 2026-11-1
    - **Paysage** : la famille ne tenait pas à l'écran, car `NotchCard` réservait la place de l'encoche (environ 70 px) sur tout le contenu enveloppé. Désormais, seul le titre (titre `h1` à `h6` ou `<header>`, jusqu'à deux niveaux sous la carte) laisse cette place ; une carte sans titre la laisse à son premier élément. La règle est reprise parmi les utilitaires : un `m-0` sur le titre l'annulait. En paysage, le scan prend 1/3 de la largeur et la famille 2/3 ; les onglets partagent une ligne avec le bandeau d'alertes.
    - **Portrait** : les décomptes SQL du test ne filtraient pas sur l'église du test. La connexion propriétaire des tests est soumise à la RLS forcée, sauf en lecture sur `CarteFamille` et `BadgeMoniteur` (politique `rg14_lecture_proprietaire`, RG-14) : le décompte des cartes actives voyait toutes les églises. Même correction dans `cartes.spec.ts` ; règle ajoutée à `CLAUDE.md`.
    - CI verte sur `bf65100` (lint, types, unitaires, intégration, e2e, image Docker). Check-in mesuré du scan à la confirmation : 368 ms en paysage, 288 ms en portrait (artefact `captures-e2e`, fichiers `mesure-checkin.txt`).
-4. [ ] Vue moniteur `/classe/[id]`.
-5. [ ] Check-out.
+4. [x] Vue moniteur `/classe/[id]`, confirmation en salle (`cec4ac2`, `8d2daf3`, `a727c08`).
+5. [x] Check-out : 5a à l'accueil, 5b cas exceptionnels, 5c en salle (`f48be1e` à `bf5b99a`) ; validée le 2026-11-21.
 6. [ ] Finition : seed, ADR, démonstration.
 
 Tests d'intégration (2026-11-14, `59e3812`) : 75 requêtes SQL brutes sur une table d'église reprises : filtrées sur l'église du test, sauf les preuves d'isolation, laissées sans filtre et commentées ; décomptes par `compterDansEglise`, ou `compterToutesEglises` pour les preuves d'isolation. Suite complète pas encore relancée en local (Docker Desktop arrêté) ; la CI de la PR n°10 la fait tourner.
@@ -112,8 +122,8 @@ Corrections validées, pas encore appliquées : aucune.
 
 PR n°10 (tests d'intégration) fusionnée le 2026-11-14 (`392d838`). Étapes 4 à 6 sur `lot-2-suite`, PR n°11.
 
-Étape 4 (vue moniteur, confirmation en salle, annulation ; cahier 1.5, ADR 0015) commitée le 2026-11-14 (`cec4ac2`). L'e2e a révélé une liste de classe qui plantait sur un enfant aux `alertes` NULL : corrigé à la cause le 2026-11-15 (`8d2daf3`) par la migration `tableaux_non_nuls` (`Enfant.alertes` et `Membre.roles` NOT NULL DEFAULT '{}', reprise des NULL église par église, garde-fou), le `COALESCE` gardé dans les lectures brutes de tableaux, un test de migration et un test du refus de NULL ; puis le décompte du test e2e corrigé (`a727c08`). CI de la PR n°11 verte sur `a727c08`. À vérifier quand Docker tourne en local : `prisma migrate dev` ne doit proposer aucune nouvelle migration (Prisma n'écrit pas NOT NULL sur une liste).
+Étape 4 (vue moniteur, confirmation en salle, annulation ; cahier 1.5, ADR 0015) commitée le 2026-11-14 (`cec4ac2`). L'e2e a révélé une liste de classe qui plantait sur un enfant aux `alertes` NULL : corrigé à la cause le 2026-11-15 (`8d2daf3`) par la migration `tableaux_non_nuls` (`Enfant.alertes` et `Membre.roles` NOT NULL DEFAULT '{}', reprise des NULL église par église, garde-fou), le `COALESCE` gardé dans les lectures brutes de tableaux, un test de migration et un test du refus de NULL ; puis le décompte du test e2e corrigé (`a727c08`). CI de la PR n°11 verte sur `a727c08`. Vérifié par l'utilisateur le 2026-11-21 : `prisma migrate diff` ne montre aucun écart après `tableaux_non_nuls`.
 
-Étape 5a commitée le 2026-11-15 (`f48be1e`), avec le correctif de l'ordre des prénoms dans les messages de retrait et d'arrivée (`cc8bc6b`, du plus âgé au plus jeune, validé par l'utilisateur) ; CI de la PR n°11 verte sur `cc8bc6b`. Étape 5b validée par l'utilisateur le 2026-11-15 (second membre, photo caméra seule avec consigne, photo visible dans le seul détail de l'incident pour RESPONSABLE et ADMIN, cahier 1.6). 5b-1 (ni carte ni code, `560284d`) : CI verte, intégration complète passée en local (308 tests). 5b-2 (retrait exceptionnel, incidents, `d5a08d5`) : lint, types, unitaires et intégration complète passés en local (311 tests, relancée après fermeture des navigateurs : un premier passage avait été arrêté par manque de mémoire). CI de la PR n°11 verte sur `d5a08d5`. Étape 5c (check-out en salle) : décisions de l'utilisateur du 2026-11-15 (seuls les enfants de la classe, cas exceptionnels renvoyés à l'accueil, membres affectés avec la même limite de codes) ; commitée (`bf5b99a`), intégration complète passée en local (313 tests), CI de la PR n°11 verte. Étape 5 complète, en attente de la validation de l'utilisateur. Reste l'étape 6 (finition : seed, démonstration).
+Étape 5a commitée le 2026-11-15 (`f48be1e`), avec le correctif de l'ordre des prénoms dans les messages de retrait et d'arrivée (`cc8bc6b`, du plus âgé au plus jeune, validé par l'utilisateur) ; CI de la PR n°11 verte sur `cc8bc6b`. Étape 5b validée par l'utilisateur le 2026-11-15 (second membre, photo caméra seule avec consigne, photo visible dans le seul détail de l'incident pour RESPONSABLE et ADMIN, cahier 1.6). 5b-1 (ni carte ni code, `560284d`) : CI verte, intégration complète passée en local (308 tests). 5b-2 (retrait exceptionnel, incidents, `d5a08d5`) : lint, types, unitaires et intégration complète passés en local (311 tests, relancée après fermeture des navigateurs : un premier passage avait été arrêté par manque de mémoire). CI de la PR n°11 verte sur `d5a08d5`. Étape 5c (check-out en salle) : décisions de l'utilisateur du 2026-11-15 (seuls les enfants de la classe, cas exceptionnels renvoyés à l'accueil, membres affectés avec la même limite de codes) ; commitée (`bf5b99a`), intégration complète passée en local (313 tests), CI de la PR n°11 verte. Étape 5 complète, validée par l'utilisateur le 2026-11-21. Reste l'étape 6 (finition : seed, démonstration).
 
 Étape 5, découpée en trois commits : **5a** check-out à l'accueil (onglet Check-out, scan ou code dans un même champ, enfants avec statut et lieu, photo de la personne qui récupère, codes erronés limités à 5 par tablette et par session, ADR 0016) ; **5b** cas exceptionnels (adulte non reconnu autorisé par le responsable avec son PIN, photo et incident ; ni carte ni code avec un second membre) ; **5c** check-out en salle si `checkout.lieu` le permet.
