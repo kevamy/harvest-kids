@@ -1,12 +1,18 @@
 "use client";
 
-import { OctagonAlert, TriangleAlert } from "lucide-react";
+import { DoorOpen, OctagonAlert, ShieldAlert, TriangleAlert } from "lucide-react";
+import type { AlertesDirect } from "@/app/api/direct/alertes/route";
 import { useLiveQuery } from "@/lib/live-query";
-import type { AlerteClasse } from "@/server/moniteurs-session";
+import { cn } from "@/lib/utils";
+import type { AlerteNonArrive } from "@/server/salle";
+
+const enAttente = (a: AlerteNonArrive) =>
+  `${a.prenom} (${a.matricule}) pas encore en salle · ${a.classe} · depuis ${a.minutes} min`;
 
 /**
- * Live class alerts (cahier §7.2.5): a class with no monitor left gets the highest alert,
- * a class under its minimum a red one. Nothing is shown when every class is staffed.
+ * Live alerts (cahier §7.2.5, §7.4): a class with no monitor left gets the highest alert, a
+ * class under its minimum a red one; a child still not in class after the church's delay is
+ * named, with its class. Nothing is shown when there is no alert.
  * Compact: one band of pills, next to the reception desk's tabs.
  */
 export function AlertesClasses({
@@ -17,61 +23,144 @@ export function AlertesClasses({
   /** Placement of the compact band in its row. */
   className?: string;
 }) {
-  const alertes = useLiveQuery<AlerteClasse[]>(["alertes-classes"], "/api/direct/alertes");
-  if (!alertes.data || alertes.data.length === 0) return null;
-  if (compact) {
-    return (
-      <section aria-label="Alertes des classes" className={className}>
+  const alertes = useLiveQuery<AlertesDirect>(["alertes-classes"], "/api/direct/alertes");
+  const classes = alertes.data?.classes ?? [];
+  const nonArrives = alertes.data?.nonArrives ?? [];
+  const bloquees = alertes.data?.tablettesBloquees ?? [];
+  const sessionsBloquees = alertes.data?.sessionsCodesBloques ?? [];
+  if (
+    classes.length === 0 &&
+    nonArrives.length === 0 &&
+    bloquees.length === 0 &&
+    sessionsBloquees.length === 0
+  ) {
+    return null;
+  }
+
+  // Wrong retrieval codes: someone may be trying codes at the desk (cahier §7.6, ADR 0016).
+  const tablettes =
+    bloquees.length > 0 || sessionsBloquees.length > 0 ? (
+      <section aria-label="Codes de retrait bloqués">
         <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
-          {alertes.data.map((a) => (
+          {sessionsBloquees.map((s) => (
             <li
-              key={`${a.sessionId}-${a.classe}`}
-              className={
-                a.niveau === "sans_moniteur"
-                  ? "flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
-                  : "flex items-center gap-2 rounded-pill bg-rose-voile px-4 py-2 font-bold text-alerte"
-              }
+              key={s.sessionId}
+              className="flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
             >
-              {a.niveau === "sans_moniteur" ? (
-                <>
-                  <OctagonAlert aria-hidden className="size-5 shrink-0" />
-                  Aucun moniteur dans {a.classe}
-                </>
-              ) : (
-                <>
-                  <TriangleAlert aria-hidden className="size-5 shrink-0" />
-                  {a.classe} : {a.moniteurs}/{a.minMoniteurs} moniteurs
-                </>
-              )}
+              <ShieldAlert aria-hidden className="size-5 shrink-0" />
+              Codes de retrait bloqués sur toutes les tablettes jusqu&apos;à la fin de la session
+              {s.culte ? ` (${s.culte})` : ""}, après 20 codes erronés : scannez les cartes et
+              vérifiez qui se présente au retrait.
+            </li>
+          ))}
+          {bloquees.map((t, i) => (
+            <li
+              key={`${t.sessionId}-${i}`}
+              className="flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
+            >
+              <ShieldAlert aria-hidden className="size-5 shrink-0" />
+              Tablette bloquée après 5 codes de retrait erronés (encore {t.minutes} min) : vérifiez
+              qui se présente au retrait.
             </li>
           ))}
         </ul>
       </section>
+    ) : null;
+
+  if (compact) {
+    return (
+      <div className={cn("flex flex-wrap gap-2", className)}>
+        {tablettes}
+        {classes.length > 0 ? (
+          <section aria-label="Alertes des classes">
+            <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
+              {classes.map((a) => (
+                <li
+                  key={`${a.sessionId}-${a.classe}`}
+                  className={
+                    a.niveau === "sans_moniteur"
+                      ? "flex items-center gap-2 rounded-pill bg-alerte px-4 py-2 font-bold text-blanc"
+                      : "flex items-center gap-2 rounded-pill bg-rose-voile px-4 py-2 font-bold text-alerte"
+                  }
+                >
+                  {a.niveau === "sans_moniteur" ? (
+                    <>
+                      <OctagonAlert aria-hidden className="size-5 shrink-0" />
+                      Aucun moniteur dans {a.classe}
+                    </>
+                  ) : (
+                    <>
+                      <TriangleAlert aria-hidden className="size-5 shrink-0" />
+                      {a.classe} : {a.moniteurs}/{a.minMoniteurs} moniteurs
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {nonArrives.length > 0 ? (
+          <section aria-label="Enfants pas encore en salle">
+            <ul role="alert" className="m-0 flex list-none flex-wrap gap-2 p-0">
+              {nonArrives.map((a) => (
+                <li
+                  key={a.presenceId}
+                  className="flex items-center gap-2 rounded-pill bg-soleil px-4 py-2 font-bold text-nuit"
+                >
+                  <DoorOpen aria-hidden className="size-5 shrink-0" />
+                  {enAttente(a)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </div>
     );
   }
+
   return (
-    <section aria-label="Alertes des classes" className="grid gap-3">
-      <ul role="alert" className="m-0 grid list-none gap-3 p-0">
-        {alertes.data.map((a) =>
-          a.niveau === "sans_moniteur" ? (
-            <li
-              key={`${a.sessionId}-${a.classe}`}
-              className="flex items-center gap-3 rounded-md bg-alerte px-5 py-4 font-display text-h3 font-semibold text-blanc"
-            >
-              <OctagonAlert aria-hidden className="size-7 shrink-0" />
-              Aucun moniteur dans {a.classe}
-            </li>
-          ) : (
-            <li
-              key={`${a.sessionId}-${a.classe}`}
-              className="flex items-center gap-3 rounded-md bg-rose-voile px-5 py-3 font-bold text-alerte"
-            >
-              <TriangleAlert aria-hidden className="size-6 shrink-0" />
-              {a.classe} : {a.moniteurs}/{a.minMoniteurs} moniteurs
-            </li>
-          ),
-        )}
-      </ul>
-    </section>
+    <div className={cn("grid gap-3", className)}>
+      {tablettes}
+      {classes.length > 0 ? (
+        <section aria-label="Alertes des classes" className="grid gap-3">
+          <ul role="alert" className="m-0 grid list-none gap-3 p-0">
+            {classes.map((a) =>
+              a.niveau === "sans_moniteur" ? (
+                <li
+                  key={`${a.sessionId}-${a.classe}`}
+                  className="flex items-center gap-3 rounded-md bg-alerte px-5 py-4 font-display text-h3 font-semibold text-blanc"
+                >
+                  <OctagonAlert aria-hidden className="size-7 shrink-0" />
+                  Aucun moniteur dans {a.classe}
+                </li>
+              ) : (
+                <li
+                  key={`${a.sessionId}-${a.classe}`}
+                  className="flex items-center gap-3 rounded-md bg-rose-voile px-5 py-3 font-bold text-alerte"
+                >
+                  <TriangleAlert aria-hidden className="size-6 shrink-0" />
+                  {a.classe} : {a.moniteurs}/{a.minMoniteurs} moniteurs
+                </li>
+              ),
+            )}
+          </ul>
+        </section>
+      ) : null}
+      {nonArrives.length > 0 ? (
+        <section aria-label="Enfants pas encore en salle" className="grid gap-3">
+          <ul role="alert" className="m-0 grid list-none gap-3 p-0">
+            {nonArrives.map((a) => (
+              <li
+                key={a.presenceId}
+                className="flex items-center gap-3 rounded-md bg-soleil px-5 py-3 font-bold text-nuit"
+              >
+                <DoorOpen aria-hidden className="size-6 shrink-0" />
+                {enAttente(a)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
   );
 }

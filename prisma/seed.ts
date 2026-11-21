@@ -12,6 +12,7 @@ import { cleFichier } from "../src/lib/fichiers";
 import { stockage, type Stockage } from "../src/lib/storage";
 import { type DansEglise, reparerTelephonesDemo, semerFamilles } from "./seed-familles";
 import { autorisationSeed } from "./seed-garde";
+import { semerCultesDemo, semerHistorique, semerLieuRetrait } from "./seed-sessions";
 
 try {
   process.loadEnvFile();
@@ -24,16 +25,35 @@ export const PIN_DEMO = "482913";
 const DOMAINE = "demo.harvest-kids.test";
 
 export const EGLISES_DEMO = [
-  { cle: "cotonou", nom: "Église de démonstration Cotonou", slug: "demo-cotonou" },
-  { cle: "porto-novo", nom: "Église de démonstration Porto-Novo", slug: "demo-porto-novo" },
+  {
+    cle: "cotonou",
+    nom: "Église de démonstration Cotonou",
+    slug: "demo-cotonou",
+    lieuRetrait: "ACCUEIL",
+  },
+  {
+    cle: "porto-novo",
+    nom: "Église de démonstration Porto-Novo",
+    slug: "demo-porto-novo",
+    // Both check-out places are shown without changing a setting (cahier §7.6).
+    lieuRetrait: "ACCUEIL_ET_CLASSES",
+  },
 ] as const;
 
+/**
+ * One account per role, and four more monitors (lot 2): with the monitor of both churches,
+ * three classes open at their two monitors (RG-05), the fourth shows a forced opening.
+ */
 const ROLES_DEMO: { role: Role; libelle: string }[] = [
   { role: "ADMIN", libelle: "admin" },
   { role: "RESPONSABLE", libelle: "responsable" },
   { role: "ACCUEIL", libelle: "accueil" },
   { role: "MONITEUR", libelle: "moniteur" },
   { role: "INFIRMERIE", libelle: "infirmerie" },
+  { role: "MONITEUR", libelle: "moniteur2" },
+  { role: "MONITEUR", libelle: "moniteur3" },
+  { role: "MONITEUR", libelle: "moniteur4" },
+  { role: "MONITEUR", libelle: "moniteur5" },
 ];
 
 export function emailDemo(libelle: string, cleEglise: string) {
@@ -77,8 +97,10 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
     ids[eglise.cle] = egliseId;
     const ville = eglise.cle === "cotonou" ? "Cotonou" : "Porto-Novo";
     for (const [i, { role, libelle }] of ROLES_DEMO.entries()) {
+      // "moniteur2" is shown as "Moniteur 2 Cotonou".
+      const nom = `${libelle[0]!.toUpperCase()}${libelle.slice(1)}`.replace(/(\d)$/, " $1");
       const compte = await compteDemo(base, {
-        nom: `${libelle[0]!.toUpperCase()}${libelle.slice(1)} ${ville}`,
+        nom: `${nom} ${ville}`,
         email: emailDemo(libelle, eglise.cle),
         // Fictitious numbers, for phone sign-in.
         telephone: `+22901970${eglise.cle === "cotonou" ? "1" : "2"}00${i}0`,
@@ -123,15 +145,45 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
 
   let familles = 0;
   let telephonesRepares = 0;
+  let cultesCrees = 0;
+  let historiques = 0;
   for (const [i, eglise] of EGLISES_DEMO.entries()) {
     const egliseId = ids[eglise.cle]!;
     const dansEglise: DansEglise = (fn) => withEglise(base, egliseId, fn);
     familles += await semerFamilles(dansEglise, egliseId, 1000 + i * 97, stockage);
     // Demonstration churches only: data seeded before the ten-digit numbers.
     telephonesRepares += await reparerTelephonesDemo(dansEglise);
+
+    // Lot 2: a session on any day, where children are handed back, last Sunday's history.
+    cultesCrees += await semerCultesDemo(dansEglise, egliseId);
+    await semerLieuRetrait(dansEglise, egliseId, eglise.lieuRetrait);
+    const membres = await base.membre.findMany({
+      where: { egliseId, actif: true },
+      select: { id: true, userId: true, roles: true, user: { select: { email: true } } },
+    });
+    const parEmail = (libelle: string) =>
+      membres.find((m) => m.user.email === emailDemo(libelle, eglise.cle))?.userId;
+    const accueil = parEmail("accueil");
+    const responsable = parEmail("responsable");
+    const moniteurs = membres
+      .filter((m) => m.roles.includes("MONITEUR"))
+      .sort((x, y) => x.user.email.localeCompare(y.user.email))
+      .map((m) => ({ userId: m.userId, membreId: m.id }));
+    if (accueil && responsable) {
+      historiques += Number(
+        await semerHistorique(dansEglise, egliseId, { accueil, responsable, moniteurs }, stockage),
+      );
+    }
   }
 
-  return { eglises: Object.keys(ids).length, comptesCrees, familles, telephonesRepares };
+  return {
+    eglises: Object.keys(ids).length,
+    comptesCrees,
+    familles,
+    telephonesRepares,
+    cultesCrees,
+    historiques,
+  };
 }
 
 async function main() {
@@ -143,7 +195,7 @@ async function main() {
     const resultat = await seed(base, stockage());
     // Counts only: no personal data in logs.
     console.log(
-      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés, ${resultat.telephonesRepares} numéros de tuteur réparés.`,
+      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés, ${resultat.telephonesRepares} numéros de tuteur réparés, ${resultat.cultesCrees} cultes de démonstration et ${resultat.historiques} sessions passées ajoutés.`,
     );
   } finally {
     await base.$disconnect();

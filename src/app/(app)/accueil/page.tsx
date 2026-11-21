@@ -1,37 +1,43 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AlertesClasses } from "@/components/hk/alertes-classes";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Pastille } from "@/components/hk/status-pill";
-import { Button } from "@/components/ui/button";
 import { peut } from "@/lib/rbac";
 import { LIBELLES_ROLES } from "@/lib/roles";
 import { getSessionCourante } from "@/lib/session";
 import { getTenantDb } from "@/lib/tenant";
+import { affectationActive } from "@/server/moniteurs-session";
+import { classeDeSession } from "@/server/salle";
 import { listerSessionsDuJour } from "@/server/sessions";
-import { Checkin } from "./checkin";
+import { PosteAccueil } from "./poste";
 
 export const metadata: Metadata = { title: "Accueil — Harvest Kids" };
 
 const heure = (h: string) => h.replace(":", " h ");
 
 /**
- * Home of a church member. For the reception team, the desk comes first: its tabs, the class
- * alerts in a compact band (on the tabs' line in landscape), then the check-in (cahier §7.3),
- * whose tab has the check-out next to it (lot 2, step 5). The full live dashboard comes with
- * lot 4.
+ * Home of a church member. For the reception team, the desk comes first: the check-in and
+ * check-out tabs (cahier §7.3, §7.6), each with its right, and the alerts in a compact band
+ * (on the tabs' line in landscape). The full live dashboard comes with lot 4.
  */
 export default async function Accueil() {
   const [session, { db, contexte }] = await Promise.all([getSessionCourante(), getTenantDb()]);
+  // A member assigned to a class (monitor or reinforcement, whatever the role) reaches its list.
+  const affectation = await affectationActive(db, contexte.membreId);
+  const maClasse = affectation ? await classeDeSession(db, affectation.sessionClasseId) : null;
   const checkin = peut(contexte.roles, "checkin");
+  const checkout = peut(contexte.roles, "checkout");
   const alertes = peut(contexte.roles, "tableau.direct");
-  const sessions = checkin
-    ? (await listerSessionsDuJour(db))
-        .filter((s) => s.statut === "OUVERTE")
-        .map((s) => ({
-          id: s.id,
-          libelle: `${s.culte ?? "Session"} · ${heure(s.heureDebut)} – ${heure(s.heureFin)}`,
-        }))
-    : [];
+  const sessions =
+    checkin || checkout
+      ? (await listerSessionsDuJour(db))
+          .filter((s) => s.statut === "OUVERTE")
+          .map((s) => ({
+            id: s.id,
+            libelle: `${s.culte ?? "Session"} · ${heure(s.heureDebut)} – ${heure(s.heureFin)}`,
+          }))
+      : [];
 
   const accueil = (
     <NotchCard couleur="blanc">
@@ -44,10 +50,17 @@ export default async function Accueil() {
           </li>
         ))}
       </ul>
+      {maClasse ? (
+        <p className="mt-4 mb-0">
+          <Link href={`/classe/${maClasse.sessionClasseId}`} className="font-bold">
+            Ouvrir la liste de ma classe : {maClasse.nom}
+          </Link>
+        </p>
+      ) : null}
     </NotchCard>
   );
 
-  if (!checkin) {
+  if (!checkin && !checkout) {
     return (
       <div className="grid gap-6">
         {accueil}
@@ -58,46 +71,14 @@ export default async function Accueil() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4">
-        {/* Landscape: the tabs and the alerts band share one line. */}
-        <div className="flex flex-col gap-4 md:landscape:flex-row md:landscape:items-center">
-          {/* One tab today; the check-out (step 5) takes its place next to it. */}
-          <div
-            role="tablist"
-            aria-label="Poste d'accueil"
-            className="flex shrink-0 flex-wrap items-center gap-2"
-          >
-            <Button
-              type="button"
-              role="tab"
-              id="onglet-checkin"
-              aria-selected="true"
-              aria-controls="panneau-checkin"
-              variant="sombre"
-            >
-              Check-in
-            </Button>
-            <Button
-              type="button"
-              role="tab"
-              id="onglet-checkout"
-              aria-selected="false"
-              aria-describedby="checkout-bientot"
-              variant="ghost"
-              disabled
-            >
-              Check-out
-            </Button>
-            <span id="checkout-bientot" className="text-label text-texte-doux">
-              Bientôt disponible
-            </span>
-          </div>
-          {alertes ? <AlertesClasses compact className="min-w-0 md:landscape:flex-1" /> : null}
-        </div>
-        <div role="tabpanel" id="panneau-checkin" aria-labelledby="onglet-checkin">
-          <Checkin sessions={sessions} />
-        </div>
-      </div>
+      <PosteAccueil
+        sessions={sessions}
+        checkin={checkin}
+        checkout={checkout}
+        alertes={
+          alertes ? <AlertesClasses compact className="min-w-0 md:landscape:flex-1" /> : null
+        }
+      />
       {accueil}
     </div>
   );

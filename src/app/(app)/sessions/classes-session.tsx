@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { LogIn, LogOut, TriangleAlert, UserPlus } from "lucide-react";
 import { useState, useTransition } from "react";
 import { NotchCard } from "@/components/hk/notch-card";
@@ -156,6 +157,15 @@ export function ClassesSession({
                     </header>
                     {classe.salle ? (
                       <p className="m-0 text-texte-doux">Salle {classe.salle}</p>
+                    ) : null}
+                    {/* The list of children (cahier §7.4): the member's own class, or any
+                        class for the RESPONSABLE; the page checks the rights again. */}
+                    {classe.sessionClasseId && (classe.classeId === maClasse || responsable) ? (
+                      <Link href={`/classe/${classe.sessionClasseId}`} className="font-bold">
+                        {classe.classeId === maClasse
+                          ? "Ouvrir la liste de ma classe"
+                          : `Voir les enfants de ${classe.nom}`}
+                      </Link>
                     ) : null}
                     {responsable && classe.motifForcage ? (
                       <p className="m-0 text-label text-texte-doux">

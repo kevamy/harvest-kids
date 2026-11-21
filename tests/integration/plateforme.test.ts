@@ -20,8 +20,10 @@ import {
   listerEglises,
   type NouvelleEglise,
 } from "@/server/plateforme/eglises";
+import { lireParametres } from "@/server/parametres";
 import { EGLISES_DEMO, seed } from "../../prisma/seed";
 import { BROUILLONS } from "../../prisma/seed-familles";
+import { CULTE_DEMO, FAMILLES_HISTORIQUE, idSessionHistorique } from "../../prisma/seed-sessions";
 import { type Client, connecter, creerEglise, enEglise, viderBase } from "./support/db";
 import { urlsDeTest } from "./support/urls";
 
@@ -252,13 +254,129 @@ describe("seed de démonstration", () => {
     }
     expect(premier.familles).toBe(total);
 
+    // Lot 2: a demonstration service every day, the check-out place, four more monitors and
+    // last Sunday's closed session, in each church.
+    expect(premier).toMatchObject({ cultesCrees: 14, historiques: 2 });
+    for (const eglise of eglises) {
+      const db = clientEglise(base, eglise.id);
+      const cultes = await db.culte.findMany({
+        where: { nom: CULTE_DEMO.nom },
+        select: { jour: true, heureDebut: true, heureFin: true, actif: true },
+        orderBy: { jour: "asc" },
+      });
+      expect(cultes).toEqual(
+        [0, 1, 2, 3, 4, 5, 6].map((jour) => ({
+          jour,
+          heureDebut: "07:00",
+          heureFin: "22:00",
+          actif: true,
+        })),
+      );
+      const demo = EGLISES_DEMO.find((e) => e.slug === eglise.slug)!;
+      expect((await lireParametres(db))["checkout.lieu"]).toBe(demo.lieuRetrait);
+      const moniteurs = await base.membre.count({
+        where: { egliseId: eglise.id, actif: true, roles: { has: "MONITEUR" } },
+      });
+      expect(moniteurs).toBe(6);
+
+      const sessionId = idSessionHistorique(eglise.id);
+      const { rows: jours } = await enEglise(proprietaire, eglise.id, () =>
+        proprietaire.query<{ dimanche: boolean; passe: boolean; culte: string; statut: string }>(
+          `SELECT extract(dow FROM s.date) = 0 AS dimanche,
+                  s.date < (now() AT TIME ZONE 'Africa/Porto-Novo')::date
+                    AND s.date >= (now() AT TIME ZONE 'Africa/Porto-Novo')::date - 7 AS passe,
+                  c.nom AS culte, s.statut::text AS statut
+             FROM "Session" s JOIN "Culte" c ON c.id = s."culteId"
+            WHERE s.id = $1 AND s."egliseId" = $2`,
+          [sessionId, eglise.id],
+        ),
+      );
+      expect(jours).toEqual([
+        { dimanche: true, passe: true, culte: "Culte 1", statut: "CLOTUREE" },
+      ]);
+
+      const classes = await db.sessionClasse.findMany({
+        where: { sessionId },
+        select: { ouverteLe: true, moniteurs: { select: { depart: true } } },
+      });
+      expect(classes).toHaveLength(3);
+      expect(classes.every((c) => c.ouverteLe && c.moniteurs.length === 2)).toBe(true);
+      expect(classes.flatMap((c) => c.moniteurs).every((a) => a.depart !== null)).toBe(true);
+
+      // Every child collected, by an authorised adult or by the exceptional retrieval, with
+      // the events and audit entries the services write, in time order.
+      const presences = await db.presence.findMany({
+        where: { sessionId },
+        select: {
+          id: true,
+          statut: true,
+          checkinLe: true,
+          enSalleLe: true,
+          recupereLe: true,
+          recuperePar: true,
+          retraitExceptionnelId: true,
+          enfant: { select: { familleId: true } },
+          evenements: { select: { type: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+        },
+      });
+      const familles = new Set(presences.map((p) => p.enfant.familleId));
+      expect(familles.size).toBe(FAMILLES_HISTORIQUE);
+      for (const p of presences) {
+        expect(p.statut).toBe("RECUPERE");
+        expect(p.checkinLe < p.enSalleLe! && p.enSalleLe! < p.recupereLe!).toBe(true);
+        expect(p.evenements.map((e) => e.type)).toEqual(["checkin", "en_salle", "checkout"]);
+        expect((p.recuperePar === null) !== (p.retraitExceptionnelId === null)).toBe(true);
+      }
+      const audits = await db.auditLog.count({
+        where: { entiteId: { in: presences.map((p) => p.id) } },
+      });
+      expect(audits).toBe(3 * presences.length);
+      expect(
+        await db.auditLog.count({
+          where: { entiteId: sessionId, action: { in: ["session.ouverte", "session.cloturee"] } },
+        }),
+      ).toBe(2);
+
+      const incidents = await db.incident.findMany({
+        where: { sessionId },
+        select: {
+          type: true,
+          retraitExceptionnel: { select: { photoKey: true, autorisePar: true } },
+        },
+      });
+      expect(incidents).toHaveLength(1);
+      expect(incidents[0]!.type).toBe("RETRAIT_NON_AUTORISE");
+      const photo = incidents[0]!.retraitExceptionnel!.photoKey;
+      expect(analyserCle(photo)).toMatchObject({ egliseId: eglise.id, categorie: "retraits" });
+      expect(await stockage.get(photo)).not.toBeNull();
+      // The exceptional retrieval covers one family's children.
+      expect(
+        new Set(
+          presences.filter((p) => p.retraitExceptionnelId !== null).map((p) => p.enfant.familleId),
+        ).size,
+      ).toBe(1);
+    }
+    // Each church holds only its own history (isolation A/B).
+    const [cotonou, portoNovo] = EGLISES_DEMO.map((e) => eglises.find((x) => x.slug === e.slug)!);
+    expect(
+      await clientEglise(base, cotonou.id).session.count({
+        where: { id: idSessionHistorique(portoNovo.id) },
+      }),
+    ).toBe(0);
+
     // Church A has a logo, church B none.
     const parSlug = Object.fromEntries(eglises.map((e) => [e.slug, e]));
     expect(parSlug["demo-cotonou"]?.logoKey).toMatch(/^eglises\/.+\/logo\/logo\.png$/);
     expect(parSlug["demo-porto-novo"]?.logoKey).toBeNull();
 
     const second = await seed(base, stockage);
-    expect(second).toMatchObject({ comptesCrees: 0, familles: 0, telephonesRepares: 0 });
+    expect(second).toMatchObject({
+      comptesCrees: 0,
+      familles: 0,
+      telephonesRepares: 0,
+      cultesCrees: 0,
+      historiques: 0,
+    });
 
     // A database seeded before the ten-digit numbers (Neon): the seed repairs them, once.
     const numeros = async () => {

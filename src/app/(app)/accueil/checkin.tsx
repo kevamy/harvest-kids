@@ -39,7 +39,14 @@ function Photo({ cle, alt }: { cle: string | null; alt: string }) {
  * screen, and the next card scanned starts the next family directly. In landscape, the scan
  * sits on the left and the family on the right, so that a family of 3 fits without scrolling.
  */
-export function Checkin({ sessions }: { sessions: SessionOuverte[] }) {
+export function Checkin({
+  sessions,
+  actif = true,
+}: {
+  sessions: SessionOuverte[];
+  /** The tab is shown: its scan field takes the focus back. */
+  actif?: boolean;
+}) {
   const [sessionId, setSessionId] = useState(sessions[0]?.id ?? "");
   const [jeton, setJeton] = useState<string | null>(null);
   const [preparation, setPreparation] = useState<PreparationCheckin | null>(null);
@@ -52,10 +59,10 @@ export function Checkin({ sessions }: { sessions: SessionOuverte[] }) {
   const [enCours, demarrer] = useTransition();
   const champScan = useRef<HTMLInputElement>(null);
 
-  // On opening, and after each confirmation: the next scan needs no touch on the screen.
+  // On opening, after each confirmation and back on this tab: the next scan needs no touch.
   useEffect(() => {
-    champScan.current?.focus();
-  }, [resultat]);
+    if (actif) champScan.current?.focus();
+  }, [resultat, actif]);
 
   const recommencer = () => {
     setJeton(null);

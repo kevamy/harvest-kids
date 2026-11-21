@@ -2,7 +2,9 @@
  * File keys (RG-15): every file of a church lives under `eglises/{egliseId}/`,
  * and the read route checks the prefix against the active church.
  */
-export const CATEGORIES_FICHIER = ["logo", "photos", "cartes"] as const;
+// "retraits": photos of adults not recognised at check-out, seen only in an incident's
+// detail by a RESPONSABLE or an ADMIN (cahier §7.6; the file route checks the right).
+export const CATEGORIES_FICHIER = ["logo", "photos", "cartes", "retraits"] as const;
 export type CategorieFichier = (typeof CATEGORIES_FICHIER)[number];
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/;

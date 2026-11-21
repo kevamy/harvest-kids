@@ -73,10 +73,15 @@ export type PreparationCheckin = {
 
 const LIBELLE_ALERTE = new Map<string, string>(ALERTES_RAPIDES.map((a) => [a.code, a.libelle]));
 
+/** Medical alerts as shown on the family record, one per item (class lists, cahier §7.4). */
+export function alertesLisibles(e: { alertes: string[]; alerteDetail: string | null }): string[] {
+  const parties = [...e.alertes.map((a) => LIBELLE_ALERTE.get(a) ?? a), e.alerteDetail];
+  return parties.filter((p): p is string => Boolean(p));
+}
+
 /** Medical alerts as shown on the family record, recalled at check-in (cahier §7.3.6). */
 function alerteLisible(e: { alertes: string[]; alerteDetail: string | null }): string | null {
-  const parties = [...e.alertes.map((a) => LIBELLE_ALERTE.get(a) ?? a), e.alerteDetail];
-  return parties.filter(Boolean).join(" · ") || null;
+  return alertesLisibles(e).join(" · ") || null;
 }
 
 /** The session must be open; returns its date (the church's local day). */

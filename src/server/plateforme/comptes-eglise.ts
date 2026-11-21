@@ -91,7 +91,7 @@ export async function listerComptes(
     }[]
   >`
     SELECT m.id AS "membreId", u.id AS "userId", u.name AS nom, u.email, u.telephone,
-           m.roles::text[] AS roles, (m.actif AND u.actif) AS actif,
+           COALESCE(m.roles::text[], '{}') AS roles, (m.actif AND u.actif) AS actif,
            EXISTS (SELECT 1 FROM "AuthAccount" a
                    WHERE a."userId" = u.id AND a."providerId" = 'credential'
                      AND a.password IS NOT NULL) AS "motDePasse",
