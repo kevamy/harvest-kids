@@ -199,6 +199,8 @@ test("le responsable règle cultes, délais et lieux ; seul l'administrateur rè
   const delais = page.getByRole("region", { name: "Délais d'alerte" });
   await expect(delais.getByLabel(/non récupéré/)).toHaveValue("10");
   await delais.getByLabel(/non récupéré/).fill("15");
+  await expect(delais.getByLabel(/pas arrivé à l'infirmerie/)).toHaveValue("5");
+  await delais.getByLabel(/pas arrivé à l'infirmerie/).fill("7");
   await delais.getByRole("button", { name: "Enregistrer les délais" }).click();
   await expect(delais.getByRole("status")).toHaveText("Délais enregistrés.");
 
@@ -219,6 +221,9 @@ test("le responsable règle cultes, délais et lieux ; seul l'administrateur rè
   await expect(
     page.getByRole("region", { name: "Délais d'alerte" }).getByLabel(/non récupéré/),
   ).toHaveValue("15");
+  await expect(
+    page.getByRole("region", { name: "Délais d'alerte" }).getByLabel(/pas arrivé à l'infirmerie/),
+  ).toHaveValue("7");
   await expect(
     page
       .getByRole("region", { name: "Lieux de rendez-vous des parents" })

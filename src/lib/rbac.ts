@@ -103,18 +103,22 @@ export function droitsSalle(
  * A child's presence card (lot 3, ADR 0019). The reception desk, the infirmerie, a RESPONSABLE
  * and an ADMIN reach every child of the church; a member assigned to the child's class in the
  * session reaches the children of that class only (a MONITEUR elsewhere gets a 404). Calling
- * the family (Urgence) also needs parent.appeler.
+ * the family (Urgence) also needs parent.appeler. A child goes to the infirmerie with a member
+ * of their class, the infirmerie, a RESPONSABLE or an ADMIN (envoyer); the infirmerie receives
+ * and sends back, as do a RESPONSABLE and an ADMIN (gerer).
  */
 export function droitsPresence(
   roles: readonly Role[],
   affecte: boolean,
-): { voir: boolean; appeler: boolean } {
-  const voir =
-    affecte ||
-    peut(roles, "tableau.direct") ||
-    peut(roles, "infirmerie.gerer") ||
-    peut(roles, "salle.superviser");
-  return { voir, appeler: voir && peut(roles, "parent.appeler") };
+): { voir: boolean; appeler: boolean; envoyer: boolean; gerer: boolean } {
+  const gerer = peut(roles, "infirmerie.gerer") || peut(roles, "salle.superviser");
+  const voir = affecte || gerer || peut(roles, "tableau.direct");
+  return {
+    voir,
+    appeler: voir && peut(roles, "parent.appeler"),
+    envoyer: affecte || gerer,
+    gerer,
+  };
 }
 
 /** Throws unless one of the roles grants the action. */

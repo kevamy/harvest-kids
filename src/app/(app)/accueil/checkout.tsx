@@ -17,6 +17,7 @@ import { reduirePhoto } from "@/lib/photo-navigateur";
 import { usePret } from "@/lib/use-pret";
 import { preparerRetraitEnSalle, validerRetraitEnSalle } from "../classe/[id]/actions";
 import { LiensUrgence } from "../presences/urgence";
+import { BandeauInfirmerie } from "@/components/hk/bandeau-infirmerie";
 import {
   autoriserRetraitExceptionnel,
   membresPourAutoriser,
@@ -581,14 +582,11 @@ export function Checkout({
               </h2>
               {/* RG-07: a child at the infirmary is announced first. */}
               {infirmerie.map((e) => (
-                <p
-                  key={e.presenceId}
-                  role="alert"
-                  className="m-0 flex gap-2 rounded-md bg-alerte px-4 py-3 font-bold text-blanc"
-                >
-                  <TriangleAlert aria-hidden className="size-6 shrink-0" />
-                  {e.prenom} est à l&apos;infirmerie. Accompagnez le parent.
-                </p>
+                <BandeauInfirmerie key={e.presenceId}>
+                  {salle
+                    ? `${e.prenom} est à l'infirmerie : le retrait se fait à l'accueil. Accompagnez le parent.`
+                    : `${e.prenom} est à l'infirmerie. Accompagnez le parent.`}
+                </BandeauInfirmerie>
               ))}
               {preparation.moyen.type === "recherche" ? (
                 <p className="m-0 rounded-md bg-soleil px-4 py-2 text-label text-nuit">
@@ -629,7 +627,9 @@ export function Checkout({
                     </div>
                     <p id={`lieu-${e.presenceId}`} className="col-span-full m-0 text-texte-doux">
                       {!e.remettable
-                        ? `Dans une autre classe : ${e.lieu}. Le parent va le chercher là-bas.`
+                        ? e.statut === "INFIRMERIE"
+                          ? "À l'infirmerie : le retrait se fait à l'accueil."
+                          : `Dans une autre classe : ${e.lieu}. Le parent va le chercher là-bas.`
                         : e.statut === "PRESENT"
                           ? `Pas encore en salle : en route vers ${e.lieu}. Allez le chercher avec le parent.`
                           : e.statut === "EN_SALLE"

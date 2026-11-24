@@ -58,7 +58,27 @@ export async function nomsMembres(
   return new Map(membres.map((m) => [m.userId, m.user.name]));
 }
 
+/**
+ * Active members of the church, by user id and name: who may accompany a child to the
+ * infirmerie (lot 3). Never a member of another church.
+ */
+export async function membresActifs(
+  base: PrismaClient,
+  contexte: Pick<ContexteEglise, "egliseId">,
+): Promise<{ userId: string; nom: string }[]> {
+  const membres = await base.membre.findMany({
+    where: { egliseId: contexte.egliseId, actif: true, user: { actif: true } },
+    select: { userId: true, roles: true, user: { select: { name: true } } },
+    orderBy: { user: { name: "asc" } },
+  });
+  return membres
+    .filter((m) => !m.roles.includes("ECRAN"))
+    .map((m) => ({ userId: m.userId, nom: m.user.name }));
+}
+
 /** Same readers with the shared platform client (pages, actions, routes). */
+export const membresActifsEglise = (contexte: ContexteEglise) =>
+  membresActifs(prismaPlateforme(), contexte);
 export const nomsMembresEglise = (contexte: ContexteEglise, userIds: string[]) =>
   nomsMembres(prismaPlateforme(), contexte, userIds);
 export const lectureMembreEglise = (contexte: ContexteEglise) =>

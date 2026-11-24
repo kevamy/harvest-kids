@@ -5,6 +5,7 @@ import { CircleCheck, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ListeClasseDirect } from "@/app/api/direct/classes/[id]/route";
+import { BandeauInfirmerie, phraseInfirmerie } from "@/components/hk/bandeau-infirmerie";
 import { ChildCard } from "@/components/hk/child-card";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Scanner } from "@/components/hk/scanner";
@@ -144,7 +145,14 @@ export function ListeClasse({
           </h2>
           <ul aria-label="Enfants à l'infirmerie" className="m-0 grid list-none gap-3 p-0">
             {infirmerie.map((e, i) => (
-              <li key={e.presenceId}>{carte(e, i)}</li>
+              <li key={e.presenceId} aria-label={e.prenom} className="grid gap-2">
+                {e.infirmerie ? (
+                  <BandeauInfirmerie>
+                    {phraseInfirmerie(e.prenom, e.infirmerie.depuisMinutes, e.infirmerie.enRoute)}
+                  </BandeauInfirmerie>
+                ) : null}
+                {carte(e, i)}
+              </li>
             ))}
           </ul>
         </section>
@@ -173,9 +181,13 @@ export function ListeClasse({
                       e.enRetard ? "m-0 font-bold text-alerte" : "m-0 text-label text-texte-doux"
                     }
                   >
-                    {e.enRetard
-                      ? `Toujours pas en salle : check-in à l'accueil il y a ${e.attenteMinutes} min`
-                      : `Check-in à l'accueil il y a ${e.attenteMinutes} min`}
+                    {e.retourInfirmerie
+                      ? e.enRetard
+                        ? `Toujours pas en salle : renvoyé de l'infirmerie il y a ${e.attenteMinutes} min`
+                        : `Renvoyé de l'infirmerie il y a ${e.attenteMinutes} min : confirmez son arrivée`
+                      : e.enRetard
+                        ? `Toujours pas en salle : check-in à l'accueil il y a ${e.attenteMinutes} min`
+                        : `Check-in à l'accueil il y a ${e.attenteMinutes} min`}
                   </p>
                 </div>
                 {droits.confirmer && sessionOuverte ? (

@@ -1,7 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, LogOut, Repeat, School, Settings, ShieldAlert, Users } from "lucide-react";
+import {
+  CalendarDays,
+  HeartPulse,
+  LogOut,
+  Repeat,
+  School,
+  Settings,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
 import { Providers } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { seDeconnecter } from "@/app/actions/session";
@@ -94,6 +103,19 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                 <Link href="/classe">
                   <School aria-hidden />
                   Classes
+                </Link>
+              </Button>
+            ) : null}
+            {peut(contexte.roles, "infirmerie.gerer") ||
+            peut(contexte.roles, "salle.superviser") ? (
+              <Button
+                asChild
+                variant="sombre"
+                className="shadow-[inset_0_0_0_2px_var(--color-nuit-doux)]"
+              >
+                <Link href="/infirmerie">
+                  <HeartPulse aria-hidden />
+                  Infirmerie
                 </Link>
               </Button>
             ) : null}

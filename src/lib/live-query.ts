@@ -5,6 +5,11 @@ import { ENTETE_RAFRAICHISSEMENT_AUTO } from "@/lib/activite";
 
 /** Live screens refresh every 3 to 5 seconds (cahier §9). */
 export const INTERVALLE_DIRECT_MS = 4000;
+/**
+ * Screens that must show an infirmerie child within 5 seconds (lot 3: infirmerie, alerts,
+ * call screen): margin for the request and the rendering.
+ */
+export const INTERVALLE_URGENT_MS = 3000;
 
 export class ErreurDirect extends Error {
   constructor(readonly statut: number) {
@@ -36,11 +41,15 @@ export async function chargerDirect<T>(url: string, signal?: AbortSignal): Promi
  * The only way to build a live screen (never a hand-made setInterval). Can later
  * be backed by SSE without touching the screens.
  */
-export function useLiveQuery<T>(cle: readonly unknown[], url: string): UseQueryResult<T> {
+export function useLiveQuery<T>(
+  cle: readonly unknown[],
+  url: string,
+  options: { intervalleMs?: number } = {},
+): UseQueryResult<T> {
   return useQuery({
     queryKey: cle,
     queryFn: ({ signal }) => chargerDirect<T>(url, signal),
-    refetchInterval: INTERVALLE_DIRECT_MS,
+    refetchInterval: options.intervalleMs ?? INTERVALLE_DIRECT_MS,
     refetchIntervalInBackground: false,
     // A locked or signed-out tablet stops polling instead of retrying.
     retry: (echecs, erreur) =>

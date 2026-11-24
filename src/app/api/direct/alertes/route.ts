@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { peut } from "@/lib/rbac";
 import { AccesRefuse, getTenantDb } from "@/lib/tenant";
 import { alertesClasses, type AlerteClasse } from "@/server/moniteurs-session";
+import { listeInfirmerie, type EnfantInfirmerie } from "@/server/infirmerie";
 import { lireParametres } from "@/server/parametres";
 import {
   sessionsCodesBloquesEglise,
@@ -10,6 +11,11 @@ import {
 import { alertesNonArrives, type AlerteNonArrive } from "@/server/salle";
 
 export type AlertesDirect = {
+  /** Children at the infirmerie or on their way (lot 3), the ones not arrived first. */
+  infirmerie: Pick<
+    EnfantInfirmerie,
+    "presenceId" | "prenom" | "matricule" | "classe" | "depuisMinutes" | "enRoute" | "nonArrive"
+  >[];
   classes: AlerteClasse[];
   nonArrives: AlerteNonArrive[];
   /** Tablets blocked after 5 wrong retrieval codes (cahier §7.6, ADR 0016). */
@@ -36,7 +42,8 @@ export async function GET() {
   }
   if (!peut(acces.contexte.roles, "alertes.voir")) return new Response(null, { status: 403 });
   const parametres = await lireParametres(acces.db);
-  const [classes, nonArrives, bloquees, sessionsBloquees] = await Promise.all([
+  const [infirmerie, classes, nonArrives, bloquees, sessionsBloquees] = await Promise.all([
+    listeInfirmerie(acces.db, parametres["infirmerie.delaiReceptionMinutes"]),
     alertesClasses(acces.db),
     alertesNonArrives(acces.db, parametres["presences.delaiNonArriveEnSalleMinutes"]),
     tablettesBloqueesEglise(acces.contexte.egliseId),
@@ -52,6 +59,16 @@ export async function GET() {
           orderBy: { debut: "asc" },
         });
   const corps: AlertesDirect = {
+    // Matricule, first name and class only: the card behind the link checks the rights.
+    infirmerie: infirmerie.map((e) => ({
+      presenceId: e.presenceId,
+      prenom: e.prenom,
+      matricule: e.matricule,
+      classe: e.classe,
+      depuisMinutes: e.depuisMinutes,
+      enRoute: e.enRoute,
+      nonArrive: e.nonArrive,
+    })),
     classes,
     nonArrives,
     tablettesBloquees: bloquees.map((t) => ({

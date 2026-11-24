@@ -70,6 +70,7 @@ export default async function ParametresCultes() {
         <FormulaireDelais
           nonRecupere={parametres["sessions.delaiAlerteNonRecupereMinutes"]}
           nonArriveEnSalle={parametres["presences.delaiNonArriveEnSalleMinutes"]}
+          receptionInfirmerie={parametres["infirmerie.delaiReceptionMinutes"]}
         />
       </NotchCard>
 

@@ -486,6 +486,7 @@ describe("liste de la classe et alerte « non arrivé en salle »", () => {
         matricule: "HK-f10",
         classe: "3–5 ans",
         minutes: 11,
+        retourInfirmerie: false,
       },
     ]);
     await toucher(moniteur, classeA, presences[0]!);

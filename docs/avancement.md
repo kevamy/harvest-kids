@@ -183,7 +183,14 @@ Plan validé le 2026-11-24 (décisions dans la section « Décisions et question
    - le bloc « Personne non reconnue » du check-out (accueil et porte de la classe) réutilise ces liens : ses appels sont journalisés ;
    - écart à mon plan : le lien est ouvert sans attendre le journal (au lieu de « journaliser d'abord »), pour qu'une urgence n'attende jamais le réseau ; l'avertissement reste ;
    - tests : `urgence.test.ts` (contacts, journal, numéro hors famille refusé, résultat une fois, audit, isolation A/B), `rbac.test.ts` (`droitsPresence`), e2e `urgence.spec.ts` (fiche depuis la classe, appel journalisé, résultat noté, 404 depuis une autre église). Vérifications locales : lint, types, 253 unitaires, intégration complète 338/338 (175 s).
-3. [ ] Infirmerie (page, bandeau partout, check-out en salle refusé, alerte « en route » non reçu).
+3. [x] Infirmerie (`src/server/infirmerie.ts`) :
+   - depuis la fiche, « Accompagner à l'infirmerie » (accompagnant parmi les membres actifs, le lecteur par défaut ; motif court) : PRESENT ou en salle → INFIRMERIE « en route » ; par un membre affecté à la classe, l'infirmerie, le responsable ou l'admin (`droitsPresence.envoyer`) ;
+   - page `/infirmerie` en direct (3 s), lien dans la navigation (INFIRMERIE, RESPONSABLE, ADMIN) : « En route » puis « À l'infirmerie », accompagnant, motif, durée, lien vers la fiche ; « Recevoir », « Renvoyer en classe » (→ PRESENT, `retourInfirmerieLe`, à confirmer par la classe) ;
+   - alerte rouge « [prénom] n'est pas arrivé à l'infirmerie » au-delà de `infirmerie.delaiReceptionMinutes` (défaut 5, réglable dans Paramètres › Cultes et accueil, avec les autres délais), comparée en SQL avec `now()`, sur la page Infirmerie et aux tableaux de l'accueil et du responsable (`/accueil`, `/sessions` : région « Enfants à l'infirmerie », liens vers la fiche), jusqu'à la réception ou au retour ;
+   - visible partout : bandeau commun `BandeauInfirmerie` (fiche, liste de classe avec sa durée, check-out à l'accueil et en salle) ; tableaux rafraîchis toutes les 3 s (`INTERVALLE_URGENT_MS`) ;
+   - **check-out en salle refusé** pour un enfant à l'infirmerie (sans case à cocher, refus revérifié sous le verrou de la session) ; à l'accueil, remis comme avant, et sorti de l'infirmerie (`infirmerieLe` effacé, contrainte CHECK) ;
+   - « pas encore en salle » compté depuis le retour de l'infirmerie (liste de classe : « Renvoyé de l'infirmerie il y a … : confirmez son arrivée ») ;
+   - tests : `infirmerie.test.ts` (transitions avec événement et audit, refus, délai réglable, retour, check-out en salle refusé et à l'accueil accepté, isolation A/B), `rbac.test.ts`, `parametres-classes.test.ts` et `salle.test.ts` mis à jour ; e2e `infirmerie.spec.ts` (envoi par le moniteur, alerte rouge à l'infirmerie et à l'accueil après 6 min, réception, renvoi, confirmation par la classe), `parametres.spec.ts` (nouveau délai). Vérifications locales : lint, types, 253 unitaires, intégration complète 345/345 (112 s).
 4. [ ] Appel parent.
 5. [ ] Écran d'appel (appairage, cookie de l'appareil, `/ecran/[slug]`).
 6. [ ] Incidents (déclaration, notes, clôture).

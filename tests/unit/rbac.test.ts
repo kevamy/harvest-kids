@@ -72,15 +72,15 @@ describe("droits par rôle (cahier §4)", () => {
   });
 
   it.each([
-    // Every child of the church: reception desk, infirmerie, RESPONSABLE, ADMIN.
-    [["ACCUEIL"], false, { voir: true, appeler: true }],
-    [["INFIRMERIE"], false, { voir: true, appeler: true }],
-    [["RESPONSABLE"], false, { voir: true, appeler: true }],
-    [["ADMIN"], false, { voir: true, appeler: true }],
-    // A MONITEUR: the children of the class they are assigned to, only.
-    [["MONITEUR"], true, { voir: true, appeler: true }],
-    [["MONITEUR"], false, { voir: false, appeler: false }],
-    [["ECRAN"], false, { voir: false, appeler: false }],
+    // Every child of the church; the reception desk neither sends nor receives.
+    [["ACCUEIL"], false, { voir: true, appeler: true, envoyer: false, gerer: false }],
+    [["INFIRMERIE"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
+    [["RESPONSABLE"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
+    [["ADMIN"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
+    // A MONITEUR: the children of the class they are assigned to, only; sends, never receives.
+    [["MONITEUR"], true, { voir: true, appeler: true, envoyer: true, gerer: false }],
+    [["MONITEUR"], false, { voir: false, appeler: false, envoyer: false, gerer: false }],
+    [["ECRAN"], false, { voir: false, appeler: false, envoyer: false, gerer: false }],
   ] as const)("fiche de présence : %j, affecté %s → %j", (roles, affecte, attendu) => {
     expect(droitsPresence(roles, affecte)).toEqual(attendu);
   });

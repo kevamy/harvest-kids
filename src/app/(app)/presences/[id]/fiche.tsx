@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useTransition } from "react";
+import { BandeauInfirmerie, phraseInfirmerie } from "@/components/hk/bandeau-infirmerie";
 import { ChildCard } from "@/components/hk/child-card";
 import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,76 @@ import { formaterTelephone } from "@/lib/telephone";
 import type { FicheDirect } from "../acces-presence";
 import { MessageSucces } from "../../parametres/entete";
 import { LiensUrgence } from "../urgence";
-import { noterResultatUrgence } from "./actions";
+import {
+  envoyerAInfirmerie,
+  noterResultatUrgence,
+  recevoirAInfirmerie,
+  renvoyerEnClasseDepuisInfirmerie,
+} from "./actions";
+
+/** "Accompagner à l'infirmerie": who accompanies (the reader by default) and why. */
+function EnvoiInfirmerie({
+  prenom,
+  accompagnants,
+  enCours,
+  onEnvoyer,
+}: {
+  prenom: string;
+  accompagnants: { userId: string; nom: string }[];
+  enCours: boolean;
+  onEnvoyer: (accompagnantUserId: string, motif: string) => void;
+}) {
+  const [accompagnant, setAccompagnant] = useState(accompagnants[0]!.userId);
+  const [motif, setMotif] = useState("");
+  return (
+    <NotchCard couleur="blanc" aria-label="Accompagner à l'infirmerie">
+      <form
+        className="grid gap-4"
+        onSubmit={(evenement) => {
+          evenement.preventDefault();
+          onEnvoyer(accompagnant, motif);
+        }}
+      >
+        <h2 className="m-0 font-display text-h2 font-semibold">Accompagner à l&apos;infirmerie</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 font-bold">
+            Accompagné par
+            <select
+              className="min-h-touch rounded-md border-2 border-nuit bg-blanc px-4 font-normal"
+              value={accompagnant}
+              onChange={(e) => setAccompagnant(e.target.value)}
+            >
+              {accompagnants.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.nom}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-2 font-bold">
+            Motif
+            <input
+              className="min-h-touch rounded-md border-2 border-nuit bg-blanc px-4 font-normal"
+              value={motif}
+              maxLength={200}
+              placeholder="Fièvre, chute, mal au ventre…"
+              onChange={(e) => setMotif(e.target.value)}
+            />
+          </label>
+        </div>
+        <Button
+          type="submit"
+          variant="alerte"
+          size="xl"
+          disabled={enCours}
+          className="justify-self-start"
+        >
+          Accompagner {prenom} à l&apos;infirmerie
+        </Button>
+      </form>
+    </NotchCard>
+  );
+}
 
 /**
  * A child's presence card, live (lot 3): the child with their medical alerts, the Urgence
@@ -36,11 +106,22 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
       </MessageErreur>
     );
   }
-  const { fiche, contacts, journal, droits } = direct.data!;
+  const { fiche, contacts, journal, droits, accompagnants } = direct.data!;
   const nomDuNumero = (numero: string) => {
     const contact = contacts.find((c) => c.telephones.includes(numero) || c.whatsapp === numero);
     return contact ? `${contact.prenom} ${contact.nom}` : formaterTelephone(numero);
   };
+
+  const agir = (
+    fn: () => Promise<{ ok: true; donnees: unknown } | { ok: false; erreur: string }>,
+    succes: string,
+  ) =>
+    demarrer(async () => {
+      setMessage(null);
+      const reponse = await appelerAction(fn);
+      setMessage(reponse.ok ? { ok: true, texte: succes } : { ok: false, texte: reponse.erreur });
+      await rafraichir();
+    });
 
   const noter = (appelId: string, resultat: ResultatAppel) =>
     demarrer(async () => {
@@ -64,6 +145,12 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
         </p>
       ) : null}
 
+      {fiche.statut === "INFIRMERIE" && fiche.infirmerieDepuisMinutes !== null ? (
+        <BandeauInfirmerie>
+          {phraseInfirmerie(fiche.prenom, fiche.infirmerieDepuisMinutes, fiche.enRoute)}
+        </BandeauInfirmerie>
+      ) : null}
+
       <ChildCard
         prenom={fiche.prenom}
         nom={fiche.nom}
@@ -81,6 +168,55 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
         ) : (
           <MessageErreur>{message.texte}</MessageErreur>
         )
+      ) : null}
+
+      {fiche.statut === "INFIRMERIE" && droits.gerer && fiche.sessionOuverte ? (
+        <div className="flex flex-wrap gap-3">
+          {fiche.enRoute ? (
+            <Button
+              type="button"
+              variant="bleu"
+              size="xl"
+              disabled={enCours}
+              onClick={() =>
+                agir(
+                  () => recevoirAInfirmerie({ presenceId }),
+                  `${fiche.prenom} est reçu à l'infirmerie.`,
+                )
+              }
+            >
+              Recevoir {fiche.prenom}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="xl"
+            disabled={enCours}
+            onClick={() =>
+              agir(
+                () => renvoyerEnClasseDepuisInfirmerie({ presenceId }),
+                `${fiche.prenom} est renvoyé en classe : la classe confirmera son arrivée.`,
+              )
+            }
+          >
+            Renvoyer en classe
+          </Button>
+        </div>
+      ) : null}
+
+      {accompagnants.length > 0 ? (
+        <EnvoiInfirmerie
+          prenom={fiche.prenom}
+          accompagnants={accompagnants}
+          enCours={enCours}
+          onEnvoyer={(accompagnantUserId, motif) =>
+            agir(
+              () => envoyerAInfirmerie({ presenceId, accompagnantUserId, motif }),
+              `${fiche.prenom} part à l'infirmerie.`,
+            )
+          }
+        />
       ) : null}
 
       {droits.appeler ? (

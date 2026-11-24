@@ -1,7 +1,7 @@
 import "server-only";
 import { droitsPresence } from "@/lib/rbac";
 import type { ClientEglise, ContexteEglise } from "@/lib/tenant";
-import { nomsMembresEglise } from "@/server/plateforme/membres-session";
+import { membresActifsEglise, nomsMembresEglise } from "@/server/plateforme/membres-session";
 import { affecteALaPresence, fichePresence, type FichePresence } from "@/server/presences";
 import {
   contactsUrgence,
@@ -34,7 +34,12 @@ export type FicheDirect = {
   contacts: ContactUrgence[];
   journal: (LigneJournalAppel & { auteur: string })[];
   droits: DroitsFiche;
+  /** Who may accompany the child to the infirmerie (reader first), when it can be sent. */
+  accompagnants: { userId: string; nom: string }[];
 };
+
+const peutPartir = (fiche: FichePresence) =>
+  fiche.sessionOuverte && (fiche.statut === "PRESENT" || fiche.statut === "EN_SALLE");
 
 /** Everything the card shows, read in the active church. */
 export async function lireFiche(
@@ -42,15 +47,21 @@ export async function lireFiche(
   { fiche, droits }: { fiche: FichePresence; droits: DroitsFiche },
 ): Promise<FicheDirect> {
   const { presenceId } = fiche;
-  const [contacts, journal] = await Promise.all([
+  const [contacts, journal, membres] = await Promise.all([
     droits.appeler ? contactsUrgence(acces.db, presenceId) : Promise.resolve([]),
     journalAppels(acces.db, presenceId),
+    droits.envoyer && peutPartir(fiche) ? membresActifsEglise(acces.contexte) : Promise.resolve([]),
   ]);
   const noms = await nomsMembresEglise(acces.contexte, [...new Set(journal.map((j) => j.userId))]);
+  const moi = acces.contexte.userId;
   return {
     fiche,
     droits,
     contacts,
     journal: journal.map((j) => ({ ...j, auteur: noms.get(j.userId) ?? "Compte supprimé" })),
+    accompagnants: [
+      ...membres.filter((m) => m.userId === moi),
+      ...membres.filter((m) => m.userId !== moi),
+    ],
   };
 }

@@ -2,6 +2,13 @@
 
 import { ActionInterdite } from "@/lib/rbac";
 import type { ClientDeBase, ClientEglise } from "@/lib/tenant";
+import {
+  InfirmerieRefusee,
+  envoyerInfirmerie,
+  recevoirInfirmerie,
+  renvoyerEnClasse,
+} from "@/server/infirmerie";
+import { membresActifsEglise } from "@/server/plateforme/membres-session";
 import { UrgenceRefusee, journaliserAppel, noterResultatAppel } from "@/server/urgence";
 import { RefusMetier, executerActionVerifiee } from "../../executer-action";
 import { presenceAutorisee } from "../acces-presence";
@@ -18,9 +25,66 @@ async function enTransaction<T>(db: ClientEglise, fn: (tx: ClientDeBase) => Prom
   try {
     return await db.$tx(fn);
   } catch (erreur) {
-    if (erreur instanceof UrgenceRefusee) throw new RefusMetier(erreur.message);
+    if (erreur instanceof UrgenceRefusee || erreur instanceof InfirmerieRefusee) {
+      throw new RefusMetier(erreur.message);
+    }
     throw erreur;
   }
+}
+
+/** The presence, and a right of droitsPresence the member must have on it. */
+async function verifierDroit(
+  acces: Parameters<typeof presenceAutorisee>[0],
+  presenceId: string,
+  droit: "envoyer" | "gerer",
+) {
+  const autorisee = await presenceAutorisee(acces, presenceId);
+  if (!autorisee) throw new RefusMetier("Enfant introuvable. Rechargez la page.");
+  if (!autorisee.droits[droit]) {
+    throw new ActionInterdite(droit === "envoyer" ? "infirmerie.envoyer" : "infirmerie.gerer");
+  }
+}
+
+/** Accompany to the infirmerie (cahier §7.7): PRESENT or in class → INFIRMERIE, en route. */
+export async function envoyerAInfirmerie(saisie: {
+  presenceId: unknown;
+  accompagnantUserId: unknown;
+  motif: unknown;
+}) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierDroit(acces, presenceId, "envoyer"),
+    async ({ db, contexte }) => {
+      const membres = await membresActifsEglise(contexte);
+      return enTransaction(db, (tx) =>
+        envoyerInfirmerie(
+          tx,
+          contexte,
+          { presenceId, accompagnantUserId: saisie.accompagnantUserId, motif: saisie.motif },
+          async (userId) => membres.some((m) => m.userId === userId),
+        ),
+      );
+    },
+  );
+}
+
+/** The infirmerie receives the child (no longer "en route"). */
+export async function recevoirAInfirmerie(saisie: { presenceId: unknown }) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierDroit(acces, presenceId, "gerer"),
+    ({ db, contexte }) =>
+      enTransaction(db, (tx) => recevoirInfirmerie(tx, contexte, { presenceId })),
+  );
+}
+
+/** Back to class: PRESENT, to be confirmed by a member of the class. */
+export async function renvoyerEnClasseDepuisInfirmerie(saisie: { presenceId: unknown }) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierDroit(acces, presenceId, "gerer"),
+    ({ db, contexte }) => enTransaction(db, (tx) => renvoyerEnClasse(tx, contexte, { presenceId })),
+  );
 }
 
 /** Rights to call the family of this presence; a child out of reach is refused alike. */
