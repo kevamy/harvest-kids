@@ -2,6 +2,8 @@
 
 import { ActionInterdite } from "@/lib/rbac";
 import type { ClientDeBase, ClientEglise } from "@/lib/tenant";
+import { AppelRefuse, appelerParent, resoudreAppel } from "@/server/appels";
+import { lireParametres } from "@/server/parametres";
 import {
   InfirmerieRefusee,
   envoyerInfirmerie,
@@ -25,11 +27,45 @@ async function enTransaction<T>(db: ClientEglise, fn: (tx: ClientDeBase) => Prom
   try {
     return await db.$tx(fn);
   } catch (erreur) {
-    if (erreur instanceof UrgenceRefusee || erreur instanceof InfirmerieRefusee) {
+    if (
+      erreur instanceof UrgenceRefusee ||
+      erreur instanceof InfirmerieRefusee ||
+      erreur instanceof AppelRefuse
+    ) {
       throw new RefusMetier(erreur.message);
     }
     throw erreur;
   }
+}
+
+/** Calls the parent to the screen (cahier §7.5), to one of the church's meeting places. */
+export async function appelerLeParent(saisie: {
+  presenceId: unknown;
+  motif: unknown;
+  lieu: unknown;
+}) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierAppel(acces, presenceId),
+    async ({ db, contexte }) => {
+      const lieux = (await lireParametres(db))["appels.lieux"];
+      return enTransaction(db, (tx) =>
+        appelerParent(tx, contexte, { presenceId, motif: saisie.motif, lieu: saisie.lieu }, lieux),
+      );
+    },
+  );
+}
+
+/** The parent arrived, or the call is cancelled. */
+export async function terminerAppel(saisie: { presenceId: unknown; resolution: unknown }) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierAppel(acces, presenceId),
+    ({ db, contexte }) =>
+      enTransaction(db, (tx) =>
+        resoudreAppel(tx, contexte, { presenceId, resolution: saisie.resolution }),
+      ),
+  );
 }
 
 /** The presence, and a right of droitsPresence the member must have on it. */

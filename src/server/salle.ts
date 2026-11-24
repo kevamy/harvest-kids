@@ -104,6 +104,8 @@ export type EnfantSalle = {
   enRetard: boolean;
   /** At the infirmerie: minutes since sent, and whether still on the way. */
   infirmerie: { depuisMinutes: number; enRoute: boolean } | null;
+  /** Meeting place of the parent call on the screen, if any (lot 3). */
+  appelLieu: string | null;
   /** Confirmed by the reader less than a minute ago: they may undo it without a reason. */
   annulable: boolean;
 };
@@ -137,6 +139,8 @@ export async function listeDeClasse(
                 ELSE json_build_object(
                   'depuisMinutes', floor(extract(epoch FROM now() - p."infirmerieLe") / 60)::int,
                   'enRoute', p."infirmerieRecueLe" IS NULL) END AS infirmerie,
+           (SELECT a.lieu FROM "Appel" a WHERE a."presenceId" = p.id AND a."resoluLe" IS NULL)
+             AS "appelLieu",
            (p.statut = 'EN_SALLE'
              AND p."enSalleLe" > now() - make_interval(secs => ${DELAI_ANNULATION_SECONDES}::int)
              AND confirmation."userId" IS NOT DISTINCT FROM ${lecteurUserId})

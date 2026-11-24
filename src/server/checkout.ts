@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { journaliser } from "@/lib/audit";
 import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
+import { resoudreAppelsAuRetrait } from "./appels";
 import { activerAuPremierScan } from "./cartes/cycle";
 import { MESSAGES_SCAN, resoudreJeton, type VerificationMoniteur } from "./cartes/resolution";
 import { alertesLisibles } from "./checkin";
@@ -439,6 +440,12 @@ export async function validerCheckout(
       apres: { statut: "RECUPERE", personneAutoriseeId: personne.id, ...second },
     });
   }
+  // A parent call still on the screen ends with the hand-over (lot 3).
+  await resoudreAppelsAuRetrait(
+    tx,
+    auteur,
+    remis.map((r) => r.id),
+  );
 
   return {
     enfants: remis.map((r) => r.prenom),
@@ -554,6 +561,7 @@ export async function retraitExceptionnel(
     SET statut = 'RECUPERE', "recupereLe" = now(), "retraitExceptionnelId" = ${retrait.id},
         "remisPar" = ${auteur.userId}, "infirmerieLe" = NULL, "infirmerieRecueLe" = NULL
     WHERE id = ANY(${presenceIds}::text[])`;
+  await resoudreAppelsAuRetrait(tx, auteur, presenceIds);
 
   await journaliser(tx, auteur, {
     action: "incident.cree",

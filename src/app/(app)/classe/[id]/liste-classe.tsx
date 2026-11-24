@@ -97,6 +97,11 @@ export function ListeClasse({
         photoUrl={e.photoKey ? `/api/fichiers/${e.photoKey}` : null}
         index={index}
       />
+      {e.appelLieu ? (
+        <p className="m-0 justify-self-start rounded-pill bg-soleil px-4 py-1 font-bold text-nuit">
+          Parent appelé · {e.appelLieu}
+        </p>
+      ) : null}
       {/* Urgence, infirmerie, parent call: from the child's card (lot 3). */}
       <Link href={`/presences/${e.presenceId}`} className="justify-self-start font-bold">
         Fiche de {e.prenom}

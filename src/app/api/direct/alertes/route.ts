@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { peut } from "@/lib/rbac";
 import { AccesRefuse, getTenantDb } from "@/lib/tenant";
 import { alertesClasses, type AlerteClasse } from "@/server/moniteurs-session";
+import { appelsEnCours, type AppelEnCours } from "@/server/appels";
 import { listeInfirmerie, type EnfantInfirmerie } from "@/server/infirmerie";
 import { lireParametres } from "@/server/parametres";
 import {
@@ -16,6 +17,8 @@ export type AlertesDirect = {
     EnfantInfirmerie,
     "presenceId" | "prenom" | "matricule" | "classe" | "depuisMinutes" | "enRoute" | "nonArrive"
   >[];
+  /** Parents called to the screen, not arrived yet (lot 3). */
+  appels: AppelEnCours[];
   classes: AlerteClasse[];
   nonArrives: AlerteNonArrive[];
   /** Tablets blocked after 5 wrong retrieval codes (cahier §7.6, ADR 0016). */
@@ -42,7 +45,8 @@ export async function GET() {
   }
   if (!peut(acces.contexte.roles, "alertes.voir")) return new Response(null, { status: 403 });
   const parametres = await lireParametres(acces.db);
-  const [infirmerie, classes, nonArrives, bloquees, sessionsBloquees] = await Promise.all([
+  const [appels, infirmerie, classes, nonArrives, bloquees, sessionsBloquees] = await Promise.all([
+    appelsEnCours(acces.db),
     listeInfirmerie(acces.db, parametres["infirmerie.delaiReceptionMinutes"]),
     alertesClasses(acces.db),
     alertesNonArrives(acces.db, parametres["presences.delaiNonArriveEnSalleMinutes"]),
@@ -69,6 +73,7 @@ export async function GET() {
       enRoute: e.enRoute,
       nonArrive: e.nonArrive,
     })),
+    appels,
     classes,
     nonArrives,
     tablettesBloquees: bloquees.map((t) => ({

@@ -1,6 +1,13 @@
 "use client";
 
-import { DoorOpen, HeartPulse, OctagonAlert, ShieldAlert, TriangleAlert } from "lucide-react";
+import {
+  DoorOpen,
+  HeartPulse,
+  Megaphone,
+  OctagonAlert,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import type { AlertesDirect } from "@/app/api/direct/alertes/route";
 import { INTERVALLE_URGENT_MS, useLiveQuery } from "@/lib/live-query";
@@ -21,6 +28,31 @@ const aInfirmerie = (a: AlerteInfirmerie) =>
     : a.enRoute
       ? `${a.prenom} (${a.matricule}) en route vers l'infirmerie · ${a.classe} · depuis ${a.depuisMinutes} min`
       : `${a.prenom} (${a.matricule}) à l'infirmerie · ${a.classe} · depuis ${a.depuisMinutes} min`;
+
+/** Parents called to the screen and not arrived yet (lot 3), each opening the child's card. */
+function Appels({ appels, compact }: { appels: AlertesDirect["appels"]; compact: boolean }) {
+  if (appels.length === 0) return null;
+  return (
+    <section aria-label="Appels en cours" className={compact ? undefined : "grid gap-3"}>
+      <ul className={cn("m-0 list-none gap-2 p-0", compact ? "flex flex-wrap" : "grid gap-3")}>
+        {appels.map((a) => (
+          <li
+            key={a.presenceId}
+            className={cn(
+              "flex items-center gap-2 bg-soleil font-bold text-nuit",
+              compact ? "rounded-pill px-4 py-2" : "rounded-md px-5 py-3",
+            )}
+          >
+            <Megaphone aria-hidden className="size-5 shrink-0" />
+            <Link href={`/presences/${a.presenceId}`} className="text-inherit">
+              Parent de {a.prenom} ({a.matricule}) appelé · {a.lieu} · depuis {a.depuisMinutes} min
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** Children at the infirmerie, each opening their card; red when not arrived. */
 function Infirmerie({ alertes, compact }: { alertes: AlerteInfirmerie[]; compact: boolean }) {
@@ -73,8 +105,10 @@ export function AlertesClasses({
   const bloquees = alertes.data?.tablettesBloquees ?? [];
   const sessionsBloquees = alertes.data?.sessionsCodesBloques ?? [];
   const infirmerie = alertes.data?.infirmerie ?? [];
+  const appels = alertes.data?.appels ?? [];
   if (
     infirmerie.length === 0 &&
+    appels.length === 0 &&
     classes.length === 0 &&
     nonArrives.length === 0 &&
     bloquees.length === 0 &&
@@ -117,6 +151,7 @@ export function AlertesClasses({
     return (
       <div className={cn("flex flex-wrap gap-2", className)}>
         <Infirmerie alertes={infirmerie} compact />
+        <Appels appels={appels} compact />
         {tablettes}
         {classes.length > 0 ? (
           <section aria-label="Alertes des classes">
@@ -168,6 +203,7 @@ export function AlertesClasses({
   return (
     <div className={cn("grid gap-3", className)}>
       <Infirmerie alertes={infirmerie} compact={false} />
+      <Appels appels={appels} compact={false} />
       {tablettes}
       {classes.length > 0 ? (
         <section aria-label="Alertes des classes" className="grid gap-3">

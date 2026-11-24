@@ -1,6 +1,8 @@
 import "server-only";
 import { droitsPresence } from "@/lib/rbac";
 import type { ClientEglise, ContexteEglise } from "@/lib/tenant";
+import { appelOuvert } from "@/server/appels";
+import { lireParametres } from "@/server/parametres";
 import { membresActifsEglise, nomsMembresEglise } from "@/server/plateforme/membres-session";
 import { affecteALaPresence, fichePresence, type FichePresence } from "@/server/presences";
 import {
@@ -36,6 +38,10 @@ export type FicheDirect = {
   droits: DroitsFiche;
   /** Who may accompany the child to the infirmerie (reader first), when it can be sent. */
   accompagnants: { userId: string; nom: string }[];
+  /** The parent call on the screen, if any. */
+  appel: Awaited<ReturnType<typeof appelOuvert>>;
+  /** Meeting places of the church (appels.lieux), when the parent may be called. */
+  lieux: string[];
 };
 
 const peutPartir = (fiche: FichePresence) =>
@@ -47,10 +53,12 @@ export async function lireFiche(
   { fiche, droits }: { fiche: FichePresence; droits: DroitsFiche },
 ): Promise<FicheDirect> {
   const { presenceId } = fiche;
-  const [contacts, journal, membres] = await Promise.all([
+  const [contacts, journal, membres, appel, parametres] = await Promise.all([
     droits.appeler ? contactsUrgence(acces.db, presenceId) : Promise.resolve([]),
     journalAppels(acces.db, presenceId),
     droits.envoyer && peutPartir(fiche) ? membresActifsEglise(acces.contexte) : Promise.resolve([]),
+    appelOuvert(acces.db, presenceId),
+    lireParametres(acces.db),
   ]);
   const noms = await nomsMembresEglise(acces.contexte, [...new Set(journal.map((j) => j.userId))]);
   const moi = acces.contexte.userId;
@@ -63,5 +71,10 @@ export async function lireFiche(
       ...membres.filter((m) => m.userId === moi),
       ...membres.filter((m) => m.userId !== moi),
     ],
+    appel,
+    lieux:
+      droits.appeler && fiche.sessionOuverte && fiche.statut !== "RECUPERE"
+        ? parametres["appels.lieux"]
+        : [],
   };
 }

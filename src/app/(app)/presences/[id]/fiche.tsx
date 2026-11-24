@@ -8,18 +8,93 @@ import { NotchCard } from "@/components/hk/notch-card";
 import { Button } from "@/components/ui/button";
 import { MessageErreur } from "@/components/ui/champ";
 import { appelerAction } from "@/lib/appel-action";
-import { LIBELLES_CANAL as CANAUX, RESULTATS_APPEL, type ResultatAppel } from "@/lib/appels";
+import {
+  LIBELLES_CANAL as CANAUX,
+  MOTIFS_APPEL,
+  RESULTATS_APPEL,
+  type MotifAppel,
+  type ResultatAppel,
+} from "@/lib/appels";
 import { useLiveQuery } from "@/lib/live-query";
 import { formaterTelephone } from "@/lib/telephone";
 import type { FicheDirect } from "../acces-presence";
 import { MessageSucces } from "../../parametres/entete";
 import { LiensUrgence } from "../urgence";
 import {
+  appelerLeParent,
   envoyerAInfirmerie,
   noterResultatUrgence,
   recevoirAInfirmerie,
   renvoyerEnClasseDepuisInfirmerie,
+  terminerAppel,
 } from "./actions";
+
+/** "Appeler le parent": a reason and a meeting place, shown on the call screen (RG-10). */
+function AppelParent({
+  prenom,
+  lieux,
+  lieuParDefaut,
+  enCours,
+  onAppeler,
+}: {
+  prenom: string;
+  lieux: string[];
+  lieuParDefaut: string;
+  enCours: boolean;
+  onAppeler: (motif: MotifAppel, lieu: string) => void;
+}) {
+  const [motif, setMotif] = useState<MotifAppel>("pleurs");
+  const [lieu, setLieu] = useState(lieuParDefaut);
+  const champ = "min-h-touch rounded-md border-2 border-nuit bg-blanc px-4 font-normal";
+  return (
+    <NotchCard couleur="blanc" aria-label="Appeler le parent">
+      <form
+        className="grid gap-4"
+        onSubmit={(evenement) => {
+          evenement.preventDefault();
+          onAppeler(motif, lieu);
+        }}
+      >
+        <h2 className="m-0 font-display text-h2 font-semibold">Appeler le parent</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 font-bold">
+            Motif de l&apos;appel
+            <select
+              className={champ}
+              value={motif}
+              onChange={(e) => setMotif(e.target.value as MotifAppel)}
+            >
+              {(Object.keys(MOTIFS_APPEL) as MotifAppel[]).map((m) => (
+                <option key={m} value={m}>
+                  {MOTIFS_APPEL[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-2 font-bold">
+            Lieu de rendez-vous
+            <select className={champ} value={lieu} onChange={(e) => setLieu(e.target.value)}>
+              {lieux.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <Button
+          type="submit"
+          variant="soleil"
+          size="xl"
+          disabled={enCours}
+          className="justify-self-start"
+        >
+          Appeler le parent de {prenom}
+        </Button>
+      </form>
+    </NotchCard>
+  );
+}
 
 /** "Accompagner à l'infirmerie": who accompanies (the reader by default) and why. */
 function EnvoiInfirmerie({
@@ -106,7 +181,7 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
       </MessageErreur>
     );
   }
-  const { fiche, contacts, journal, droits, accompagnants } = direct.data!;
+  const { fiche, contacts, journal, droits, accompagnants, appel, lieux } = direct.data!;
   const nomDuNumero = (numero: string) => {
     const contact = contacts.find((c) => c.telephones.includes(numero) || c.whatsapp === numero);
     return contact ? `${contact.prenom} ${contact.nom}` : formaterTelephone(numero);
@@ -214,6 +289,66 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
             agir(
               () => envoyerAInfirmerie({ presenceId, accompagnantUserId, motif }),
               `${fiche.prenom} part à l'infirmerie.`,
+            )
+          }
+        />
+      ) : null}
+
+      {appel ? (
+        <NotchCard couleur="blanc" aria-label="Appel du parent">
+          <div className="grid gap-4">
+            <h2 className="m-0 font-display text-h2 font-semibold">Parent appelé</h2>
+            <p className="m-0 rounded-md bg-soleil px-4 py-3 font-bold text-nuit">
+              {MOTIFS_APPEL[appel.motif]} · rendez-vous : {appel.lieu} · depuis{" "}
+              {appel.depuisMinutes} min
+            </p>
+            {droits.appeler ? (
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  variant="bleu"
+                  disabled={enCours}
+                  onClick={() =>
+                    agir(
+                      () => terminerAppel({ presenceId, resolution: "parent_arrive" }),
+                      "Parent arrivé : l'appel est retiré de l'écran.",
+                    )
+                  }
+                >
+                  Parent arrivé
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={enCours}
+                  onClick={() =>
+                    agir(
+                      () => terminerAppel({ presenceId, resolution: "annule" }),
+                      "Appel annulé : il est retiré de l'écran.",
+                    )
+                  }
+                >
+                  Annuler l&apos;appel
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </NotchCard>
+      ) : lieux.length > 0 ? (
+        <AppelParent
+          prenom={fiche.prenom}
+          lieux={lieux}
+          // At the infirmerie, the infirmerie is the obvious meeting place.
+          lieuParDefaut={
+            (fiche.statut === "INFIRMERIE" &&
+              lieux.find((l) => l.toLocaleLowerCase("fr").includes("infirmerie"))) ||
+            lieux[0]!
+          }
+          enCours={enCours}
+          onAppeler={(motif, lieu) =>
+            agir(
+              () => appelerLeParent({ presenceId, motif, lieu }),
+              `Parent de ${fiche.prenom} appelé à l'écran : ${lieu}.`,
             )
           }
         />

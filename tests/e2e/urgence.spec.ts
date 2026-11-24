@@ -115,6 +115,53 @@ test("le moniteur ouvre la fiche depuis sa classe, appelle la mère : l'appel es
   ]);
 });
 
+test("le moniteur appelle le parent à l'écran ; la classe voit « Parent appelé » ; l'appel se termine à l'arrivée du parent", async ({
+  page,
+  eglise,
+}) => {
+  const { sessionClasseId, presenceId } = await enfantEnClasse(eglise);
+  await seConnecter(page, eglise.email("MONITEUR"));
+  await attendreAccueil(page, eglise.nom);
+  await page.goto(`/presences/${presenceId}`);
+  const fiche = page.getByRole("region", { name: "Fiche de Ayo" });
+  const appel = fiche.getByRole("region", { name: "Appeler le parent" });
+  await appel.getByRole("combobox", { name: "Motif de l'appel" }).selectOption("Change");
+  await expect(appel.getByRole("combobox", { name: "Lieu de rendez-vous" })).toHaveValue(
+    "Accueil enfants",
+  );
+  await appel.getByRole("button", { name: "Appeler le parent de Ayo" }).click();
+  await expect(fiche.getByRole("status")).toHaveText(
+    "Parent de Ayo appelé à l'écran : Accueil enfants.",
+  );
+  const enCours = fiche.getByRole("region", { name: "Appel du parent" });
+  await expect(enCours.getByRole("paragraph")).toHaveText(
+    /^Change · rendez-vous : Accueil enfants · depuis \d+ min$/,
+  );
+
+  await page.goto(`/classe/${sessionClasseId}`);
+  await expect(
+    page
+      .getByRole("region", { name: "Liste de 6–8 ans" })
+      .getByRole("listitem", { name: "Ayo" })
+      .getByRole("paragraph")
+      .filter({ hasText: "Parent appelé" }),
+  ).toHaveText("Parent appelé · Accueil enfants");
+
+  await page.goto(`/presences/${presenceId}`);
+  await fiche
+    .getByRole("region", { name: "Appel du parent" })
+    .getByRole("button", { name: "Parent arrivé" })
+    .click();
+  await expect(fiche.getByRole("status")).toHaveText(
+    "Parent arrivé : l'appel est retiré de l'écran.",
+  );
+  await expect(fiche.getByRole("region", { name: "Appeler le parent" })).toBeVisible();
+  const { rows } = await eglise.dansEglise((c) =>
+    c.query(`SELECT motif, lieu, resolution FROM "Appel" WHERE "egliseId" = $1`, [eglise.id]),
+  );
+  expect(rows).toEqual([{ motif: "change", lieu: "Accueil enfants", resolution: "parent_arrive" }]);
+});
+
 test("la fiche d'un enfant d'une autre église répond 404", async ({
   page,
   eglise,
