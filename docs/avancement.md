@@ -2,14 +2,14 @@
 
 Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque lot se termine par une démonstration sur l'environnement Vercel et une validation avant le suivant.
 
-| Lot                              | État                                                                                              | Branche et pull request                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30                   | `lot-0`, PR n°1 ; correctif PR n°2      |
-| 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                                     | PR n°4 à n°7 ; `lot-1-matricules-liste` |
-| 2. Sessions, check-in, check-out | **en cours** : étapes 1 à 6 fusionnées (PR n°11 le 2026-11-21) ; démonstration à faire sur Vercel | PR n°9 à n°11 ; `lot-2-cloture`         |
-| 3. Infirmerie, appels, urgence   | plan validé le 2026-11-24 ; en attente de la clôture du lot 2                                     | `lot-3` (à créer)                       |
-| 4. Transition et pilotage        | à faire                                                                                           | —                                       |
-| 5. Robustesse et borne           | à faire                                                                                           | —                                       |
+| Lot                              | État                                                                            | Branche et pull request                 |
+| -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- |
+| 0. Fondations                    | **terminé** : validé sur Vercel le 2026-10-29, fusionné dans main le 2026-10-30 | `lot-0`, PR n°1 ; correctif PR n°2      |
+| 1. Familles et cartes            | **terminé** : validé sur Vercel le 2026-11-06                                   | PR n°4 à n°7 ; `lot-1-matricules-liste` |
+| 2. Sessions, check-in, check-out | **terminé, recette reportée après le lot 3** (décision du 2026-11-24)           | PR n°9 à n°13                           |
+| 3. Infirmerie, appels, urgence   | **en cours** : plan validé le 2026-11-24 ; étape 1 (schéma) en revue            | `lot-3`                                 |
+| 4. Transition et pilotage        | à faire                                                                         | —                                       |
+| 5. Robustesse et borne           | à faire                                                                         | —                                       |
 
 ## Décisions et questions ouvertes
 
@@ -34,6 +34,7 @@ Suivi des lots du plan de livraison (section 15 du cahier des charges). Chaque l
   6. `EcranAppareil.derniereVue` mise à jour au plus une fois par minute, pas à chaque rafraîchissement ; testé.
   7. Nouvelle tuile de l'écran d'appel mise en évidence quelques secondes à son apparition, sans son, sans animation si `prefers-reduced-motion` est actif.
   8. Ordre : étape 0, puis retours de la démonstration du lot 2 avant le schéma ; **arrêt avant la migration pour la revue du schéma**. Écarts au cahier à y reporter : §6 (INFIRMERIE → PRESENT), §3 bis et §7.8 (appairage par écran), §4 (rôle ECRAN sans usage).
+- **2026-11-24** — **Démonstration du lot 2 reportée** par l'utilisateur : **recette groupée des lots 2 et 3 à la fin du lot 3**. Le lot 2 est marqué « terminé, recette reportée après le lot 3 ». Consignes pour la suite : PR `lot-2-demonstration` (documentation seule) fusionnée une fois la CI verte ; branche `lot-3` depuis `main` ; lot 3 en autonomie, étape par étape (commit, push, CI verte à chaque étape) ; **un seul arrêt obligatoire : la revue du schéma avant la migration** ; ensuite, arrêt seulement pour une vraie décision fonctionnelle ou de sécurité, ou un échec inexpliqué ; à la fin du lot 3, une seule liste de recette couvrant les lots 2 et 3, avec pour chaque point le compte et l'église.
 - **2026-11-21** — Étape 6 demandée : pousser `0d21560`, corriger le tableau d'avancement, seed de démonstration du lot 2, ADR manquants, fusion de la PR n°11 une fois la CI verte, vérification de « Migrations Neon », puis liste de démonstration sur https://harvest-kids.vercel.app.
 
 ## Lot 0 — Fondations
@@ -129,7 +130,7 @@ Plan validé le 2026-11-06. Étapes 1 à 3 validées et fusionnées le 2026-11-1
    - CI verte sur `bf65100` (lint, types, unitaires, intégration, e2e, image Docker). Check-in mesuré du scan à la confirmation : 368 ms en paysage, 288 ms en portrait (artefact `captures-e2e`, fichiers `mesure-checkin.txt`).
 4. [x] Vue moniteur `/classe/[id]`, confirmation en salle (`cec4ac2`, `8d2daf3`, `a727c08`).
 5. [x] Check-out : 5a à l'accueil, 5b cas exceptionnels, 5c en salle (`f48be1e` à `bf5b99a`) ; validée le 2026-11-21.
-6. [ ] Finition : seed, ADR, démonstration. Faits le 2026-11-21 : limite globale des codes erronés (`465ef70`), ADR 0017, seed du lot 2 (`573bb57`). PR n°11 fusionnée le 2026-11-21 (`4ef6478`) après une CI verte ; CI de `main` verte ; « Migrations Neon » a appliqué `20261115090000_tableaux_non_nuls` ; `/api/sante` répond `{"ok":true}`. « Données de démonstration Neon » vert le 2026-11-24 après le correctif du délai (PR n°12, `a53e8b7`). Reste : la démonstration ci-dessous, par l'utilisateur (en cours le 2026-11-24), puis ses retours.
+6. [x] Finition : seed, ADR, démonstration (démonstration reportée le 2026-11-24 : recette groupée avec le lot 3). Faits le 2026-11-21 : limite globale des codes erronés (`465ef70`), ADR 0017, seed du lot 2 (`573bb57`). PR n°11 fusionnée le 2026-11-21 (`4ef6478`) après une CI verte ; CI de `main` verte ; « Migrations Neon » a appliqué `20261115090000_tableaux_non_nuls` ; `/api/sante` répond `{"ok":true}`. « Données de démonstration Neon » vert le 2026-11-24 après le correctif du délai (PR n°12, `a53e8b7`). La démonstration ci-dessous est reportée à la recette groupée des lots 2 et 3 (décision du 2026-11-24) ; sa liste sera reprise dans la liste de recette de fin du lot 3.
 
 ### Liste de démonstration du lot 2 (https://harvest-kids.vercel.app)
 
