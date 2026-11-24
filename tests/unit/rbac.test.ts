@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ACTIONS, ActionInterdite, droitsSalle, exigerDroit, peut } from "@/lib/rbac";
+import {
+  ACTIONS,
+  ActionInterdite,
+  droitsPresence,
+  droitsSalle,
+  exigerDroit,
+  peut,
+} from "@/lib/rbac";
 
 describe("droits par rôle (cahier §4)", () => {
   it("l'administrateur peut tout dans son église", () => {
@@ -62,6 +69,20 @@ describe("droits par rôle (cahier §4)", () => {
     [["RESPONSABLE"], true, { voir: true, confirmer: true, corriger: true }],
   ] as const)("arrivée en salle : %j, affecté %s → %j", (roles, affecte, attendu) => {
     expect(droitsSalle(roles, affecte)).toEqual(attendu);
+  });
+
+  it.each([
+    // Every child of the church: reception desk, infirmerie, RESPONSABLE, ADMIN.
+    [["ACCUEIL"], false, { voir: true, appeler: true }],
+    [["INFIRMERIE"], false, { voir: true, appeler: true }],
+    [["RESPONSABLE"], false, { voir: true, appeler: true }],
+    [["ADMIN"], false, { voir: true, appeler: true }],
+    // A MONITEUR: the children of the class they are assigned to, only.
+    [["MONITEUR"], true, { voir: true, appeler: true }],
+    [["MONITEUR"], false, { voir: false, appeler: false }],
+    [["ECRAN"], false, { voir: false, appeler: false }],
+  ] as const)("fiche de présence : %j, affecté %s → %j", (roles, affecte, attendu) => {
+    expect(droitsPresence(roles, affecte)).toEqual(attendu);
   });
 
   it("exigerDroit lève une erreur explicite", () => {

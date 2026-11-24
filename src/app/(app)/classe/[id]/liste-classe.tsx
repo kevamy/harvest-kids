@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, Undo2 } from "lucide-react";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ListeClasseDirect } from "@/app/api/direct/classes/[id]/route";
 import { ChildCard } from "@/components/hk/child-card";
@@ -83,17 +84,23 @@ export function ListeClasse({
   const enSalle = enfants.filter((e) => e.statut === "EN_SALLE");
 
   const carte = (e: EnfantSalle, index: number) => (
-    <ChildCard
-      prenom={e.prenom}
-      nom={e.nom}
-      age={e.age}
-      classe={nomClasse}
-      matricule={e.matricule}
-      statut={e.statut}
-      alertes={e.alertes}
-      photoUrl={e.photoKey ? `/api/fichiers/${e.photoKey}` : null}
-      index={index}
-    />
+    <div className="grid gap-2">
+      <ChildCard
+        prenom={e.prenom}
+        nom={e.nom}
+        age={e.age}
+        classe={nomClasse}
+        matricule={e.matricule}
+        statut={e.statut}
+        alertes={e.alertes}
+        photoUrl={e.photoKey ? `/api/fichiers/${e.photoKey}` : null}
+        index={index}
+      />
+      {/* Urgence, infirmerie, parent call: from the child's card (lot 3). */}
+      <Link href={`/presences/${e.presenceId}`} className="justify-self-start font-bold">
+        Fiche de {e.prenom}
+      </Link>
+    </div>
   );
 
   return (

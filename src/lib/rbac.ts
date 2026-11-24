@@ -45,6 +45,8 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "classe.voir",
     "salle.superviser",
     "alertes.voir",
+    // Urgence button on any child's card (lot 3).
+    "parent.appeler",
     "incident.declarer",
     "incidents.voir",
     "rapports.voir",
@@ -95,6 +97,24 @@ export function droitsSalle(
 ): { voir: boolean; confirmer: boolean; corriger: boolean } {
   const superviser = peut(roles, "salle.superviser");
   return { voir: affecte || superviser, confirmer: affecte, corriger: superviser };
+}
+
+/**
+ * A child's presence card (lot 3, ADR 0019). The reception desk, the infirmerie, a RESPONSABLE
+ * and an ADMIN reach every child of the church; a member assigned to the child's class in the
+ * session reaches the children of that class only (a MONITEUR elsewhere gets a 404). Calling
+ * the family (Urgence) also needs parent.appeler.
+ */
+export function droitsPresence(
+  roles: readonly Role[],
+  affecte: boolean,
+): { voir: boolean; appeler: boolean } {
+  const voir =
+    affecte ||
+    peut(roles, "tableau.direct") ||
+    peut(roles, "infirmerie.gerer") ||
+    peut(roles, "salle.superviser");
+  return { voir, appeler: voir && peut(roles, "parent.appeler") };
 }
 
 /** Throws unless one of the roles grants the action. */

@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  CircleCheck,
-  MessageCircle,
-  Phone,
-  Search,
-  TriangleAlert,
-  UserRound,
-  UserX,
-} from "lucide-react";
+import { CircleCheck, Search, TriangleAlert, UserRound, UserX } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MatriculeBadge } from "@/components/hk/matricule-badge";
 import { NotchCard } from "@/components/hk/notch-card";
@@ -16,7 +8,6 @@ import { Scanner } from "@/components/hk/scanner";
 import { StatusPill } from "@/components/hk/status-pill";
 import { Button } from "@/components/ui/button";
 import { appelerAction } from "@/lib/appel-action";
-import { formaterTelephone, lienTelephone, lienWhatsApp } from "@/lib/telephone";
 import type {
   PreparationCheckout,
   ResultatCheckout,
@@ -25,6 +16,7 @@ import type {
 import { reduirePhoto } from "@/lib/photo-navigateur";
 import { usePret } from "@/lib/use-pret";
 import { preparerRetraitEnSalle, validerRetraitEnSalle } from "../classe/[id]/actions";
+import { LiensUrgence } from "../presences/urgence";
 import {
   autoriserRetraitExceptionnel,
   membresPourAutoriser,
@@ -816,29 +808,24 @@ export function Checkout({
                       ? "Retrait bloqué : cet adulte n'est pas parmi les personnes autorisées. Accompagnez le parent à l'accueil."
                       : "Retrait bloqué : cet adulte n'est pas parmi les personnes autorisées. Appelez le contact principal ; le responsable peut ensuite autoriser un retrait exceptionnel."}
                   </p>
-                  {contact ? (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-bold">
-                        {contact.prenom} {contact.nom}
-                        {telephone ? ` · ${formaterTelephone(telephone)}` : ""}
-                      </span>
-                      {telephone && lienTelephone(telephone) ? (
-                        <Button asChild variant="sombre">
-                          <a href={lienTelephone(telephone)!}>
-                            <Phone aria-hidden />
-                            Appeler {contact.prenom}
-                          </a>
-                        </Button>
-                      ) : null}
-                      {whatsapp && lienWhatsApp(whatsapp) ? (
-                        <Button asChild variant="ghost">
-                          <a href={lienWhatsApp(whatsapp)!} target="_blank" rel="noreferrer">
-                            <MessageCircle aria-hidden />
-                            WhatsApp
-                          </a>
-                        </Button>
-                      ) : null}
-                    </div>
+                  {contact && preparation?.enfants[0] ? (
+                    // Same links as the Urgence button: each call is logged (lot 3), on the
+                    // first child's presence.
+                    <LiensUrgence
+                      presenceId={preparation.enfants[0].presenceId}
+                      contacts={[
+                        {
+                          cle: "contact-principal",
+                          prenom: contact.prenom,
+                          nom: contact.nom,
+                          lien: "Contact principal",
+                          principal: false,
+                          qualite: "tuteur",
+                          telephones: telephone ? [telephone] : [],
+                          whatsapp,
+                        },
+                      ]}
+                    />
                   ) : (
                     <p className="m-0 flex items-center gap-2">
                       <UserRound aria-hidden className="size-5" />
