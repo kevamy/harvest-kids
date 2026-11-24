@@ -90,10 +90,20 @@ async function famille(jeu: Jeu, cle: string, code: string, statuts = ["EN_SALLE
     const presenceId = `presence_${enfantId}`;
     await sql(
       jeu,
+      // A child at the infirmerie has its sending time (CHECK Presence_infirmerie_statut).
       `INSERT INTO "Presence" (id, "egliseId", "sessionId", "enfantId", "classeId", statut,
-                               "codeRetrait", "checkinPar")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'user_accueil')`,
-      [presenceId, jeu.egliseId, jeu.sessionId, enfantId, jeu.classeId, statut, code],
+                               "codeRetrait", "checkinPar", "infirmerieLe")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'user_accueil', CASE WHEN $8 THEN now() END)`,
+      [
+        presenceId,
+        jeu.egliseId,
+        jeu.sessionId,
+        enfantId,
+        jeu.classeId,
+        statut,
+        code,
+        statut === "INFIRMERIE",
+      ],
     );
     presences.push(presenceId);
   }

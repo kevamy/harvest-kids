@@ -23,6 +23,9 @@ const TABLES_PLATEFORME = [
   "AccesSupport",
   "AuditPlateforme",
   "JetonCompte",
+  // Read before the church is known (paired call screen, ADR 0018); its isolation is proven by
+  // tests/integration/ecran.test.ts.
+  "EcranAppareil",
   "AuthSession",
   "AuthAccount",
   "AuthVerification",

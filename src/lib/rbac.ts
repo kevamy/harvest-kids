@@ -28,7 +28,6 @@ export const ACTIONS = [
   "comptes.gerer",
   "eglise.parametrer",
   "donnees.purger",
-  "ecran.voir",
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -68,12 +67,12 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "incident.declarer",
   ],
   INFIRMERIE: ["infirmerie.gerer", "parent.appeler", "alertes.voir", "incident.declarer"],
-  // Read-only call screen, without any personal data (RG-10).
-  ECRAN: ["ecran.voir"],
+  // No rights: the call screen is a paired device, not an account (ADR 0018).
+  ECRAN: [],
 };
 
 export function peut(roles: readonly Role[], action: Action): boolean {
-  if (roles.includes("ADMIN")) return action !== "ecran.voir";
+  if (roles.includes("ADMIN")) return true;
   return roles.some((role) => role !== "ADMIN" && DROITS[role].includes(action));
 }
 

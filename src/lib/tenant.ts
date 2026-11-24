@@ -32,6 +32,7 @@ export const MODELES_EGLISE = [
   "Appel",
   "AppelTelephonique",
   "Incident",
+  "IncidentNote",
   "RetraitExceptionnel",
   "AuditLog",
   "Parametre",

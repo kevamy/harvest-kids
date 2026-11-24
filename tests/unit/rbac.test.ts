@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ACTIONS, ActionInterdite, droitsSalle, exigerDroit, peut } from "@/lib/rbac";
 
 describe("droits par rôle (cahier §4)", () => {
-  it("l'administrateur peut tout dans son église, sauf l'écran d'appel technique", () => {
-    for (const action of ACTIONS.filter((a) => a !== "ecran.voir")) {
-      expect(peut(["ADMIN"], action), action).toBe(true);
-    }
-    expect(peut(["ADMIN"], "ecran.voir")).toBe(false);
+  it("l'administrateur peut tout dans son église", () => {
+    for (const action of ACTIONS) expect(peut(["ADMIN"], action), action).toBe(true);
+  });
+
+  it("le rôle ECRAN n'a aucun droit : l'écran d'appel est un appareil appairé (ADR 0018)", () => {
+    for (const action of ACTIONS) expect(peut(["ECRAN"], action), action).toBe(false);
   });
 
   it.each([
@@ -36,9 +37,6 @@ describe("droits par rôle (cahier §4)", () => {
     ["INFIRMERIE", "infirmerie.gerer", true],
     ["INFIRMERIE", "alertes.voir", true],
     ["INFIRMERIE", "checkin", false],
-    ["ECRAN", "ecran.voir", true],
-    ["ECRAN", "tableau.direct", false],
-    ["ECRAN", "alertes.voir", false],
   ] as const)("%s → %s : %s", (role, action, attendu) => {
     expect(peut([role], action)).toBe(attendu);
   });
