@@ -131,9 +131,14 @@ type TransactionPrisma = Parameters<Parameters<PrismaClient["$transaction"]>[0]>
 
 /**
  * Runs `fn` inside one church (app.eglise_id set for the transaction). Built by
- * prisma/seed.ts, the only seed file allowed to hold the raw Prisma client.
+ * prisma/seed.ts, the only seed file allowed to hold the raw Prisma client. `timeout` (ms)
+ * lengthens Prisma's 5 s limit for long transactions: on Neon, each statement pays the
+ * round trip from the GitHub runner.
  */
-export type DansEglise = <T>(fn: (tx: TransactionPrisma) => Promise<T>) => Promise<T>;
+export type DansEglise = <T>(
+  fn: (tx: TransactionPrisma) => Promise<T>,
+  options?: { timeout?: number },
+) => Promise<T>;
 
 export async function semerFamilles(
   dansEglise: DansEglise,

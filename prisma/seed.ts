@@ -149,7 +149,7 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
   let historiques = 0;
   for (const [i, eglise] of EGLISES_DEMO.entries()) {
     const egliseId = ids[eglise.cle]!;
-    const dansEglise: DansEglise = (fn) => withEglise(base, egliseId, fn);
+    const dansEglise: DansEglise = (fn, options) => withEglise(base, egliseId, fn, options);
     familles += await semerFamilles(dansEglise, egliseId, 1000 + i * 97, stockage);
     // Demonstration churches only: data seeded before the ten-digit numbers.
     telephonesRepares += await reparerTelephonesDemo(dansEglise);

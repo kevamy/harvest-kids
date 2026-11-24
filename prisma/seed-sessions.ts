@@ -62,6 +62,9 @@ const CLASSES_HISTORIQUE = 3;
 
 export const idSessionHistorique = (egliseId: string) => `${egliseId}_demo_dimanche`;
 
+/** Time allowed to the history's transaction, instead of Prisma's 5 s. */
+export const HISTORIQUE_TIMEOUT_MS = 60_000;
+
 /**
  * Last Sunday's "Culte 1" session, closed. Returns false when it exists already, or when
  * the church has no such service or already held a session that day.
@@ -84,7 +87,11 @@ export async function semerHistorique(
   await stockage.put(photoKey, await silhouetteFictive(97), "image/png");
   let ecrit = false;
   try {
-    ecrit = await dansEglise((tx) => ecrireHistorique(tx, egliseId, sessionId, acteurs, photoKey));
+    // Over a hundred statements, one round trip each: 5.2 s on Neon from a GitHub runner
+    // (2026-11-24), past Prisma's default 5 s.
+    ecrit = await dansEglise((tx) => ecrireHistorique(tx, egliseId, sessionId, acteurs, photoKey), {
+      timeout: HISTORIQUE_TIMEOUT_MS,
+    });
   } finally {
     if (!ecrit) await stockage.delete(photoKey);
   }
