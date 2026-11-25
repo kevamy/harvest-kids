@@ -1,9 +1,11 @@
 /**
- * Lot 2 demonstration data (cahier §16), demonstration churches only, idempotent:
+ * Lot 2 and 3 demonstration data (cahier §16), demonstration churches only, idempotent:
  * - a "Démonstration" service every day, so a session exists whatever the day of a demo;
  * - where the children are handed back (`checkout.lieu`), set once, never overwritten;
  * - last Sunday's session, closed: classes opened by their monitors, children checked in,
- *   arrived in class and collected, and one exceptional retrieval with its incident.
+ *   arrived in class and collected, and one exceptional retrieval with its incident;
+ * - in that session (lot 3), an infirmerie episode, a logged phone call and a parent call.
+ * Call screens are never paired by the seed: the ADMIN pairs them on the device.
  *
  * The history cannot go through the lot 2 services: they stamp every row with the
  * database's now(), and the journal is append-only (RG-09), so it could not be moved back
@@ -394,4 +396,177 @@ async function ecrireHistorique(
     duree + 40,
   );
   return true;
+}
+
+/**
+ * Lot 3, added to last Sunday's session (also on a base where the lot 2 history already
+ * exists): the first child checked in went to the infirmerie with his monitor, was received
+ * there, his main contact was phoned (logged, reached) and called to the screen; the parent
+ * came, the child went back to class (PRESENT, confirmed again by his monitor), then was
+ * collected as before. Same shapes as the lot 3 services, times from the session's start.
+ * Returns false when the session is missing or the episode is already there.
+ */
+export async function semerEpisodeInfirmerie(
+  dansEglise: DansEglise,
+  egliseId: string,
+  acteurs: { accueil: string; infirmerie: string },
+): Promise<boolean> {
+  const sessionId = idSessionHistorique(egliseId);
+  // About twenty round trips: well under 5 s, but Neon from a GitHub runner is slow.
+  const delai = { timeout: HISTORIQUE_TIMEOUT_MS };
+  return dansEglise(async (tx) => {
+    const [cible] = await tx.$queryRaw<
+      { presenceId: string; classeId: string; familleId: string; moniteur: string | null }[]
+    >`
+      SELECT p.id AS "presenceId", p."classeId", e."familleId",
+             (SELECT m."userId" FROM "AffectationMoniteur" a
+                JOIN "SessionClasse" sc ON sc.id = a."sessionClasseId"
+                JOIN "Membre" m ON m.id = a."membreId"
+               WHERE sc."sessionId" = p."sessionId" AND sc."classeId" = p."classeId"
+               ORDER BY a.arrivee, a.id LIMIT 1) AS moniteur
+      FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
+      WHERE p."sessionId" = ${sessionId} AND p."retraitExceptionnelId" IS NULL
+      ORDER BY p."checkinLe", p.id
+      LIMIT 1`;
+    if (!cible?.moniteur) return false;
+    const [deja] = await tx.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM "Appel" WHERE "presenceId" = ${cible.presenceId}`;
+    if (deja!.n > 0) return false;
+
+    const { presenceId, classeId, moniteur } = cible;
+    // Every time below: the session's start plus a number of minutes, computed by PostgreSQL.
+    const evenement = (type: string, detail: Json, userId: string, m: number) =>
+      tx.$executeRaw`
+        INSERT INTO "EvenementPresence" (id, "egliseId", "presenceId", type, detail, "userId", "createdAt")
+        SELECT ${randomUUID()}, ${egliseId}, ${presenceId}, ${type},
+               ${JSON.stringify(detail)}::jsonb, ${userId}, s.debut + make_interval(mins => ${m}::int)
+        FROM "Session" s WHERE s.id = ${sessionId}`;
+    const audit = (
+      userId: string,
+      action: string,
+      entite: string,
+      entiteId: string,
+      apres: Json,
+      m: number,
+    ) =>
+      tx.$executeRaw`
+        INSERT INTO "AuditLog" (id, "egliseId", "userId", action, entite, "entiteId", apres, "createdAt")
+        SELECT ${randomUUID()}, ${egliseId}, ${userId}, ${action}, ${entite}, ${entiteId},
+               ${JSON.stringify(apres)}::jsonb, s.debut + make_interval(mins => ${m}::int)
+        FROM "Session" s WHERE s.id = ${sessionId}`;
+
+    // 20 minutes into the service: fever, to the infirmerie with the class's monitor.
+    await evenement(
+      "infirmerie",
+      { statut: "INFIRMERIE", depuis: "EN_SALLE", accompagnant: moniteur, motif: "Fièvre" },
+      moniteur,
+      20,
+    );
+    await audit(
+      moniteur,
+      "presence.infirmerie",
+      "Presence",
+      presenceId,
+      { statut: "INFIRMERIE", accompagnant: moniteur },
+      20,
+    );
+    await evenement("infirmerie_recue", { statut: "INFIRMERIE" }, acteurs.infirmerie, 22);
+    await audit(
+      acteurs.infirmerie,
+      "presence.infirmerie_recue",
+      "Presence",
+      presenceId,
+      { statut: "INFIRMERIE", recu: true },
+      22,
+    );
+
+    // The main contact phoned from the Urgence button, reached.
+    const [tuteur] = await tx.$queryRaw<{ telephone: string | null }[]>`
+      SELECT telephone FROM "Tuteur"
+      WHERE "familleId" = ${cible.familleId} AND principal ORDER BY id LIMIT 1`;
+    if (tuteur?.telephone) {
+      const appelTelId = randomUUID();
+      await tx.$executeRaw`
+        INSERT INTO "AppelTelephonique" (id, "egliseId", "presenceId", "enfantId", numero, canal,
+                                         resultat, "resultatLe", "userId", "createdAt")
+        SELECT ${appelTelId}, ${egliseId}, p.id, p."enfantId", ${tuteur.telephone}, 'tel',
+               'joint', s.debut + interval '25 minutes', ${acteurs.infirmerie},
+               s.debut + interval '24 minutes'
+        FROM "Presence" p JOIN "Session" s ON s.id = p."sessionId" WHERE p.id = ${presenceId}`;
+      await audit(
+        acteurs.infirmerie,
+        "appel.telephone",
+        "AppelTelephonique",
+        appelTelId,
+        { presenceId, canal: "tel" },
+        24,
+      );
+      await audit(
+        acteurs.infirmerie,
+        "appel.resultat",
+        "AppelTelephonique",
+        appelTelId,
+        { resultat: "joint" },
+        25,
+      );
+    }
+
+    // The parent called to the screen, to the infirmerie; arrived.
+    const appelId = randomUUID();
+    await tx.$executeRaw`
+      INSERT INTO "Appel" (id, "egliseId", "presenceId", motif, lieu, "creePar", "creeLe",
+                           "resoluLe", resolution, "resoluPar")
+      SELECT ${appelId}, ${egliseId}, ${presenceId}, 'soins', 'Infirmerie', ${acteurs.infirmerie},
+             s.debut + interval '25 minutes', s.debut + interval '32 minutes', 'parent_arrive',
+             ${acteurs.accueil}
+      FROM "Session" s WHERE s.id = ${sessionId}`;
+    await evenement(
+      "appel_parent",
+      { appelId, motif: "soins", lieu: "Infirmerie" },
+      acteurs.infirmerie,
+      25,
+    );
+    await audit(
+      acteurs.infirmerie,
+      "appel.cree",
+      "Appel",
+      appelId,
+      { presenceId, motif: "soins", lieu: "Infirmerie" },
+      25,
+    );
+    await evenement(
+      "appel_parent_resolu",
+      { appelId, resolution: "parent_arrive" },
+      acteurs.accueil,
+      32,
+    );
+    await audit(
+      acteurs.accueil,
+      "appel.resolu",
+      "Appel",
+      appelId,
+      { presenceId, resolution: "parent_arrive" },
+      32,
+    );
+
+    // Back to class, PRESENT, confirmed again by the monitor (decision of 2026-11-24).
+    await evenement("infirmerie_retour", { statut: "PRESENT", recu: true }, acteurs.infirmerie, 35);
+    await audit(
+      acteurs.infirmerie,
+      "presence.infirmerie_retour",
+      "Presence",
+      presenceId,
+      { statut: "PRESENT" },
+      35,
+    );
+    await evenement("en_salle", { statut: "EN_SALLE", classeId, mode: "toucher" }, moniteur, 37);
+    await audit(moniteur, "presence.en_salle", "Presence", presenceId, { statut: "EN_SALLE" }, 37);
+    await tx.$executeRaw`
+      UPDATE "Presence" p
+      SET "retourInfirmerieLe" = s.debut + interval '35 minutes',
+          "enSalleLe" = s.debut + interval '37 minutes'
+      FROM "Session" s
+      WHERE p.id = ${presenceId} AND s.id = p."sessionId"`;
+    return true;
+  }, delai);
 }

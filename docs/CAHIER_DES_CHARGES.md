@@ -1,6 +1,6 @@
 # Harvest Kids — Cahier des charges
 
-Version 1.6, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur ; 1.5 : arrivée en salle confirmée par les membres affectés à la classe, annulation d'une confirmation ; 1.6 : check-out, second membre et photo de l'adulte non reconnu). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
+Version 1.7, novembre 2026 (1.1 : multi-églises et logo de l'église sur les cartes ; 1.2 : mode de carte, classes et tranches d'âge configurables par église, impression des cartes par chaque église ; 1.3 : gestion des comptes au lot 1, activation des comptes par lien à usage unique ; 1.4 : ouverture forcée d'une classe avec au moins un moniteur présent, alerte maximale d'une classe ouverte sans moniteur ; 1.5 : arrivée en salle confirmée par les membres affectés à la classe, annulation d'une confirmation ; 1.6 : check-out, second membre et photo de l'adulte non reconnu ; 1.7 : écran d'appel appairé par lien unique sans compte ECRAN, retour de l'infirmerie en `PRESENT` confirmé par la classe, check-out d'un enfant à l'infirmerie à l'accueil seulement). Destinataire : Claude Code (développement), validé par l'équipe des leaders.
 
 ---
 
@@ -55,7 +55,7 @@ Harvest Kids est un service unique hébergé une fois (Vercel en test, VPS Hosti
   1. côté application, un client Prisma « scopé » (extension Prisma), obtenu uniquement via `getTenantDb()`, ajoute automatiquement `egliseId` à toute lecture et toute écriture. Le client Prisma brut n'est importable que dans `src/server/plateforme/` ;
   2. côté base, des politiques **Row-Level Security** PostgreSQL filtrent chaque table métier sur `current_setting('app.eglise_id')`, positionné en début de transaction (`SET LOCAL`). Une requête oubliée ne peut donc pas fuir vers une autre église. L'application se connecte avec un rôle PostgreSQL sans `BYPASSRLS` ; les migrations utilisent un rôle distinct.
 - **L'église active vient de la session**, pas de l'URL : à la connexion, l'utilisateur entre dans l'église dont il est membre ; s'il est membre de plusieurs églises, il choisit (et peut changer) depuis le menu. Aucun sous-domaine n'est nécessaire en v1, ce qui évite les certificats wildcard sur Caddy et les domaines wildcard sur Vercel. Les sous-domaines par église restent possibles plus tard sans changer le modèle.
-- **Exception, l'écran d'appel** : il est adressé par `/ecran/[slug-eglise]` et protégé par un jeton d'écran propre à l'église.
+- **Exception, l'écran d'appel** : il est adressé par `/ecran/[slug-eglise]`, mais l'église qu'il affiche vient de l'appareil appairé (cookie), jamais de l'adresse ; chaque écran est appairé par un lien unique et révocable à part (section 7.8, ADR 0018).
 
 ### Ce qui est propre à chaque église
 
@@ -88,7 +88,7 @@ Les rôles ci-dessous s'appliquent **à l'intérieur d'une église** : un compte
 | `ACCUEIL` | Équipe de réception | Inscrire et modifier les familles, faire les check-in et check-out, appeler les parents, voir le tableau de bord en direct |
 | `MONITEUR` | Équipe d'animation | Voir sa classe, confirmer l'arrivée en salle, envoyer un enfant à l'infirmerie, demander l'appel d'un parent, déclarer un incident |
 | `INFIRMERIE` | Équipe de soins | Voir les enfants à l'infirmerie, les recevoir, les renvoyer en classe, consulter les alertes médicales, déclarer un incident |
-| `ECRAN` | Compte technique de l'écran d'appel | Lecture seule de la page d'appel, sans aucune donnée nominative |
+| `ECRAN` | Sans usage depuis la v1.7 (l'écran d'appel est un appareil appairé, pas un compte : section 7.8) | Aucun droit |
 
 Une personne peut avoir plusieurs rôles. Les parents n'ont pas de compte en v1 : ils sont identifiés par leur carte QR, leur code de retrait et la vérification visuelle.
 
@@ -114,19 +114,20 @@ Une personne peut avoir plusieurs rôles. Les parents n'ont pas de compte en v1 
 
 ```
 ATTENDU ──► PRESENT ──► EN_SALLE ──► RECUPERE
-               │            │  ▲
-               │            ▼  │
-               └──────► INFIRMERIE
-                    (APPEL_PARENT est un drapeau qui se superpose au statut)
+             │   ▲          │               ▲
+             │   │          ▼               │ (à l'accueil seulement)
+             └───┴─────► INFIRMERIE ────────┘
+     (le retour de l'infirmerie se fait en PRESENT, confirmé ensuite par la classe ;
+      un appel parent ouvert se superpose au statut)
 ```
 
 | Statut | Signification | Déclencheur |
 |---|---|---|
 | `PRESENT` | Enregistré à l'accueil, en route vers sa classe | Check-in à l'accueil |
 | `EN_SALLE` | Confirmé par un membre affecté à la classe | Scan ou toucher par un membre affecté à la classe pour la session ; annulable (retour à `PRESENT`, section 7.4) |
-| `INFIRMERIE` | À l'infirmerie | Moniteur ou infirmerie ; enregistre l'heure et l'accompagnant |
-| `RECUPERE` | Remis à une personne autorisée | Check-out validé |
-| Drapeau `appelParent` | Le parent est appelé | Moniteur, accueil ou infirmerie ; affiché sur l'écran d'appel jusqu'à résolution |
+| `INFIRMERIE` | En route vers l'infirmerie, puis reçu | Moniteur de la classe, infirmerie, responsable ; enregistre l'heure, l'accompagnant et le motif. Retour en `PRESENT` (jamais directement `EN_SALLE`) : un membre de la classe confirme l'arrivée, et l'alerte « non arrivé en salle » compte depuis le retour |
+| `RECUPERE` | Remis à une personne autorisée | Check-out validé (un enfant à l'infirmerie : à l'accueil seulement) |
+| Appel parent ouvert | Le parent est appelé | Moniteur, accueil, infirmerie ou responsable ; affiché sur l'écran d'appel jusqu'à résolution (parent arrivé, annulé, ou enfant récupéré) |
 
 Chaque changement de statut est horodaté et enregistré dans l'historique de la présence et dans le journal d'audit (qui, quand, depuis quel appareil).
 
@@ -171,7 +172,7 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 
 ### 7.5 Pendant le culte (MONITEUR, INFIRMERIE, ACCUEIL)
 
-- **Infirmerie** : depuis la fiche, « Accompagner à l'infirmerie » (choix de l'accompagnant, motif court). L'infirmerie voit l'enfant arriver, le reçoit, puis le renvoie en classe ou le garde. **Le statut `INFIRMERIE` est visible partout, y compris au check-out** (c'est la cause de l'incident d'origine).
+- **Infirmerie** : depuis la fiche, « Accompagner à l'infirmerie » (choix de l'accompagnant, motif court). L'infirmerie voit l'enfant arriver, le reçoit, puis le renvoie en classe (statut `PRESENT`, à confirmer par la classe) ou le garde. Un enfant envoyé et non reçu après un délai réglable par l'église (5 minutes par défaut) déclenche une alerte rouge « … n'est pas arrivé à l'infirmerie » sur la page Infirmerie et aux tableaux de l'accueil et du responsable, jusqu'à sa réception ou son retour en classe. **Le statut `INFIRMERIE` est visible partout, y compris au check-out** (c'est la cause de l'incident d'origine).
 - **Appeler le parent** : depuis la fiche, choix du motif (pleurs, change, soins, comportement, autre). Le matricule apparaît sur l'écran d'appel avec le lieu de rendez-vous (accueil enfants ou infirmerie). L'appel est résolu quand le parent arrive ou quand le moniteur l'annule.
 - **Urgence** : bouton présent sur chaque fiche. Il affiche les tuteurs et personnes autorisées avec leurs numéros ; un toucher lance l'appel (`tel:`), un autre ouvre WhatsApp (`https://wa.me/`). Chaque appel lancé est journalisé (qui, quand, quel numéro, résultat saisi : joint, pas de réponse, messagerie).
 - **Incident** : formulaire court (type, description, personnes présentes, mesures prises) rattaché à l'enfant et à la session, notifié au responsable sur son tableau de bord.
@@ -183,7 +184,7 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 3. L'agent vérifie visuellement l'adulte et touche sa photo pour indiquer qui récupère.
 4. L'agent sélectionne les enfants remis et valide : statut `RECUPERE`, horodatage, personne qui récupère, agent qui remet.
 5. Cas particuliers :
-   - **Enfant à l'infirmerie** : message en tête « Ayo est à l'infirmerie. Accompagnez le parent. », le check-out reste possible depuis l'infirmerie.
+   - **Enfant à l'infirmerie** : message en tête « Ayo est à l'infirmerie. Accompagnez le parent. » ; l'agent d'accueil accompagne le parent et valide le retrait sur sa tablette. À la porte de la classe, le retrait d'un enfant à l'infirmerie est refusé (« … est à l'infirmerie : le retrait se fait à l'accueil »).
    - **Enfant encore en salle** : l'agent demande à la classe de l'amener (notification sur la tablette de la classe) ou accompagne le parent.
    - **Adulte non reconnu parmi les personnes autorisées** : retrait bloqué. L'écran propose d'appeler le contact principal ; le responsable peut autoriser exceptionnellement après appel, en saisissant le nom de l'adulte, une photo et le motif. L'événement crée automatiquement un incident. Le responsable (RESPONSABLE ou ADMIN) confirme avec son PIN sur la tablette de l'agent. La photo est prise avec la caméra de la tablette uniquement ; l'écran de prise de vue affiche la consigne « Prévenez la personne que sa photo est prise pour la sécurité de l'enfant ». Elle ne s'affiche que dans le détail de l'incident, pour un RESPONSABLE ou un ADMIN, jamais dans une liste.
    - **Carte et code absents** : recherche par nom, vérification renforcée (photo obligatoire de la personne autorisée reconnue + confirmation par un second membre de l'équipe). Le second membre est un autre compte que celui de l'agent connecté, actif dans l'église, avec le rôle ACCUEIL, RESPONSABLE ou ADMIN ; il confirme par son PIN sur la même tablette, et ses PIN erronés comptent dans le même compteur de blocage que le déverrouillage.
@@ -195,12 +196,12 @@ Une recherche rapide (nom d'enfant, nom de parent, téléphone, matricule) est d
 3. Un enfant qui reste pour le culte 2 (parents qui servent, par exemple) est **basculé** dans la session suivante sans repasser par l'accueil, avec traçabilité.
 4. La session 1 ne peut être clôturée que lorsque tous les enfants sont `RECUPERE` ou basculés ; sinon le responsable doit justifier la clôture.
 
-### 7.8 Écran d'appel (compte ECRAN)
+### 7.8 Écran d'appel (appareil appairé, sans compte)
 
 - Page `/ecran/[slug-eglise]` plein écran, sur fond bleu nuit, avec le **logo de l'église** (variante claire), lisible à 15 mètres : matricules (pas de noms, pas de photos) et lieu de rendez-vous.
-- Couleurs : soleil = parent attendu à l'accueil, alerte = infirmerie, bleu layette = prêt au retrait en fin de culte.
-- Rafraîchissement automatique en 5 secondes maximum ; un indicateur discret signale une perte de connexion.
-- Le compte ECRAN reste connecté sur l'appareil projeté (session longue, révocable).
+- Couleurs : soleil = parent attendu à l'accueil, alerte = infirmerie (dès l'envoi, jusqu'au retour en classe ou au retrait), bleu layette = prêt au retrait en fin de culte.
+- Rafraîchissement automatique en 5 secondes maximum ; un indicateur discret signale une perte de connexion. Une nouvelle tuile est mise en évidence quelques secondes, sans son, sans animation si l'appareil demande moins de mouvement.
+- Pas de compte ECRAN : l'ADMIN ajoute un écran nommé dans Paramètres › Écran d'appel et reçoit un lien d'appairage valable 24 heures, à usage unique, affiché une seule fois. Ouvert sur l'appareil de la salle, il est échangé contre un cookie longue durée ; chaque écran se retire à part (ADR 0018).
 
 ### 7.9 Tableaux de bord et rapports
 
@@ -341,7 +342,6 @@ model Eglise {
   adresse         String?
   fuseau          String       @default("Africa/Porto-Novo")
   statut          StatutEglise @default(ACTIVE)
-  ecranToken      String       @unique          // jeton de l'écran d'appel
   prochainMatricule Int        @default(1)      // compteur par église (RG-01)
   createdAt       DateTime     @default(now())
   membres         Membre[]

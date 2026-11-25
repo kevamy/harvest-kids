@@ -256,7 +256,7 @@ describe("seed de démonstration", () => {
 
     // Lot 2: a demonstration service every day, the check-out place, four more monitors and
     // last Sunday's closed session, in each church.
-    expect(premier).toMatchObject({ cultesCrees: 14, historiques: 2 });
+    expect(premier).toMatchObject({ cultesCrees: 14, historiques: 2, episodesInfirmerie: 2 });
     for (const eglise of eglises) {
       const db = clientEglise(base, eglise.id);
       const cultes = await db.culte.findMany({
@@ -321,16 +321,44 @@ describe("seed de démonstration", () => {
       });
       const familles = new Set(presences.map((p) => p.enfant.familleId));
       expect(familles.size).toBe(FAMILLES_HISTORIQUE);
+      // Lot 3: one child went to the infirmerie, his mother was phoned and called, he went
+      // back to class (confirmed again) before being collected.
+      const EPISODE = [
+        "checkin",
+        "en_salle",
+        "infirmerie",
+        "infirmerie_recue",
+        "appel_parent",
+        "appel_parent_resolu",
+        "infirmerie_retour",
+        "en_salle",
+        "checkout",
+      ];
+      const episodes = presences.filter((p) => p.evenements.length === EPISODE.length);
+      expect(episodes).toHaveLength(1);
       for (const p of presences) {
         expect(p.statut).toBe("RECUPERE");
         expect(p.checkinLe < p.enSalleLe! && p.enSalleLe! < p.recupereLe!).toBe(true);
-        expect(p.evenements.map((e) => e.type)).toEqual(["checkin", "en_salle", "checkout"]);
+        expect(p.evenements.map((e) => e.type)).toEqual(
+          p === episodes[0] ? EPISODE : ["checkin", "en_salle", "checkout"],
+        );
         expect((p.recuperePar === null) !== (p.retraitExceptionnelId === null)).toBe(true);
       }
       const audits = await db.auditLog.count({
         where: { entiteId: { in: presences.map((p) => p.id) } },
       });
-      expect(audits).toBe(3 * presences.length);
+      // Four more on the presence: sent, received, sent back, in class again.
+      expect(audits).toBe(3 * presences.length + 4);
+      const appels = await db.appel.findMany({
+        where: { presenceId: episodes[0]!.id },
+        select: { lieu: true, resolution: true },
+      });
+      expect(appels).toEqual([{ lieu: "Infirmerie", resolution: "parent_arrive" }]);
+      const telephones = await db.appelTelephonique.findMany({
+        where: { presenceId: episodes[0]!.id },
+        select: { canal: true, resultat: true },
+      });
+      expect(telephones).toEqual([{ canal: "tel", resultat: "joint" }]);
       expect(
         await db.auditLog.count({
           where: { entiteId: sessionId, action: { in: ["session.ouverte", "session.cloturee"] } },
@@ -376,6 +404,7 @@ describe("seed de démonstration", () => {
       telephonesRepares: 0,
       cultesCrees: 0,
       historiques: 0,
+      episodesInfirmerie: 0,
     });
 
     // A database seeded before the ten-digit numbers (Neon): the seed repairs them, once.
