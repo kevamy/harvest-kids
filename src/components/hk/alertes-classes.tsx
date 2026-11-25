@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { AlertesDirect } from "@/app/api/direct/alertes/route";
+import { LIBELLES_INCIDENT } from "@/lib/incidents";
 import { INTERVALLE_URGENT_MS, useLiveQuery } from "@/lib/live-query";
 import { cn } from "@/lib/utils";
 import type { AlerteNonArrive } from "@/server/salle";
@@ -46,6 +47,33 @@ function Appels({ appels, compact }: { appels: AlertesDirect["appels"]; compact:
             <Megaphone aria-hidden className="size-5 shrink-0" />
             <Link href={`/presences/${a.presenceId}`} className="text-inherit">
               Parent de {a.prenom} ({a.matricule}) appelé · {a.lieu} · depuis {a.depuisMinutes} min
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Incidents of the open sessions (RESPONSABLE, ADMIN), each opening its detail. */
+function Incidents({ incidents }: { incidents: AlertesDirect["incidents"] }) {
+  if (incidents.length === 0) return null;
+  return (
+    <section aria-label="Incidents de la session" className="grid gap-3">
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {incidents.map((i) => (
+          <li
+            key={i.id}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-5 py-3 font-bold",
+              i.clos ? "bg-blanc text-texte-doux" : "bg-rose-voile text-alerte",
+            )}
+          >
+            <ShieldAlert aria-hidden className="size-5 shrink-0" />
+            <Link href={`/incidents/${i.id}`} className="text-inherit">
+              {i.heure} · {LIBELLES_INCIDENT[i.type]}
+              {i.prenom ? ` · ${i.prenom}` : ""}
+              {i.clos ? " · clos" : ""}
             </Link>
           </li>
         ))}
@@ -106,9 +134,11 @@ export function AlertesClasses({
   const sessionsBloquees = alertes.data?.sessionsCodesBloques ?? [];
   const infirmerie = alertes.data?.infirmerie ?? [];
   const appels = alertes.data?.appels ?? [];
+  const incidents = alertes.data?.incidents ?? [];
   if (
     infirmerie.length === 0 &&
     appels.length === 0 &&
+    incidents.length === 0 &&
     classes.length === 0 &&
     nonArrives.length === 0 &&
     bloquees.length === 0 &&
@@ -204,6 +234,7 @@ export function AlertesClasses({
     <div className={cn("grid gap-3", className)}>
       <Infirmerie alertes={infirmerie} compact={false} />
       <Appels appels={appels} compact={false} />
+      <Incidents incidents={incidents} />
       {tablettes}
       {classes.length > 0 ? (
         <section aria-label="Alertes des classes" className="grid gap-3">

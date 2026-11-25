@@ -20,14 +20,93 @@ import { formaterTelephone } from "@/lib/telephone";
 import type { FicheDirect } from "../acces-presence";
 import { MessageSucces } from "../../parametres/entete";
 import { LiensUrgence } from "../urgence";
+import { LIBELLES_INCIDENT, TYPES_DECLARABLES, type TypeDeclarable } from "@/lib/incidents";
 import {
   appelerLeParent,
+  declarerIncidentEnfant,
   envoyerAInfirmerie,
   noterResultatUrgence,
   recevoirAInfirmerie,
   renvoyerEnClasseDepuisInfirmerie,
   terminerAppel,
 } from "./actions";
+
+/** "Déclarer un incident" (cahier §7.9): type, what happened, who was there, what was done. */
+function DeclarationIncident({
+  prenom,
+  enCours,
+  onDeclarer,
+}: {
+  prenom: string;
+  enCours: boolean;
+  onDeclarer: (
+    saisie: { type: TypeDeclarable; description: string; personnes: string; mesures: string },
+    vider: () => void,
+  ) => void;
+}) {
+  const vide = { type: "BLESSURE" as TypeDeclarable, description: "", personnes: "", mesures: "" };
+  const [saisie, setSaisie] = useState(vide);
+  const champ = "rounded-md border-2 border-nuit bg-blanc px-4 py-3 font-normal";
+  return (
+    <NotchCard couleur="blanc" aria-label="Déclarer un incident">
+      <form
+        className="grid gap-4"
+        onSubmit={(evenement) => {
+          evenement.preventDefault();
+          onDeclarer(saisie, () => setSaisie(vide));
+        }}
+      >
+        <h2 className="m-0 font-display text-h2 font-semibold">Déclarer un incident</h2>
+        <label className="grid max-w-md gap-2 font-bold">
+          Type d&apos;incident
+          <select
+            className={`min-h-touch ${champ}`}
+            value={saisie.type}
+            onChange={(e) => setSaisie({ ...saisie, type: e.target.value as TypeDeclarable })}
+          >
+            {TYPES_DECLARABLES.map((t) => (
+              <option key={t} value={t}>
+                {LIBELLES_INCIDENT[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-2 font-bold">
+          Ce qui s&apos;est passé
+          <textarea
+            className={`min-h-24 ${champ}`}
+            value={saisie.description}
+            maxLength={2000}
+            onChange={(e) => setSaisie({ ...saisie, description: e.target.value })}
+          />
+        </label>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 font-bold">
+            Personnes présentes
+            <input
+              className={`min-h-touch ${champ}`}
+              value={saisie.personnes}
+              maxLength={500}
+              onChange={(e) => setSaisie({ ...saisie, personnes: e.target.value })}
+            />
+          </label>
+          <label className="grid gap-2 font-bold">
+            Mesures prises
+            <input
+              className={`min-h-touch ${champ}`}
+              value={saisie.mesures}
+              maxLength={1000}
+              onChange={(e) => setSaisie({ ...saisie, mesures: e.target.value })}
+            />
+          </label>
+        </div>
+        <Button type="submit" variant="sombre" disabled={enCours} className="justify-self-start">
+          Déclarer l&apos;incident de {prenom}
+        </Button>
+      </form>
+    </NotchCard>
+  );
+}
 
 /** "Appeler le parent": a reason and a meeting place, shown on the call screen (RG-10). */
 function AppelParent({
@@ -366,6 +445,27 @@ export function FicheEnfant({ presenceId }: { presenceId: string }) {
             <LiensUrgence presenceId={presenceId} contacts={contacts} onJournalise={rafraichir} />
           </div>
         </NotchCard>
+      ) : null}
+
+      {droits.declarer ? (
+        <DeclarationIncident
+          prenom={fiche.prenom}
+          enCours={enCours}
+          onDeclarer={(saisie, vider) =>
+            demarrer(async () => {
+              setMessage(null);
+              const reponse = await appelerAction(() =>
+                declarerIncidentEnfant({ presenceId, ...saisie }),
+              );
+              if (!reponse.ok) {
+                setMessage({ ok: false, texte: reponse.erreur });
+                return;
+              }
+              setMessage({ ok: true, texte: "Incident déclaré : le responsable le voit." });
+              vider();
+            })
+          }
+        />
       ) : null}
 
       <section aria-labelledby="journal-appels" className="grid gap-3">

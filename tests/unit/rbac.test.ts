@@ -8,6 +8,15 @@ import {
   peut,
 } from "@/lib/rbac";
 
+/** Expected rights on a presence card, in the order of droitsPresence. */
+const droits = (
+  voir: boolean,
+  appeler: boolean,
+  envoyer: boolean,
+  gerer: boolean,
+  declarer: boolean,
+) => ({ voir, appeler, envoyer, gerer, declarer });
+
 describe("droits par rôle (cahier §4)", () => {
   it("l'administrateur peut tout dans son église", () => {
     for (const action of ACTIONS) expect(peut(["ADMIN"], action), action).toBe(true);
@@ -72,15 +81,15 @@ describe("droits par rôle (cahier §4)", () => {
   });
 
   it.each([
-    // Every child of the church; the reception desk neither sends nor receives.
-    [["ACCUEIL"], false, { voir: true, appeler: true, envoyer: false, gerer: false }],
-    [["INFIRMERIE"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
-    [["RESPONSABLE"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
-    [["ADMIN"], false, { voir: true, appeler: true, envoyer: true, gerer: true }],
+    // Every child of the church; the reception desk neither sends, receives nor declares.
+    [["ACCUEIL"], false, droits(true, true, false, false, false)],
+    [["INFIRMERIE"], false, droits(true, true, true, true, true)],
+    [["RESPONSABLE"], false, droits(true, true, true, true, true)],
+    [["ADMIN"], false, droits(true, true, true, true, true)],
     // A MONITEUR: the children of the class they are assigned to, only; sends, never receives.
-    [["MONITEUR"], true, { voir: true, appeler: true, envoyer: true, gerer: false }],
-    [["MONITEUR"], false, { voir: false, appeler: false, envoyer: false, gerer: false }],
-    [["ECRAN"], false, { voir: false, appeler: false, envoyer: false, gerer: false }],
+    [["MONITEUR"], true, droits(true, true, true, false, true)],
+    [["MONITEUR"], false, droits(false, false, false, false, false)],
+    [["ECRAN"], false, droits(false, false, false, false, false)],
   ] as const)("fiche de présence : %j, affecté %s → %j", (roles, affecte, attendu) => {
     expect(droitsPresence(roles, affecte)).toEqual(attendu);
   });

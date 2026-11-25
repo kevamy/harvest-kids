@@ -3,6 +3,7 @@
 import { ActionInterdite } from "@/lib/rbac";
 import type { ClientDeBase, ClientEglise } from "@/lib/tenant";
 import { AppelRefuse, appelerParent, resoudreAppel } from "@/server/appels";
+import { IncidentRefuse, declarerIncident } from "@/server/incidents";
 import { lireParametres } from "@/server/parametres";
 import {
   InfirmerieRefusee,
@@ -30,7 +31,8 @@ async function enTransaction<T>(db: ClientEglise, fn: (tx: ClientDeBase) => Prom
     if (
       erreur instanceof UrgenceRefusee ||
       erreur instanceof InfirmerieRefusee ||
-      erreur instanceof AppelRefuse
+      erreur instanceof AppelRefuse ||
+      erreur instanceof IncidentRefuse
     ) {
       throw new RefusMetier(erreur.message);
     }
@@ -72,13 +74,35 @@ export async function terminerAppel(saisie: { presenceId: unknown; resolution: u
 async function verifierDroit(
   acces: Parameters<typeof presenceAutorisee>[0],
   presenceId: string,
-  droit: "envoyer" | "gerer",
+  droit: "envoyer" | "gerer" | "declarer",
 ) {
   const autorisee = await presenceAutorisee(acces, presenceId);
   if (!autorisee) throw new RefusMetier("Enfant introuvable. Rechargez la page.");
   if (!autorisee.droits[droit]) {
-    throw new ActionInterdite(droit === "envoyer" ? "infirmerie.envoyer" : "infirmerie.gerer");
+    throw new ActionInterdite(
+      droit === "envoyer"
+        ? "infirmerie.envoyer"
+        : droit === "gerer"
+          ? "infirmerie.gerer"
+          : "incident.declarer",
+    );
   }
+}
+
+/** An incident about this child, declared from the card (cahier §7.9). */
+export async function declarerIncidentEnfant(saisie: {
+  presenceId: unknown;
+  type: unknown;
+  description: unknown;
+  personnes: unknown;
+  mesures: unknown;
+}) {
+  const presenceId = texte(saisie.presenceId);
+  return executerActionVerifiee(
+    (acces) => verifierDroit(acces, presenceId, "declarer"),
+    ({ db, contexte }) =>
+      enTransaction(db, (tx) => declarerIncident(tx, contexte, { ...saisie, presenceId })),
+  );
 }
 
 /** Accompany to the infirmerie (cahier §7.7): PRESENT or in class → INFIRMERIE, en route. */

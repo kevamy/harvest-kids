@@ -162,6 +162,54 @@ test("le moniteur appelle le parent à l'écran ; la classe voit « Parent appel
   expect(rows).toEqual([{ motif: "change", lieu: "Accueil enfants", resolution: "parent_arrive" }]);
 });
 
+test("le moniteur déclare un incident depuis la fiche ; le responsable le voit, ajoute une note et le clôt", async ({
+  page,
+  browser,
+  eglise,
+}) => {
+  const { presenceId } = await enfantEnClasse(eglise);
+  await seConnecter(page, eglise.email("MONITEUR"));
+  await attendreAccueil(page, eglise.nom);
+  await page.goto(`/presences/${presenceId}`);
+  const fiche = page.getByRole("region", { name: "Fiche de Ayo" });
+  const declaration = fiche.getByRole("region", { name: "Déclarer un incident" });
+  await declaration.getByRole("combobox", { name: "Type d'incident" }).selectOption("Blessure");
+  await declaration
+    .getByRole("textbox", { name: "Ce qui s'est passé" })
+    .fill("Chute dans la cour, genou écorché");
+  await declaration.getByRole("textbox", { name: "Mesures prises" }).fill("Pansement");
+  await declaration.getByRole("button", { name: "Déclarer l'incident de Ayo" }).click();
+  await expect(fiche.getByRole("status")).toHaveText("Incident déclaré : le responsable le voit.");
+
+  // The RESPONSABLE, on their own tablet.
+  const { baseURL, locale, timezoneId, viewport } = test.info().project.use;
+  const tablette = await browser.newContext({ baseURL, locale, timezoneId, viewport });
+  const responsable = await tablette.newPage();
+  await seConnecter(responsable, eglise.email("RESPONSABLE"));
+  await attendreAccueil(responsable, eglise.nom);
+  await responsable.goto("/sessions");
+  await responsable
+    .getByRole("region", { name: "Incidents de la session" })
+    .getByRole("link", { name: /^\d{2}:\d{2} · Blessure · Ayo$/ })
+    .click();
+  await expect(responsable.getByRole("heading", { level: 1 })).toHaveText("Blessure");
+  const ajout = responsable.getByRole("region", { name: "Ajouter une note" });
+  await ajout.getByRole("textbox", { name: "Nouvelle note" }).fill("Parents prévenus à la sortie.");
+  await ajout.getByRole("button", { name: "Ajouter la note" }).click();
+  await expect(responsable.getByRole("status")).toHaveText("Note ajoutée.");
+  await expect(
+    responsable.getByRole("list", { name: "Notes" }).getByRole("listitem"),
+  ).toContainText("Parents prévenus à la sortie.");
+  await responsable.getByRole("button", { name: "Clore l'incident" }).click();
+  await responsable
+    .getByRole("dialog", { name: "Clore cet incident ?" })
+    .getByRole("button", { name: "Clore l'incident" })
+    .click();
+  await expect(responsable.getByRole("status")).toHaveText("Incident clos.");
+  await expect(responsable.getByRole("button", { name: "Clore l'incident" })).toHaveCount(0);
+  await tablette.close();
+});
+
 test("la fiche d'un enfant d'une autre église répond 404", async ({
   page,
   eglise,

@@ -110,7 +110,7 @@ export function droitsSalle(
 export function droitsPresence(
   roles: readonly Role[],
   affecte: boolean,
-): { voir: boolean; appeler: boolean; envoyer: boolean; gerer: boolean } {
+): { voir: boolean; appeler: boolean; envoyer: boolean; gerer: boolean; declarer: boolean } {
   const gerer = peut(roles, "infirmerie.gerer") || peut(roles, "salle.superviser");
   const voir = affecte || gerer || peut(roles, "tableau.direct");
   return {
@@ -118,6 +118,8 @@ export function droitsPresence(
     appeler: voir && peut(roles, "parent.appeler"),
     envoyer: affecte || gerer,
     gerer,
+    // An incident is declared from the card by whoever reaches the child and holds the right.
+    declarer: voir && peut(roles, "incident.declarer"),
   };
 }
 
