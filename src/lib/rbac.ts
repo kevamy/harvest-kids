@@ -28,7 +28,6 @@ export const ACTIONS = [
   "comptes.gerer",
   "eglise.parametrer",
   "donnees.purger",
-  "ecran.voir",
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -46,6 +45,8 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "classe.voir",
     "salle.superviser",
     "alertes.voir",
+    // Urgence button on any child's card (lot 3).
+    "parent.appeler",
     "incident.declarer",
     "incidents.voir",
     "rapports.voir",
@@ -68,12 +69,12 @@ const DROITS: Record<Exclude<Role, "ADMIN">, readonly Action[]> = {
     "incident.declarer",
   ],
   INFIRMERIE: ["infirmerie.gerer", "parent.appeler", "alertes.voir", "incident.declarer"],
-  // Read-only call screen, without any personal data (RG-10).
-  ECRAN: ["ecran.voir"],
+  // No rights: the call screen is a paired device, not an account (ADR 0018).
+  ECRAN: [],
 };
 
 export function peut(roles: readonly Role[], action: Action): boolean {
-  if (roles.includes("ADMIN")) return action !== "ecran.voir";
+  if (roles.includes("ADMIN")) return true;
   return roles.some((role) => role !== "ADMIN" && DROITS[role].includes(action));
 }
 
@@ -96,6 +97,30 @@ export function droitsSalle(
 ): { voir: boolean; confirmer: boolean; corriger: boolean } {
   const superviser = peut(roles, "salle.superviser");
   return { voir: affecte || superviser, confirmer: affecte, corriger: superviser };
+}
+
+/**
+ * A child's presence card (lot 3, ADR 0019). The reception desk, the infirmerie, a RESPONSABLE
+ * and an ADMIN reach every child of the church; a member assigned to the child's class in the
+ * session reaches the children of that class only (a MONITEUR elsewhere gets a 404). Calling
+ * the family (Urgence) also needs parent.appeler. A child goes to the infirmerie with a member
+ * of their class, the infirmerie, a RESPONSABLE or an ADMIN (envoyer); the infirmerie receives
+ * and sends back, as do a RESPONSABLE and an ADMIN (gerer).
+ */
+export function droitsPresence(
+  roles: readonly Role[],
+  affecte: boolean,
+): { voir: boolean; appeler: boolean; envoyer: boolean; gerer: boolean; declarer: boolean } {
+  const gerer = peut(roles, "infirmerie.gerer") || peut(roles, "salle.superviser");
+  const voir = affecte || gerer || peut(roles, "tableau.direct");
+  return {
+    voir,
+    appeler: voir && peut(roles, "parent.appeler"),
+    envoyer: affecte || gerer,
+    gerer,
+    // An incident is declared from the card by whoever reaches the child and holds the right.
+    declarer: voir && peut(roles, "incident.declarer"),
+  };
 }
 
 /** Throws unless one of the roles grants the action. */

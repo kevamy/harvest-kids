@@ -87,10 +87,11 @@ export async function creerEgliseIsolee(libelle: string): Promise<EgliseIsolee> 
     if (!secrets) throw new Error("Comptes de démonstration absents : lancez `pnpm db:seed`.");
 
     await c.query("BEGIN");
-    await c.query(
-      `INSERT INTO "Eglise" (id, nom, slug, "ecranToken", "updatedAt") VALUES ($1, $2, $3, $4, now())`,
-      [id, nom, slug, `ecran_${randomBytes(16).toString("hex")}`],
-    );
+    await c.query(`INSERT INTO "Eglise" (id, nom, slug, "updatedAt") VALUES ($1, $2, $3, now())`, [
+      id,
+      nom,
+      slug,
+    ]);
     for (const role of ROLES) {
       const userId = `${id}_${role.toLowerCase()}`;
       await c.query(

@@ -116,6 +116,8 @@ describe("clés uniques composées contenant egliseId (lues dans le DMMF)", () =
           "Appel",
           "AppelTelephonique",
           "Incident",
+          // Leaf table: nothing references a note, no compound key needed.
+          "IncidentNote",
           "AuditLog",
           "AffectationMoniteur",
         ].includes(modele)

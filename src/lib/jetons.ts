@@ -42,6 +42,22 @@ export function genererJetonCompte(): string {
   return `HKC1.${aleatoireBase62(43)}`;
 }
 
+/**
+ * Call screen (ADR 0018): the pairing link carries `HKE1.` and 43 base62 characters, shown
+ * once to the ADMIN, valid 24 hours and once; the paired device keeps `HKA1.` and 43 base62
+ * characters in its cookie. Only their SHA-256 fingerprints are stored.
+ */
+export const FORMAT_JETON_ECRAN = /^HKE1\.[0-9A-Za-z]{43}$/;
+export const FORMAT_SECRET_APPAREIL = /^HKA1\.[0-9A-Za-z]{43}$/;
+
+export function genererJetonEcran(): string {
+  return `HKE1.${aleatoireBase62(43)}`;
+}
+
+export function genererSecretAppareil(): string {
+  return `HKA1.${aleatoireBase62(43)}`;
+}
+
 export function estJetonCarte(valeur: string): boolean {
   return FORMAT_JETON_CARTE.test(valeur);
 }

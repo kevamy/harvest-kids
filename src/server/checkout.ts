@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { journaliser } from "@/lib/audit";
 import type { ClientDeBase, ContexteEglise } from "@/lib/tenant";
+import { resoudreAppelsAuRetrait } from "./appels";
 import { activerAuPremierScan } from "./cartes/cycle";
 import { MESSAGES_SCAN, resoudreJeton, type VerificationMoniteur } from "./cartes/resolution";
 import { alertesLisibles } from "./checkin";
@@ -240,7 +241,10 @@ export async function preparerCheckout(
     famille,
     moyen,
     enfants: lignes.map(({ enfantId, classeId, classe, alertes, alerteDetail, ...l }) => {
-      const remettable = !options.classeId || options.classeId === classeId;
+      // At the class door, never a child at the infirmerie: the reception desk accompanies
+      // the parent (decision of 2026-11-24).
+      const remettable =
+        !options.classeId || (options.classeId === classeId && l.statut !== "INFIRMERIE");
       return {
         ...l,
         lieu: l.statut === "INFIRMERIE" ? "Infirmerie" : classe,
@@ -367,6 +371,20 @@ export async function validerCheckout(
     );
   }
 
+  if (classeId) {
+    // Checked again under the session lock: the screen may have been left open.
+    const [infirmerie] = await tx.$queryRaw<{ prenom: string }[]>`
+      SELECT e.prenom FROM "Presence" p JOIN "Enfant" e ON e.id = p."enfantId"
+      WHERE p.id = ANY(${presenceIds}::text[]) AND p."sessionId" = ${sessionId}
+        AND p.statut = 'INFIRMERIE'
+      ORDER BY e."dateNaissance", e.prenom LIMIT 1`;
+    if (infirmerie) {
+      throw new CheckoutRefuse(
+        `${infirmerie.prenom} est à l'infirmerie : accompagnez le parent à l'accueil.`,
+      );
+    }
+  }
+
   const remis = await tx.$queryRaw<
     { id: string; prenom: string; dateNaissance: Date; statut: string }[]
   >`
@@ -379,7 +397,9 @@ export async function validerCheckout(
     )
     UPDATE "Presence" p
     SET statut = 'RECUPERE', "recupereLe" = now(), "recuperePar" = ${personne.id},
-        "remisPar" = ${auteur.userId}
+        "remisPar" = ${auteur.userId},
+        -- Leaving the infirmerie with the parent (CHECK Presence_infirmerie_statut).
+        "infirmerieLe" = NULL, "infirmerieRecueLe" = NULL
     FROM avant, "Enfant" e
     WHERE p.id = avant.id AND e.id = p."enfantId"
     RETURNING p.id, e.prenom, e."dateNaissance", avant.statut::text AS statut`;
@@ -420,6 +440,12 @@ export async function validerCheckout(
       apres: { statut: "RECUPERE", personneAutoriseeId: personne.id, ...second },
     });
   }
+  // A parent call still on the screen ends with the hand-over (lot 3).
+  await resoudreAppelsAuRetrait(
+    tx,
+    auteur,
+    remis.map((r) => r.id),
+  );
 
   return {
     enfants: remis.map((r) => r.prenom),
@@ -533,8 +559,9 @@ export async function retraitExceptionnel(
   await tx.$executeRaw`
     UPDATE "Presence"
     SET statut = 'RECUPERE', "recupereLe" = now(), "retraitExceptionnelId" = ${retrait.id},
-        "remisPar" = ${auteur.userId}
+        "remisPar" = ${auteur.userId}, "infirmerieLe" = NULL, "infirmerieRecueLe" = NULL
     WHERE id = ANY(${presenceIds}::text[])`;
+  await resoudreAppelsAuRetrait(tx, auteur, presenceIds);
 
   await journaliser(tx, auteur, {
     action: "incident.cree",

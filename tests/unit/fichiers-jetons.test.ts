@@ -6,9 +6,13 @@ import {
   estJetonBadge,
   estJetonCarte,
   FORMAT_JETON_COMPTE,
+  FORMAT_JETON_ECRAN,
+  FORMAT_SECRET_APPAREIL,
   genererJetonBadge,
   genererJetonCarte,
   genererJetonCompte,
+  genererJetonEcran,
+  genererSecretAppareil,
   typeJeton,
 } from "@/lib/jetons";
 
@@ -85,6 +89,19 @@ describe("jeton de lien de compte (ADR 0014)", () => {
     for (const jeton of jetons) expect(jeton).toMatch(FORMAT_JETON_COMPTE);
     expect(new Set(jetons).size).toBe(200);
     expect(typeJeton(jetons[0]!)).toBeNull();
+  });
+});
+
+describe("écran d'appel : lien d'appairage et secret de l'appareil (ADR 0018)", () => {
+  it("HKE1. pour le lien, HKA1. pour l'appareil, 43 caractères base62, jamais répétés", () => {
+    const liens = Array.from({ length: 200 }, genererJetonEcran);
+    const secrets = Array.from({ length: 200 }, genererSecretAppareil);
+    for (const lien of liens) expect(lien).toMatch(FORMAT_JETON_ECRAN);
+    for (const secret of secrets) expect(secret).toMatch(FORMAT_SECRET_APPAREIL);
+    expect(new Set([...liens, ...secrets]).size).toBe(400);
+    // A link is never taken for a device secret, nor for a card.
+    expect(liens[0]).not.toMatch(FORMAT_SECRET_APPAREIL);
+    expect(typeJeton(liens[0]!)).toBeNull();
   });
 });
 

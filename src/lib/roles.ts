@@ -10,5 +10,8 @@ export const LIBELLES_ROLES: Record<Role, string> = {
   ECRAN: "Écran d'appel",
 };
 
-/** Roles given from Paramètres › Comptes; the call screen account (ECRAN) comes with lot 3. */
+/**
+ * Roles given from Paramètres › Comptes. ECRAN stays in the enum without any use: the call
+ * screen is a paired device, not an account (ADR 0018).
+ */
 export const ROLES_COMPTE = ["ADMIN", "RESPONSABLE", "ACCUEIL", "MONITEUR", "INFIRMERIE"] as const;

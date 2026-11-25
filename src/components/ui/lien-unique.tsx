@@ -13,12 +13,15 @@ export function LienUnique({
   lien,
   validite,
   onFermer,
+  destinataire = "Envoyez ce lien à la personne (WhatsApp, SMS).",
 }: {
   titre: string;
   lien: string;
   /** "7 jours", "24 heures". */
   validite: string;
   onFermer: () => void;
+  /** Who opens the link: a person by default, or a call screen's device (lot 3). */
+  destinataire?: string;
 }) {
   const [copie, setCopie] = useState<"ok" | "echec" | null>(null);
   return (
@@ -30,8 +33,8 @@ export function LienUnique({
         {titre}
       </h2>
       <p className="m-0">
-        Envoyez ce lien à la personne (WhatsApp, SMS). Il est valable {validite} et ne sert
-        qu&apos;une fois. <strong>Il ne sera plus affiché</strong> : copiez-le maintenant.
+        {destinataire} Il est valable {validite} et ne sert qu&apos;une fois.{" "}
+        <strong>Il ne sera plus affiché</strong> : copiez-le maintenant.
       </p>
       <label htmlFor="lien-unique" className="text-label font-bold">
         Lien à transmettre

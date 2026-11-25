@@ -128,7 +128,11 @@ const minutes = (min: number, max: number) =>
     .max(max, `Le délai est d'au plus ${max} minutes.`);
 
 // Same bounds as the server (SCHEMAS_PARAMETRES), which checks again.
-const schemaDelais = z.object({ nonRecupere: minutes(0, 120), nonArriveEnSalle: minutes(1, 60) });
+const schemaDelais = z.object({
+  nonRecupere: minutes(0, 120),
+  nonArriveEnSalle: minutes(1, 60),
+  receptionInfirmerie: minutes(1, 30),
+});
 type Delais = z.infer<typeof schemaDelais>;
 
 export function FormulaireDelais(delais: Delais) {
@@ -176,6 +180,15 @@ export function FormulaireDelais(delais: Delais) {
           aide="10 minutes par défaut, entre 1 et 60."
           erreur={errors.nonArriveEnSalle?.message}
           {...formulaire.register("nonArriveEnSalle", nombre)}
+        />
+        <Champ
+          id="delai-reception-infirmerie"
+          libelle="Alerte « pas arrivé à l'infirmerie » après l'envoi (minutes)"
+          type="number"
+          inputMode="numeric"
+          aide="5 minutes par défaut, entre 1 et 30."
+          erreur={errors.receptionInfirmerie?.message}
+          {...formulaire.register("receptionInfirmerie", nombre)}
         />
       </div>
       <Button type="submit" variant="bleu" disabled={isSubmitting} className="justify-self-start">

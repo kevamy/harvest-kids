@@ -35,6 +35,23 @@
   }
 }
 
+/*
+ * Call screen (lot 3): a new tile stands out for a few seconds when it appears, without
+ * sound. Played once when the tile is mounted: tiles already on screen keep their state
+ * across refreshes. Only under motion-safe, and cut by the rule below anyway.
+ */
+@keyframes hk-apparition {
+  0%,
+  70% {
+    box-shadow: 0 0 0 8px var(--color-blanc);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

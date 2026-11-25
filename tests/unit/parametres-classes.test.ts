@@ -117,6 +117,8 @@ describe("paramètres de l'église", () => {
       // Cahier §17, points 3, 4 and 6 (lot 2 plan).
       "sessions.delaiAlerteNonRecupereMinutes": 10,
       "presences.delaiNonArriveEnSalleMinutes": 10,
+      // Lot 3 (decision of 2026-11-24).
+      "infirmerie.delaiReceptionMinutes": 5,
       "checkout.lieu": "ACCUEIL",
       "appels.lieux": ["Accueil enfants", "Infirmerie"],
       "telephone.indicatifParDefaut": "229",

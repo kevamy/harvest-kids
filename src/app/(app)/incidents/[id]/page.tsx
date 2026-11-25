@@ -7,6 +7,7 @@ import { formaterTelephone } from "@/lib/telephone";
 import { LIBELLES_INCIDENT, detailIncident } from "@/server/incidents";
 import { nomsMembresEglise } from "@/server/plateforme/membres-session";
 import { contextePage } from "../../acces";
+import { SuiviIncident } from "./suivi";
 
 export const metadata: Metadata = { title: "Incident — Harvest Kids" };
 
@@ -24,6 +25,8 @@ export default async function PageIncident({ params }: PageProps<"/incidents/[id
   const noms = await nomsMembresEglise(acces.contexte, [
     incident.declarePar,
     ...(incident.retrait ? [incident.retrait.autorisePar, incident.retrait.remisPar] : []),
+    ...(incident.cloturePar ? [incident.cloturePar] : []),
+    ...incident.notes.map((n) => n.auteur),
   ]);
   const nom = (userId: string) => noms.get(userId) ?? "Compte supprimé";
 
@@ -39,8 +42,23 @@ export default async function PageIncident({ params }: PageProps<"/incidents/[id
         <dl className="m-0 grid gap-x-6 gap-y-2 md:grid-cols-[auto_minmax(0,1fr)]">
           <dt className="font-bold">Date</dt>
           <dd className="m-0">{incident.date}</dd>
+          {incident.enfant ? (
+            <>
+              <dt className="font-bold">Enfant</dt>
+              <dd className="m-0">
+                {incident.enfant.prenom} {incident.enfant.nom}
+                {incident.enfant.matricule ? ` (${incident.enfant.matricule})` : ""}
+              </dd>
+            </>
+          ) : null}
           <dt className="font-bold">Description</dt>
           <dd className="m-0">{incident.description}</dd>
+          {incident.personnes ? (
+            <>
+              <dt className="font-bold">Personnes présentes</dt>
+              <dd className="m-0">{incident.personnes}</dd>
+            </>
+          ) : null}
           {incident.mesures ? (
             <>
               <dt className="font-bold">Mesures prises</dt>
@@ -94,6 +112,16 @@ export default async function PageIncident({ params }: PageProps<"/incidents/[id
           </div>
         </NotchCard>
       ) : null}
+
+      <SuiviIncident
+        incidentId={incident.id}
+        clos={
+          incident.clotureLe && incident.cloturePar
+            ? { le: incident.clotureLe, par: nom(incident.cloturePar) }
+            : null
+        }
+        notes={incident.notes.map((n) => ({ ...n, auteur: nom(n.auteur) }))}
+      />
     </div>
   );
 }

@@ -1,13 +1,115 @@
 "use client";
 
-import { DoorOpen, OctagonAlert, ShieldAlert, TriangleAlert } from "lucide-react";
+import {
+  DoorOpen,
+  HeartPulse,
+  Megaphone,
+  OctagonAlert,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
+import Link from "next/link";
 import type { AlertesDirect } from "@/app/api/direct/alertes/route";
-import { useLiveQuery } from "@/lib/live-query";
+import { LIBELLES_INCIDENT } from "@/lib/incidents";
+import { INTERVALLE_URGENT_MS, useLiveQuery } from "@/lib/live-query";
 import { cn } from "@/lib/utils";
 import type { AlerteNonArrive } from "@/server/salle";
 
 const enAttente = (a: AlerteNonArrive) =>
-  `${a.prenom} (${a.matricule}) pas encore en salle · ${a.classe} · depuis ${a.minutes} min`;
+  a.retourInfirmerie
+    ? `${a.prenom} (${a.matricule}) renvoyé de l'infirmerie, pas encore en salle · ${a.classe} · depuis ${a.minutes} min`
+    : `${a.prenom} (${a.matricule}) pas encore en salle · ${a.classe} · depuis ${a.minutes} min`;
+
+type AlerteInfirmerie = AlertesDirect["infirmerie"][number];
+
+/** RG-07, lot 3: "not arrived" past the church's delay, otherwise where the child is. */
+const aInfirmerie = (a: AlerteInfirmerie) =>
+  a.nonArrive
+    ? `${a.prenom} n'est pas arrivé à l'infirmerie · ${a.classe} · parti il y a ${a.depuisMinutes} min`
+    : a.enRoute
+      ? `${a.prenom} (${a.matricule}) en route vers l'infirmerie · ${a.classe} · depuis ${a.depuisMinutes} min`
+      : `${a.prenom} (${a.matricule}) à l'infirmerie · ${a.classe} · depuis ${a.depuisMinutes} min`;
+
+/** Parents called to the screen and not arrived yet (lot 3), each opening the child's card. */
+function Appels({ appels, compact }: { appels: AlertesDirect["appels"]; compact: boolean }) {
+  if (appels.length === 0) return null;
+  return (
+    <section aria-label="Appels en cours" className={compact ? undefined : "grid gap-3"}>
+      <ul className={cn("m-0 list-none gap-2 p-0", compact ? "flex flex-wrap" : "grid gap-3")}>
+        {appels.map((a) => (
+          <li
+            key={a.presenceId}
+            className={cn(
+              "flex items-center gap-2 bg-soleil font-bold text-nuit",
+              compact ? "rounded-pill px-4 py-2" : "rounded-md px-5 py-3",
+            )}
+          >
+            <Megaphone aria-hidden className="size-5 shrink-0" />
+            <Link href={`/presences/${a.presenceId}`} className="text-inherit">
+              Parent de {a.prenom} ({a.matricule}) appelé · {a.lieu} · depuis {a.depuisMinutes} min
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Incidents of the open sessions (RESPONSABLE, ADMIN), each opening its detail. */
+function Incidents({ incidents }: { incidents: AlertesDirect["incidents"] }) {
+  if (incidents.length === 0) return null;
+  return (
+    <section aria-label="Incidents de la session" className="grid gap-3">
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {incidents.map((i) => (
+          <li
+            key={i.id}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-5 py-3 font-bold",
+              i.clos ? "bg-blanc text-texte-doux" : "bg-rose-voile text-alerte",
+            )}
+          >
+            <ShieldAlert aria-hidden className="size-5 shrink-0" />
+            <Link href={`/incidents/${i.id}`} className="text-inherit">
+              {i.heure} · {LIBELLES_INCIDENT[i.type]}
+              {i.prenom ? ` · ${i.prenom}` : ""}
+              {i.clos ? " · clos" : ""}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Children at the infirmerie, each opening their card; red when not arrived. */
+function Infirmerie({ alertes, compact }: { alertes: AlerteInfirmerie[]; compact: boolean }) {
+  if (alertes.length === 0) return null;
+  return (
+    <section aria-label="Enfants à l'infirmerie" className={compact ? undefined : "grid gap-3"}>
+      <ul
+        role="alert"
+        className={cn("m-0 list-none gap-2 p-0", compact ? "flex flex-wrap" : "grid gap-3")}
+      >
+        {alertes.map((a) => (
+          <li
+            key={a.presenceId}
+            className={cn(
+              "flex items-center gap-2 font-bold",
+              compact ? "rounded-pill px-4 py-2" : "rounded-md px-5 py-3",
+              a.nonArrive ? "bg-alerte text-blanc" : "bg-rose-voile text-alerte",
+            )}
+          >
+            <HeartPulse aria-hidden className="size-5 shrink-0" />
+            <Link href={`/presences/${a.presenceId}`} className="text-inherit">
+              {aInfirmerie(a)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /**
  * Live alerts (cahier §7.2.5, §7.4): a class with no monitor left gets the highest alert, a
@@ -23,12 +125,20 @@ export function AlertesClasses({
   /** Placement of the compact band in its row. */
   className?: string;
 }) {
-  const alertes = useLiveQuery<AlertesDirect>(["alertes-classes"], "/api/direct/alertes");
+  const alertes = useLiveQuery<AlertesDirect>(["alertes-classes"], "/api/direct/alertes", {
+    intervalleMs: INTERVALLE_URGENT_MS,
+  });
   const classes = alertes.data?.classes ?? [];
   const nonArrives = alertes.data?.nonArrives ?? [];
   const bloquees = alertes.data?.tablettesBloquees ?? [];
   const sessionsBloquees = alertes.data?.sessionsCodesBloques ?? [];
+  const infirmerie = alertes.data?.infirmerie ?? [];
+  const appels = alertes.data?.appels ?? [];
+  const incidents = alertes.data?.incidents ?? [];
   if (
+    infirmerie.length === 0 &&
+    appels.length === 0 &&
+    incidents.length === 0 &&
     classes.length === 0 &&
     nonArrives.length === 0 &&
     bloquees.length === 0 &&
@@ -70,6 +180,8 @@ export function AlertesClasses({
   if (compact) {
     return (
       <div className={cn("flex flex-wrap gap-2", className)}>
+        <Infirmerie alertes={infirmerie} compact />
+        <Appels appels={appels} compact />
         {tablettes}
         {classes.length > 0 ? (
           <section aria-label="Alertes des classes">
@@ -120,6 +232,9 @@ export function AlertesClasses({
 
   return (
     <div className={cn("grid gap-3", className)}>
+      <Infirmerie alertes={infirmerie} compact={false} />
+      <Appels appels={appels} compact={false} />
+      <Incidents incidents={incidents} />
       {tablettes}
       {classes.length > 0 ? (
         <section aria-label="Alertes des classes" className="grid gap-3">

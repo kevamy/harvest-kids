@@ -34,6 +34,12 @@ const SECTIONS: { href: string; titre: string; description: string; action: Acti
     action: "sessions.gerer",
   },
   {
+    href: "/parametres/ecran",
+    titre: "Écran d'appel",
+    description: "Écrans de la salle : en ajouter un avec son lien d'appairage, en retirer un.",
+    action: "eglise.parametrer",
+  },
+  {
     href: "/parametres/impression",
     titre: "Impression des cartes",
     description: "Format par défaut, recto seul ou recto-verso.",

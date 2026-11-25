@@ -12,7 +12,12 @@ import { cleFichier } from "../src/lib/fichiers";
 import { stockage, type Stockage } from "../src/lib/storage";
 import { type DansEglise, reparerTelephonesDemo, semerFamilles } from "./seed-familles";
 import { autorisationSeed } from "./seed-garde";
-import { semerCultesDemo, semerHistorique, semerLieuRetrait } from "./seed-sessions";
+import {
+  semerCultesDemo,
+  semerEpisodeInfirmerie,
+  semerHistorique,
+  semerLieuRetrait,
+} from "./seed-sessions";
 
 try {
   process.loadEnvFile();
@@ -147,6 +152,7 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
   let telephonesRepares = 0;
   let cultesCrees = 0;
   let historiques = 0;
+  let episodesInfirmerie = 0;
   for (const [i, eglise] of EGLISES_DEMO.entries()) {
     const egliseId = ids[eglise.cle]!;
     const dansEglise: DansEglise = (fn, options) => withEglise(base, egliseId, fn, options);
@@ -173,6 +179,14 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
       historiques += Number(
         await semerHistorique(dansEglise, egliseId, { accueil, responsable, moniteurs }, stockage),
       );
+      // Lot 3: an infirmerie episode, a phone call and a parent call in that history, also
+      // added where the lot 2 history already exists. Call screens are paired by the ADMIN.
+      episodesInfirmerie += Number(
+        await semerEpisodeInfirmerie(dansEglise, egliseId, {
+          accueil,
+          infirmerie: parEmail("infirmerie") ?? responsable,
+        }),
+      );
     }
   }
 
@@ -183,6 +197,7 @@ export async function seed(base: PrismaClient, stockage: Stockage) {
     telephonesRepares,
     cultesCrees,
     historiques,
+    episodesInfirmerie,
   };
 }
 
@@ -195,7 +210,7 @@ async function main() {
     const resultat = await seed(base, stockage());
     // Counts only: no personal data in logs.
     console.log(
-      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés, ${resultat.telephonesRepares} numéros de tuteur réparés, ${resultat.cultesCrees} cultes de démonstration et ${resultat.historiques} sessions passées ajoutés.`,
+      `Données de démonstration prêtes : ${resultat.eglises} églises, ${resultat.comptesCrees} comptes et ${resultat.familles} familles créés, ${resultat.telephonesRepares} numéros de tuteur réparés, ${resultat.cultesCrees} cultes de démonstration, ${resultat.historiques} sessions passées et ${resultat.episodesInfirmerie} épisodes d'infirmerie ajoutés.`,
     );
   } finally {
     await base.$disconnect();

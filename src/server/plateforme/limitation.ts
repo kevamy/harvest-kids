@@ -200,6 +200,13 @@ export const essaisConnexion = (identifiant: string, ip: string) =>
     [`connexion:ip:${ip}`, REGLES_CONNEXION.ip],
   ] as const;
 
+/** Call screen pairing (ADR 0018): per link (fingerprint), then the IP guard, as activation. */
+export const essaisEcran = (empreinte: string, ip: string) =>
+  [
+    [`ecran:jeton:${empreinte}`, REGLES_ACTIVATION.jeton],
+    [`ecran:ip:${ip}`, REGLES_ACTIVATION.ip],
+  ] as const;
+
 export const essaisActivation = (empreinte: string, ip: string) =>
   [
     [`activation:jeton:${empreinte}`, REGLES_ACTIVATION.jeton],

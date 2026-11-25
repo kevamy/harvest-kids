@@ -96,10 +96,16 @@ export type EnfantSalle = {
   /** Medical alerts, always shown in the class list. */
   alertes: string[];
   statut: "PRESENT" | "EN_SALLE" | "INFIRMERIE";
-  /** Minutes since the check-in (database clock). */
+  /** Minutes since the check-in, or since the return from the infirmerie (database clock). */
   attenteMinutes: number;
+  /** Sent back from the infirmerie (lot 3): the wait counts from that return. */
+  retourInfirmerie: boolean;
   /** Still PRESENT after the church's delay: "not arrived in class" alert. */
   enRetard: boolean;
+  /** At the infirmerie: minutes since sent, and whether still on the way. */
+  infirmerie: { depuisMinutes: number; enRoute: boolean } | null;
+  /** Meeting place of the parent call on the screen, if any (lot 3). */
+  appelLieu: string | null;
   /** Confirmed by the reader less than a minute ago: they may undo it without a reason. */
   annulable: boolean;
 };
@@ -122,10 +128,19 @@ export async function listeDeClasse(
            -- NOT NULL since tableaux_non_nuls; kept as a second barrier for a raw read.
            e."dateNaissance", COALESCE(e.alertes, '{}') AS alertes, e."alerteDetail",
            p.statut::text AS statut,
-           floor(extract(epoch FROM now() - p."checkinLe") / 60)::int AS "attenteMinutes",
+           floor(extract(epoch FROM now() - COALESCE(p."retourInfirmerieLe", p."checkinLe")) / 60)::int
+             AS "attenteMinutes",
+           p."retourInfirmerieLe" IS NOT NULL AS "retourInfirmerie",
            (p.statut = 'PRESENT'
-             AND p."checkinLe" < now() - make_interval(mins => ${delaiNonArriveMinutes}::int))
+             AND COALESCE(p."retourInfirmerieLe", p."checkinLe")
+                   < now() - make_interval(mins => ${delaiNonArriveMinutes}::int))
              AS "enRetard",
+           CASE WHEN p."infirmerieLe" IS NULL THEN NULL
+                ELSE json_build_object(
+                  'depuisMinutes', floor(extract(epoch FROM now() - p."infirmerieLe") / 60)::int,
+                  'enRoute', p."infirmerieRecueLe" IS NULL) END AS infirmerie,
+           (SELECT a.lieu FROM "Appel" a WHERE a."presenceId" = p.id AND a."resoluLe" IS NULL)
+             AS "appelLieu",
            (p.statut = 'EN_SALLE'
              AND p."enSalleLe" > now() - make_interval(secs => ${DELAI_ANNULATION_SECONDES}::int)
              AND confirmation."userId" IS NOT DISTINCT FROM ${lecteurUserId})
@@ -389,11 +404,14 @@ export type AlerteNonArrive = {
   matricule: string;
   classe: string;
   minutes: number;
+  /** Sent back from the infirmerie and not confirmed in class since (lot 3). */
+  retourInfirmerie: boolean;
 };
 
 /**
  * Children still PRESENT after the church's delay in an open session (cahier §7.4): the
- * "not arrived in class" alert of the reception dashboard. Compared with the database clock.
+ * "not arrived in class" alert of the reception dashboard, counted from the check-in or from
+ * the return from the infirmerie. Compared with the database clock.
  */
 export async function alertesNonArrives(
   db: Pick<ClientDeBase, "$queryRaw">,
@@ -401,12 +419,15 @@ export async function alertesNonArrives(
 ): Promise<AlerteNonArrive[]> {
   return db.$queryRaw<AlerteNonArrive[]>`
     SELECT p.id AS "presenceId", e.prenom, e.matricule, k.nom AS classe,
-           floor(extract(epoch FROM now() - p."checkinLe") / 60)::int AS minutes
+           floor(extract(epoch FROM now() - COALESCE(p."retourInfirmerieLe", p."checkinLe")) / 60)::int
+             AS minutes,
+           p."retourInfirmerieLe" IS NOT NULL AS "retourInfirmerie"
     FROM "Presence" p
     JOIN "Session" s ON s.id = p."sessionId"
     JOIN "Enfant" e ON e.id = p."enfantId"
     JOIN "Classe" k ON k.id = p."classeId"
     WHERE s.statut = 'OUVERTE' AND p.statut = 'PRESENT' AND p."basculeVers" IS NULL
-      AND p."checkinLe" < now() - make_interval(mins => ${delaiMinutes}::int)
-    ORDER BY p."checkinLe", e.prenom`;
+      AND COALESCE(p."retourInfirmerieLe", p."checkinLe")
+            < now() - make_interval(mins => ${delaiMinutes}::int)
+    ORDER BY COALESCE(p."retourInfirmerieLe", p."checkinLe"), e.prenom`;
 }

@@ -78,12 +78,12 @@ model Eglise {
   adresse           String?
   fuseau            String       @default("Africa/Porto-Novo") // RG-12
   statut            StatutEglise @default(ACTIVE)
-  ecranToken        String       @unique // jeton de l'écran d'appel
   prochainMatricule Int          @default(1) // RG-01, incrémenté de façon atomique
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
   membres               Membre[]
+  ecrans                EcranAppareil[]
   accesSupport          AccesSupport[]
   familles              Famille[]
   tuteurs               Tuteur[]
@@ -102,6 +102,7 @@ model Eglise {
   appels                Appel[]
   appelsTelephoniques   AppelTelephonique[]
   incidents             Incident[]
+  incidentNotes         IncidentNote[]
   auditLogs             AuditLog[]
   parametres            Parametre[]
   retraitsExceptionnels RetraitExceptionnel[]
@@ -209,6 +210,29 @@ model JetonCompte {
   createdAt  DateTime        @default(now())
 
   @@index([userId, type])
+}
+
+// Écran d'appel appairé (cahier §7.8, ADR 0018). Hors RLS : l'écran n'a pas de session, il est
+// reconnu par son cookie avant qu'on connaisse l'église. L'ADMIN crée un écran nommé et reçoit
+// un lien d'appairage à usage unique (valable 24 h, échéance posée en SQL), échangé une seule
+// fois contre le secret de l'appareil, gardé dans un cookie longue durée. Seules les empreintes
+// SHA-256 sont stockées. Révocable écran par écran ; jamais effacé (historique).
+model EcranAppareil {
+  id            String    @id @default(cuid())
+  egliseId      String
+  eglise        Eglise    @relation(fields: [egliseId], references: [id], onDelete: Cascade)
+  nom           String // « Salle principale »
+  jetonHash     String    @unique // lien d'appairage
+  jetonExpireLe DateTime // now() + 24 heures
+  appaireLe     DateTime? // lien consommé ; non nul si et seulement si appareilHash l'est
+  appareilHash  String?   @unique // secret du cookie de l'appareil
+  derniereVue   DateTime? // mise à jour au plus une fois par minute
+  creePar       String // userId de l'administrateur
+  creeLe        DateTime  @default(now())
+  revoqueLe     DateTime?
+  revoquePar    String?
+
+  @@index([egliseId])
 }
 
 // ---------- Tables Better Auth
@@ -551,10 +575,16 @@ model Presence {
   classe                Classe               @relation(fields: [classeId, egliseId], references: [id, egliseId], onDelete: Restrict)
   statut                StatutPresence
   codeRetrait           String // 4 caractères, valable pour cette session seulement (RG-04)
-  appelParent           Boolean              @default(false)
   checkinPar            String
   checkinLe             DateTime             @default(now())
   enSalleLe             DateTime?
+  // Infirmerie (lot 3, ADR 0019). infirmerieLe : envoi, non nul si et seulement si le statut est
+  // INFIRMERIE (CHECK) ; infirmerieRecueLe : réception par l'infirmerie (« en route » tant que
+  // NULL). Accompagnant et motif dans le détail de l'événement « infirmerie ».
+  infirmerieLe          DateTime?
+  infirmerieRecueLe     DateTime?
+  // Dernier renvoi en classe : l'alerte « pas encore en salle » part de cette heure-là.
+  retourInfirmerieLe    DateTime?
   recupereLe            DateTime?
   recuperePar           String? // personne autorisée qui a récupéré l'enfant
   autorise              PersonneAutorisee?   @relation(fields: [recuperePar, egliseId], references: [id, egliseId], onDelete: Restrict)
@@ -595,23 +625,32 @@ model EvenementPresence {
   @@index([presenceId, createdAt])
 }
 
-// Appel affiché sur l'écran d'appel (matricule + lieu, jamais de nom : RG-10).
+// Appel d'un parent, affiché sur l'écran d'appel (matricule + lieu, jamais de nom : RG-10).
+// Un seul appel ouvert par présence (index partiel). Contraintes CHECK de la migration
+// lot3_infirmerie_appels : motif et résolution dans leur liste ; résolu le, résolution et
+// résolu par, tous nuls ou tous renseignés. Seules les colonnes de résolution se modifient,
+// une seule fois (droits par colonne et déclencheur).
 model Appel {
   id         String    @id @default(cuid())
   egliseId   String
   eglise     Eglise    @relation(fields: [egliseId], references: [id], onDelete: Restrict)
   presenceId String
   presence   Presence  @relation(fields: [presenceId, egliseId], references: [id, egliseId], onDelete: Restrict)
-  motif      String
-  lieu       String
+  motif      String // pleurs | change | soins | comportement | autre
+  lieu       String // un des lieux de rendez-vous (appels.lieux), recopié
   creeLe     DateTime  @default(now())
-  resoluLe   DateTime?
   creePar    String
+  resoluLe   DateTime?
+  resolution String? // parent_arrive | annule | recupere (check-out)
+  resoluPar  String?
 
+  @@unique([presenceId], where: raw("\"resoluLe\" IS NULL"), map: "Appel_un_ouvert_par_presence")
   @@index([egliseId, resoluLe])
 }
 
-// Journal des appels téléphoniques et WhatsApp lancés depuis le bouton Urgence.
+// Journal des appels téléphoniques et WhatsApp lancés depuis le bouton Urgence. En ajout seul :
+// seul le résultat se renseigne, une fois (droits par colonne et déclencheur). Numéro au format
+// E.164 (CHECK, ADR 0011) ; canal et résultat dans leur liste (CHECK).
 model AppelTelephonique {
   id         String    @id @default(cuid())
   egliseId   String
@@ -623,10 +662,12 @@ model AppelTelephonique {
   numero     String
   canal      String // tel | whatsapp
   resultat   String? // joint | pas_de_reponse | messagerie
+  resultatLe DateTime? // non nul si et seulement si resultat l'est
   userId     String
   createdAt  DateTime  @default(now())
 
   @@index([egliseId, enfantId])
+  @@index([presenceId, createdAt])
 }
 
 model Incident {
@@ -643,12 +684,30 @@ model Incident {
   mesures     String?
   declarePar  String
   createdAt   DateTime     @default(now())
+  // Une fois déclaré, le contenu ne se modifie plus (droits par colonne) : seule la clôture se
+  // pose, une fois (déclencheur). Les compléments passent par IncidentNote.
   clotureLe   DateTime?
+  cloturePar  String? // non nul si et seulement si clotureLe l'est (CHECK)
 
   retraitExceptionnel RetraitExceptionnel?
+  notes               IncidentNote[]
 
   @@unique([id, egliseId])
   @@index([egliseId, sessionId])
+}
+
+// Complément apporté à un incident après sa déclaration. En ajout seul (RG-09).
+model IncidentNote {
+  id         String   @id @default(cuid())
+  egliseId   String
+  eglise     Eglise   @relation(fields: [egliseId], references: [id], onDelete: Restrict)
+  incidentId String
+  incident   Incident @relation(fields: [incidentId, egliseId], references: [id, egliseId], onDelete: Restrict)
+  texte      String
+  auteur     String // userId
+  createdAt  DateTime @default(now())
+
+  @@index([incidentId, createdAt])
 }
 
 // Retrait par un adulte absent des personnes autorisées (cahier §7.6), après appel du contact

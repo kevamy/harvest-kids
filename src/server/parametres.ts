@@ -39,6 +39,13 @@ export const SCHEMAS_PARAMETRES = {
     .int("Saisissez un nombre entier de minutes.")
     .min(1, "Le délai est d'au moins 1 minute.")
     .max(60, "Le délai est d'au plus 60 minutes."),
+  // Lot 3 (decision of 2026-11-24): a child sent to the infirmerie and not received after this
+  // delay raises a red alert (infirmerie page, reception and RESPONSABLE dashboards).
+  "infirmerie.delaiReceptionMinutes": z
+    .number({ message: "Saisissez un nombre de minutes." })
+    .int("Saisissez un nombre entier de minutes.")
+    .min(1, "Le délai est d'au moins 1 minute.")
+    .max(30, "Le délai est d'au plus 30 minutes."),
   // Cahier §17, point 3: check-out at the reception desk only, or also from the class.
   "checkout.lieu": z.enum(["ACCUEIL", "ACCUEIL_ET_CLASSES"], {
     message: "Choisissez où se fait le retrait.",
@@ -113,6 +120,7 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   // Cahier §17, points 3, 4 and 6, until the leaders settle them: each church can change them.
   "sessions.delaiAlerteNonRecupereMinutes": 10,
   "presences.delaiNonArriveEnSalleMinutes": 10,
+  "infirmerie.delaiReceptionMinutes": 5,
   "checkout.lieu": "ACCUEIL",
   "appels.lieux": ["Accueil enfants", "Infirmerie"],
   "telephone.indicatifParDefaut": "229",

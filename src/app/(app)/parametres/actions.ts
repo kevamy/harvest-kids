@@ -142,10 +142,13 @@ export async function mettreAJourCulte(culteId: unknown, saisie: unknown): Promi
   return resultat;
 }
 
-/** Alert delays (cahier §7.4, §7.7), both written in one transaction. */
+/** Alert delays (cahier §7.4, §7.7, lot 3 infirmerie), written in one transaction. */
 export async function enregistrerDelaisAlerte(saisie: unknown): Promise<ResultatAction> {
   const resultat = await executerAction("sessions.gerer", async ({ db, contexte }) => {
-    const { nonRecupere, nonArriveEnSalle } = (saisie ?? {}) as Record<string, unknown>;
+    const { nonRecupere, nonArriveEnSalle, receptionInfirmerie } = (saisie ?? {}) as Record<
+      string,
+      unknown
+    >;
     await db.$tx(async (tx) => {
       await ecrireParametre(tx, contexte, "sessions.delaiAlerteNonRecupereMinutes", nonRecupere);
       await ecrireParametre(
@@ -154,6 +157,7 @@ export async function enregistrerDelaisAlerte(saisie: unknown): Promise<Resultat
         "presences.delaiNonArriveEnSalleMinutes",
         nonArriveEnSalle,
       );
+      await ecrireParametre(tx, contexte, "infirmerie.delaiReceptionMinutes", receptionInfirmerie);
     });
   });
   if (resultat.ok) revalidatePath("/parametres/cultes");

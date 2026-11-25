@@ -1,5 +1,4 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { creerCompte, emettreJetonCompte, rattacherMembre } from "./comptes";
@@ -30,11 +29,6 @@ export const FUSEAUX_PROPOSES = [
   "Africa/Kinshasa",
   "Europe/Paris",
 ] as const;
-
-/** Opaque token of the church's call screen (never derived from its id or slug). */
-export function genererJetonEcran(): string {
-  return randomBytes(24).toString("base64url");
-}
 
 export const schemaNouvelleEglise = z.object({
   nom: z.string().trim().min(3, "Le nom compte au moins 3 caractères.").max(120),
@@ -76,7 +70,6 @@ export async function creerEgliseAvecDefauts(
         nom: donnees.nom,
         slug: donnees.slug,
         fuseau: donnees.fuseau ?? "Africa/Porto-Novo",
-        ecranToken: genererJetonEcran(),
       },
       select: { id: true },
     });
@@ -111,7 +104,6 @@ export async function creerEgliseAvecPremierAdmin(
         nom: donnees.nom,
         slug: donnees.slug,
         fuseau: donnees.fuseau,
-        ecranToken: genererJetonEcran(),
       },
       select: { id: true },
     });

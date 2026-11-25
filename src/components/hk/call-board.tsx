@@ -71,6 +71,7 @@ export function CallBoard({
         <p className="text-body-lg text-nuit-doux">Aucun appel en cours.</p>
       ) : (
         <ul
+          aria-label="Appels"
           className={cn(
             "grid gap-4",
             pleinEcran
@@ -84,7 +85,13 @@ export function CallBoard({
               <li
                 key={tuile.matricule}
                 data-type={tuile.type}
-                className={cn("grid gap-1 rounded-md p-4", apparence.classes)}
+                aria-label={`${tuile.matricule} · ${tuile.lieu}`}
+                className={cn(
+                  "grid gap-1 rounded-md p-4",
+                  // A new tile stands out for 4 s (globals.css), never under reduced motion.
+                  "motion-safe:animate-[hk-apparition_4s_ease-out_1]",
+                  apparence.classes,
+                )}
               >
                 <MatriculeBadge matricule={tuile.matricule} taille={pleinEcran ? "ecran" : "lg"} />
                 <span className="text-label font-bold">
