@@ -108,14 +108,15 @@ test("l'ADMIN appaire un écran ; un appel y apparaît en moins de 5 s, mis en �
     .click();
   await expect(page.getByRole("status")).toHaveText("Écran « Salle principale » retiré.");
 
-  await expect(ecran.getByRole("alert")).toHaveText(
+  // Inside the screen's region: Next.js keeps its own (empty) route announcer as an alert.
+  await expect(tableau.getByRole("alert")).toHaveText(
     "Cet écran a été retiré : demandez un nouveau lien à l'administrateur.",
     { timeout: 10_000 },
   );
   // The link was used once: opening it again pairs nothing (a real load, not a hash change).
   await ecran.goto("about:blank");
   await ecran.goto(lien);
-  await expect(ecran.getByRole("alert")).toHaveText(
+  await expect(tableau.getByRole("alert")).toHaveText(
     "Ce lien n'est plus valable : demandez un nouveau lien à l'administrateur de l'église.",
   );
   await contexte.close();
@@ -139,7 +140,7 @@ test("sans animation quand l'appareil demande moins de mouvement ; l'appareil d'
 
   // The same device on the other church's address: not paired there, nothing shown.
   await ecran.goto(`/ecran/${autreEglise.slug}`);
-  await expect(ecran.getByRole("alert")).toHaveText(
+  await expect(ecran.getByRole("region", { name: "Écran d'appel" }).getByRole("alert")).toHaveText(
     "Cet écran n'est pas appairé à cette église : ouvrez sur cet appareil le lien donné par l'administrateur.",
   );
   expect((await ecran.request.get(`/api/ecran/${autreEglise.slug}`)).status()).toBe(404);

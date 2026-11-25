@@ -33,10 +33,11 @@ const admin = (jeu: Jeu) => ({
   appareil: null,
 });
 const IP = "203.0.113.7";
+const ORIGINE = "https://harvest-kids.test/";
 
 /** A screen of the church and the token of its pairing link. */
 async function ecran(jeu: Jeu, nom = "Salle principale") {
-  const { id, jeton, lien } = await creerEcran(base, admin(jeu), nom);
+  const { id, jeton, lien } = await creerEcran(base, admin(jeu), nom, ORIGINE);
   return { id, jeton, lien };
 }
 
@@ -80,7 +81,7 @@ describe("administration des écrans (ADMIN de l'église active)", () => {
   it("crée un écran avec un lien d'appairage valable 24 h, stocké en empreinte seulement", async () => {
     const { id, jeton, lien } = await ecran(a);
     expect(jeton).toMatch(FORMAT_JETON_ECRAN);
-    expect(lien).toMatch(new RegExp(`/ecran/eglise-a#${jeton.replace(".", "\\.")}$`));
+    expect(lien).toBe(`https://harvest-kids.test/ecran/eglise-a#${jeton}`);
     const { rows } = await proprietaire.query(
       `SELECT "jetonHash", extract(epoch FROM "jetonExpireLe" - "creeLe")::int AS secondes
        FROM "EcranAppareil" WHERE id = $1`,
@@ -93,7 +94,7 @@ describe("administration des écrans (ADMIN de l'église active)", () => {
     expect(await listerEcrans(base, admin(a))).toEqual([
       expect.objectContaining({ id, nom: "Salle principale", etat: "en_attente", appaireLe: null }),
     ]);
-    await expect(creerEcran(base, admin(a), " ")).rejects.toThrow("Donnez un nom");
+    await expect(creerEcran(base, admin(a), " ", ORIGINE)).rejects.toThrow("Donnez un nom");
   });
 
   it("isolation : un ADMIN de A ne liste, ne révoque ni ne crée un écran de B", async () => {

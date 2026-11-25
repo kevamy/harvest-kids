@@ -45,14 +45,18 @@ export const schemaNomEcran = z
  * The pairing link: the token in the fragment, never sent to a server nor written in a log
  * (same form as the activation links, ADR 0014).
  */
-export const lienEcran = (slug: string, jeton: string) =>
-  `${env().BETTER_AUTH_URL.replace(/\/$/, "")}/ecran/${slug}#${jeton}`;
+export const lienEcran = (origine: string, slug: string, jeton: string) =>
+  `${origine.replace(/\/$/, "")}/ecran/${slug}#${jeton}`;
 
-/** A new screen of the admin's church and its pairing link, shown once. */
+/**
+ * A new screen of the admin's church and its pairing link, shown once. `origine` is the
+ * application's address (BETTER_AUTH_URL, read by the caller).
+ */
 export async function creerEcran(
   base: PrismaClient,
   admin: Admin,
   nom: unknown,
+  origine: string,
 ): Promise<{ id: string; jeton: string; lien: string }> {
   const nomValide = schemaNomEcran.parse(nom);
   const jeton = genererJetonEcran();
@@ -71,7 +75,7 @@ export async function creerEcran(
         appareil: admin.appareil,
       },
     });
-    return { id: cree!.id, jeton, lien: lienEcran(cree!.slug, jeton) };
+    return { id: cree!.id, jeton, lien: lienEcran(origine, cree!.slug, jeton) };
   });
 }
 
@@ -258,7 +262,7 @@ export async function tuilesEcran(base: PrismaClient, egliseId: string): Promise
 export const listerEcransEglise = (admin: Pick<ContexteEglise, "egliseId">) =>
   listerEcrans(prismaPlateforme(), admin);
 export const creerEcranEglise = (admin: ContexteEglise, nom: unknown) =>
-  creerEcran(prismaPlateforme(), admin, nom);
+  creerEcran(prismaPlateforme(), admin, nom, env().BETTER_AUTH_URL);
 export const revoquerEcranEglise = (admin: ContexteEglise, ecranId: string) =>
   revoquerEcran(prismaPlateforme(), admin, ecranId);
 export const appairerEcranPublic = (slug: string, jeton: string, ip: string) =>
