@@ -207,6 +207,7 @@ Plan validé le 2026-11-24 (décisions dans la section « Décisions et question
    - ADR 0018 (écran d'appel) et 0019 (infirmerie, appels, Urgence, incidents) ; cahier en version 1.7 (§3 bis, §4, §6, §7.5, §7.6, §7.8, schéma) ;
    - liste de recette groupée des lots 2 et 3 ci-dessous ;
    - vérifications locales : lint, types, 254 unitaires, intégration complète 366/366 (200 s). **Échec isolé non expliqué** : un passage de `plateforme.test.ts` (seed) a échoué une fois (51,8 s) juste après l'ajout de l'épisode d'infirmerie ; son message a été perdu (sortie filtrée), et la base a été relancée sans relevé préalable, contrairement à la règle (relevé fait ensuite : aucune requête active, aucun verrou en attente). Non reproduit en 7 passages (4 seul, 2 avec le fichier entier, 1 dans la suite complète). À surveiller en CI.
+   - **CI de la PR n°14 verte sur `8749b7b`** (lint, types, unitaires, intégration, e2e, image Docker). Scénario d'origine mesuré du clic « Accompagner … à l'infirmerie » à l'affichage : paysage, tableau de l'accueil 2 355 ms, écran d'appel 2 364 ms, bandeau au check-out (code saisi) 2 476 ms ; portrait, 2 838 ms, 2 845 ms et 2 947 ms (artefact `captures-e2e`, `mesure-incident-origine.txt`). **Lot 3 prêt** : reste la fusion de la PR n°14 (applique `lot3_infirmerie_appels` sur Neon), le workflow « Données de démonstration Neon », puis la recette groupée de l'utilisateur.
 
 ### Liste de recette groupée des lots 2 et 3 (https://harvest-kids.vercel.app)
 
