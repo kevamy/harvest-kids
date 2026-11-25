@@ -44,15 +44,18 @@ export async function chargerDirect<T>(url: string, signal?: AbortSignal): Promi
 export function useLiveQuery<T>(
   cle: readonly unknown[],
   url: string,
-  options: { intervalleMs?: number } = {},
+  options: { intervalleMs?: number; actif?: boolean } = {},
 ): UseQueryResult<T> {
   return useQuery({
     queryKey: cle,
     queryFn: ({ signal }) => chargerDirect<T>(url, signal),
+    enabled: options.actif ?? true,
     refetchInterval: options.intervalleMs ?? INTERVALLE_DIRECT_MS,
     refetchIntervalInBackground: false,
-    // A locked or signed-out tablet stops polling instead of retrying.
+    // A locked or signed-out tablet (or an unpaired, foreign or revoked call screen) stops
+    // retrying at once.
     retry: (echecs, erreur) =>
-      !(erreur instanceof ErreurDirect && [401, 403, 423].includes(erreur.statut)) && echecs < 2,
+      !(erreur instanceof ErreurDirect && [401, 403, 404, 410, 423].includes(erreur.statut)) &&
+      echecs < 2,
   });
 }

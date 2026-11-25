@@ -13,6 +13,9 @@ const CHEMINS_PUBLICS = [
   "/connexion",
   // Account activation and password reset links (ADR 0014): the link is the proof.
   "/activation",
+  // Call screen (ADR 0018): no session; the paired device's cookie is checked by its API.
+  "/ecran",
+  "/api/ecran",
   "/design",
   "/hors-connexion",
   "/api/auth",
@@ -26,7 +29,9 @@ function estPublic(chemin: string) {
   return CHEMINS_PUBLICS.some((p) => chemin === p || chemin.startsWith(`${p}/`));
 }
 
-const estActivation = (chemin: string) => chemin === "/activation";
+/** One-time link pages: the activation page and the call screen (pairing link, ADR 0018). */
+const estActivation = (chemin: string) =>
+  chemin === "/activation" || chemin === "/ecran" || chemin.startsWith("/ecran/");
 
 export function politiqueSecurite(nonce: string, developpement: boolean): string {
   return [
